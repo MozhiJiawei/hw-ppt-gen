@@ -23,10 +23,14 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    - Use the notes to calibrate density, card shapes, grid proportions, red/gray usage, table treatment, chart treatment, and footer language.
    - Do not merely say the images were referenced; leave review evidence in `.tmp/<deck>_reference_review.json`.
 4. Plan the deck slide by slide before coding. Save the plan as `.tmp/<deck>_plan.json` or `.tmp/<deck>_plan.md`. Keep the plan separate from visual construction:
-   - Slide title states the point of view.
+   - Use a two-part title on content pages: a short 24 pt main title states the page type or viewpoint, and an optional 18 pt subtitle explains the nuance. Do not put long explanatory clauses entirely in the 24 pt title.
+   - Every正文内容页（分析页、分栏页、数据页、表格页、图表页、流程页、图文页）must include a top `分析总结` block under the page title. Cover, contents, and chapter divider slides do not use this block.
+   - The `分析总结` block summarizes the page's core viewpoint in no more than three points. Each point must start with a meaning-specific short label such as `规划先行：` or `风险收敛：`; do not use generic labels like `结论1：`.
    - Each slide has at most three core messages.
    - Choose a layout by content count and relationship, not by decoration.
    - Record the source evidence for important claims and figures.
+   - Every embedded source figure or table must be treated as an evidence module, not a picture-only box. Prefer `visual + Chinese figure legend + 1-3 short interpretation lines` inside the same module when space permits. If the module would otherwise look empty, add source-grounded observations, conclusions, or reading guidance instead of leaving blank space.
+   - Every embedded source figure or table must have a Chinese figure-legend description tightly attached below the visual, not pinned to the bottom of the card. By default, center the visual within its available visual area; the legend follows the visual's actual bottom edge. Use 12 pt, bold, italic text for the legend, for example `semi-PD 实验结果：Llama3-8B / 70B 的实验结果`. Keep the smaller source/caption note directly below the legend at 6 pt, then place optional interpretation lines below the source note. Leave extra whitespace beneath the interpretation, not between the visual and legend.
 5. Create deck-specific generation scripts and all generated files under `.tmp/`. Do not write generated `.pptx`, deck-specific scripts, images, extracted text, QA reports, or scratch JSON outside `.tmp/`.
 6. Generate the PPTX with `pptxgenjs`, preferably by importing `scripts/hw_pptx_helpers.js`.
 7. Run content QA manually against the source material: missing text, ordering mistakes, placeholders, stale examples, unsourced numeric claims, and obvious wording errors. Save a concise QA note to `.tmp/<deck>_content_qa.json` or `.tmp/<deck>_content_qa.md`.
@@ -59,13 +63,15 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 
 11. Triage hard-QA output. Treat errors as blockers. For every warning, either fix it or record why it is accepted in the QA note. Re-run hard QA after fixes.
 12. Run independent LLM visual QA from the exported PNGs. This is a blocking gate:
+   - Limit visual-QA-driven regeneration to **two total visual QA iterations** per deck. The first exported deck counts as iteration 1; one regenerated-and-rechecked deck counts as iteration 2. After iteration 2, do not keep looping. Record any remaining non-blocking concerns in `.tmp/<deck>_visual_qa.json` or `.tmp/<deck>_visual_qa.md`, and report unresolved blocking issues explicitly instead of starting another regeneration cycle.
+   - Tell the visual reviewer this iteration cap in its prompt: "最多进行两轮视觉 QA 迭代；若第二轮后仍有问题，只报告问题，不要求继续重做。"
    - Use a separate reviewer subagent when subagents are available. Give it only the exported slide PNGs, the reference images, and the visual QA rubric; do not give it the generation script, prior QA pass/fail result, or your intended fixes.
    - If subagents are unavailable, perform a fresh independent review pass yourself after clearing generation assumptions from the prompt context. Treat the pass as adversarial review, not author self-check.
    - Inspect every `.tmp/<deck>_slides/slide_XX.png` at original size, not only a contact sheet.
    - Save `.tmp/<deck>_visual_qa.json` or `.tmp/<deck>_visual_qa.md` with one entry per slide. Each entry must include `language_status`, `title_status`, `overflow_status`, `overlap_status`, `reference_match_status`, and `blocking_findings`.
    - Fail visual QA if any created visible text is not Chinese, any page title wraps to multiple lines, any text leaves its card/text box, any module overlaps another module, or any footer/title/card is visibly clipped.
    - If image export fails, visual QA is not complete; report `visual_qa_status: failed_or_unavailable`, not `completed`.
-13. Fix the first version and regenerate when content QA, hard style QA, or visual QA finds issues.
+13. Fix the first version and regenerate when content QA, hard style QA, or visual QA finds issues, while respecting the two-iteration cap for visual-QA-driven regeneration. Content QA and hard style QA errors remain blockers, but visual QA must not become an unbounded loop.
 
 ## Output Rules
 
@@ -85,6 +91,8 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 - Keep typography to a small fixed scale: 12 pt, 14 pt, 18 pt, and 24 pt. Use 6 pt only for footers or compact source captions.
 - Use these size bands:
   - Page title: 24 pt bold, Huawei red `C00000`.
+  - Page subtitle/title note: 18 pt bold, Huawei red `C00000`, placed after the main title on the same line.
+  - Analysis summary: 14 pt; left label is bold white text on Huawei red; in the gray body only the meaning-specific point labels are bold, and the explanatory text after each colon is regular weight.
   - First-level card title: 14 pt.
   - Second-level title: 14 pt.
   - Body: 12 pt by default; use 14 pt for conclusion, interpretation, or other large text boxes.
@@ -92,7 +100,8 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
   - Footers and compact source captions: 6 pt.
   - Never go below 6 pt.
 - Use 1.5x line spacing for body text boxes by default (`lineSpacingMultiple: 1.5` in pptxgenjs).
-- Page titles must fit on one line at 24 pt. If a title does not fit, shorten the Chinese viewpoint; do not rely on wrapping, shrinking, or hiding overflow.
+- Page title area must fit on one line: keep the 24 pt main title short, and move explanatory text into the 18 pt `titleNote` / `titleSubtitle`. Do not rely on wrapping, shrinking, or hiding overflow.
+- Every正文内容页 must reserve the first content band below the title for `分析总结`: red left label and gray right body, with no outer border around the whole summary band. Keep it high on the slide, then place detailed cards/charts/tables below it.
 - Keep expression dense and restrained: viewpoint in the title, limited red emphasis, no generic AI decoration, no ornamental gradients.
 - Do not use giant empty cards. A large gray card is acceptable only when it contains a real table, chart, source figure, process, dense list, or compact evidence block.
 - Match text amount to the text-box size. If a card is large, write enough source-grounded interpretation, implications, or conclusion text to visually fill it at 12/14 pt with 1.5x line spacing; otherwise shrink the card or choose a more compact layout.
@@ -105,12 +114,14 @@ Use `scripts/hw_pptx_helpers.js` for stable components:
 - `addCoverSlide(pptx, data)` creates a red-band cover.
 - `addTocSlide(pptx, data)` creates a numbered contents page.
 - `addSectionSlide(pptx, data)` creates a hard-QA-compatible chapter divider with a top-left red page title.
-- `addContentCardsSlide(pptx, data)` creates red-title plus gray-card content blocks.
-- `addColumnsSlide(pptx, data)` creates two-, three-, or four-column pages.
-- `addDataCardsSlide(pptx, data)` creates compact data-card pages.
-- `addTableSlide(pptx, data)` creates Huawei-style dense tables.
-- `addBarChartSlide(pptx, data)` creates a simple business bar chart.
-- `addFlowSlide(pptx, data)` creates a horizontal process page.
+- `addContentCardsSlide(pptx, data)` creates an analysis-summary band plus red-title/gray-card content blocks.
+- `addColumnsSlide(pptx, data)` creates an analysis-summary band plus two-, three-, or four-column pages.
+- `addDataCardsSlide(pptx, data)` creates an analysis-summary band plus compact data-card pages.
+- `addTableSlide(pptx, data)` creates an analysis-summary band plus Huawei-style dense tables.
+- `addBarChartSlide(pptx, data)` creates an analysis-summary band plus a simple business bar chart.
+- `addFlowSlide(pptx, data)` creates an analysis-summary band plus a horizontal process page.
+
+For content-page helpers, pass the 24 pt title as `title` and the 18 pt explanatory subtitle as `titleNote` or `titleSubtitle`. Pass `summary` as a string, array, or `{ body/items, fill }`. Prefer `summary.body` entries as `{ label, text }`, for example `{ label: "规划先行", text: "先完成页面级观点规划，再进入生成脚本。" }`. The helper keeps the left label fixed as `分析总结`; do not use `summary.title` to replace that label. Chapter divider slides intentionally do not receive a summary block.
 
 Write custom deck scripts by composing these helpers. For uncommon layouts, create a small local helper in `.tmp/` that still uses `HW_STYLE`, `addPageTitle`, `addFooter`, `redTitleCard`, `grayCard`, and `safeText`.
 
@@ -127,6 +138,7 @@ Write custom deck scripts by composing these helpers. For uncommon layouts, crea
 ## Planning Heuristics
 
 - Use a cover and contents page for decks over four slides.
+- Treat content pages and chapter divider pages differently: content pages must show `分析总结`; chapter dividers only introduce the chapter.
 - Use content-card pages for one to three analytical messages.
 - Use two columns for comparison; use biased columns when one side contains the main evidence and the other side contains interpretation.
 - Use three or four columns for parallel categories, workstreams, markets, or phases.
@@ -136,6 +148,7 @@ Write custom deck scripts by composing these helpers. For uncommon layouts, crea
 - For paper or technical-report inputs, default to this story arc unless the user asks otherwise: problem and trade-off, key insight, architecture/mechanism, algorithm or workflow, evaluation setup, key results, implementation or deployment notes, conclusion.
 - Use original figures/tables as evidence when they carry important technical details; pair them with a short interpretation card rather than retyping every label.
 - Avoid using source figures as decoration. Each embedded figure must support a slide message and have a short caption or source note.
+- Every embedded source figure/table must be an evidence module, not a picture-only box. Include a figure-legend description directly below the visual: 12 pt, bold, italic, Chinese, with a meaning-specific prefix such as `semi-PD 实验结果：` or `semi-PD 架构图：`. The legend should sit close to the image/table bottom edge; do not place it at the bottom of a large empty image card. Put original figure/table number and source notes immediately below it in 6 pt. When the module has visible empty space, add 1-3 concise Chinese interpretation lines in the same module.
 - Prefer compact cards plus a chart/table/diagram/evidence region over full-height empty cards. If a card contains fewer than three substantive lines, do not stretch it to fill a column.
 - For conclusion and interpretation slides, use fewer but fuller text boxes with 14 pt body when the layout has enough space. Do not leave large cards half-empty just to keep wording short.
 - For two-, three-, and four-column Huawei layouts, match the reference-image density: combine red title bars, compact text, numbered lists, small modules, charts/tables, process arrows, or source figures.
@@ -145,6 +158,7 @@ Write custom deck scripts by composing these helpers. For uncommon layouts, crea
 Content QA:
 
 - Verify every planned slide appears in the deck.
+- Verify every正文内容页 has the top `分析总结` block, and verify cover, contents, and chapter divider slides do not have it.
 - Verify all generated visible text is Chinese, with only necessary technical acronyms/model names/source identifiers left in English.
 - Compare slide titles and key claims against the source material.
 - Verify numeric claims in titles, data cards, and conclusion slides against the source inventory.
@@ -156,13 +170,15 @@ Visual QA:
 
 - Use the PowerPoint-rendered PNGs when available. LibreOffice-rendered PNGs are fallback evidence and must be marked as such.
 - Check titles, cards, tables, charts, and footers align to a consistent grid.
-- Check page titles are one line and do not enter the content area.
+- Check page title area is one line and does not enter the content area: main title is 24 pt, optional subtitle/title note is 18 pt.
+- Check every正文内容页 places the `分析总结` block directly below the title: red label on the left, gray summary text on the right, no more than three meaning-specific points. Only the point label before `：` is bold; the explanatory text after it is regular weight.
 - Check no text obviously overflows its card or table cell.
-- Check page titles are 24 pt Huawei red, not black.
+- Check page main titles are 24 pt Huawei red, optional title notes are 18 pt Huawei red, not black.
 - Check body text uses 1.5x line spacing and 12/14 pt sizing, with conclusion or interpretation boxes using the larger body size when space allows.
 - Check large text boxes are filled with content length appropriate to their size; if a box looks sparse, add grounded explanation or reduce the box height.
 - Check red is used for hierarchy and emphasis, not as a page-wide accent everywhere.
 - Check chart labels, notes, and table values remain readable at final size.
+- Check every embedded source figure/table has a 12 pt bold italic Chinese figure-legend description tightly below the visual, plus any original source note in 6 pt immediately beneath it; fail the visual QA if a large gap appears between the visual and its legend. If a figure/table module has large unused space and no interpretation text, mark it as a layout issue rather than accepting it as true 图文并茂.
 - Compare against `assets/slides_ref/` for density and restraint before declaring done.
 - Use exported PNGs from `scripts/export_pptx_images.js` as the primary visual QA artifact.
 - The visual QA reviewer must be independent from the generation pass whenever subagents are available.
@@ -172,6 +188,8 @@ Hard QA:
 
 - Run `scripts/check_huawei_pptx.js`.
 - Treat errors as blockers.
+- Treat `analysis_summary_missing` as a blocker for正文内容页.
+- Treat `analysis_summary_generic_label` as a blocker; replace `结论1：` style labels with content-specific labels.
 - Fix warnings when they indicate visible drift from the Huawei style contract.
 - Record accepted warnings with a concrete reason. Common accepted warnings include helper-generated font-size variety caused by a page title, card title, body, footer, and labels coexisting on a dense page; do not accept warnings that mask low contrast, tiny text, off-palette colors, or animation.
 - Run hard QA with `--require-reference-review` and `--require-render-dir` before final delivery so missing reference-image review and missing exported PNGs fail the workflow.

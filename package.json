@@ -1,0 +1,19 @@
+{
+  "name": "huawei-pptx-generator",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Codex skill resources for generating Huawei-style PPTX decks with pptxgenjs.",
+  "type": "commonjs",
+  "scripts": {
+    "setup-render-path": "powershell -ExecutionPolicy Bypass -File scripts/setup_render_tools_path.ps1",
+    "sample": "node scripts/generate_sample_deck.js",
+    "check-sample": "node scripts/check_huawei_pptx.js .tmp/sample_huawei_deck.pptx",
+    "export-sample": "node scripts/export_pptx_images.js .tmp/sample_huawei_deck.pptx --out .tmp/sample_huawei_deck_slides",
+    "reference-review-template": "node scripts/prepare_reference_review.js --out .tmp/reference_review.json",
+    "smoke": "npm run sample && npm run check-sample"
+  },
+  "dependencies": {
+    "jszip": "^3.10.1",
+    "pptxgenjs": "^4.0.1"
+  }
+}

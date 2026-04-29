@@ -1,0 +1,3 @@
+display_name: Huawei PPTX Generator
+short_description: Generate Chinese Huawei-style PPTX decks with pptxgenjs, PowerPoint rendering, and strict QA.
+default_prompt: Generate a Chinese Huawei-style PPTX from the provided source material, save all outputs under .tmp, run the bundled compliance checker, export with the target PPT renderer, and complete independent visual QA.

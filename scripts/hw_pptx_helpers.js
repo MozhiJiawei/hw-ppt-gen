@@ -8,7 +8,7 @@ const ShapeType = pptxgen.ShapeType || {
 };
 
 const HW_STYLE = Object.freeze({
-  slide: { w: 13.333, h: 7.5, marginX: 0.55, titleY: 0.22, contentTop: 1.08, footerY: 7.12 },
+  slide: { w: 13.333, h: 7.5, marginX: 0.55, titleY: 0.3, titleRuleY: 0.84, contentTop: 1.08, footerY: 7.12 },
   font: {
     cn: "Microsoft YaHei",
     en: "Arial",
@@ -41,10 +41,28 @@ const HW_STYLE = Object.freeze({
     data: 18,
   },
   line: { normal: 0.5 },
+  summary: { y: 0.96, h: 1.12, contentTop: 2.35 },
 });
 
 function cloneOptions(value) {
   return JSON.parse(JSON.stringify(value || {}));
+}
+
+function estimateTextUnits(text) {
+  let units = 0;
+  for (const char of String(text || "")) {
+    if (/[\u3400-\u9fff]/.test(char)) units += 1;
+    else if (/[A-Z]/.test(char)) units += 0.72;
+    else if (/[a-z]/.test(char)) units += 0.55;
+    else if (/[0-9]/.test(char)) units += 0.55;
+    else if (/\s/.test(char)) units += 0.3;
+    else units += 0.35;
+  }
+  return units;
+}
+
+function estimateTextWidth(text, fontSize) {
+  return estimateTextUnits(text) * (fontSize / 72);
 }
 
 function stripHash(color) {
@@ -126,7 +144,10 @@ function addLine(slide, x1, y1, x2, y2, options = {}) {
   slide.addShape(ShapeType.line, opts);
 }
 
-function addPageTitle(slide, title, kicker = "") {
+function addPageTitle(slide, title, options = {}) {
+  const opts = typeof options === "string" ? { kicker: options } : (options || {});
+  const kicker = opts.kicker || "";
+  const subtitle = opts.subtitle || opts.titleNote || "";
   if (kicker) {
     textBox(slide, kicker, {
       x: HW_STYLE.slide.marginX,
@@ -138,16 +159,36 @@ function addPageTitle(slide, title, kicker = "") {
       color: HW_STYLE.color.red,
     });
   }
-  textBox(slide, title, {
-    x: HW_STYLE.slide.marginX,
-    y: HW_STYLE.slide.titleY,
-    w: 12.2,
-    h: 0.5,
-    fontSize: HW_STYLE.size.pageTitle,
-    bold: true,
-    color: HW_STYLE.color.red,
-  });
-  addLine(slide, HW_STYLE.slide.marginX, 0.88, 12.78, 0.88, {
+  const subtitleText = safeText(subtitle);
+  if (subtitleText) {
+    slide.addText([
+      { text: safeText(title), options: { fontSize: HW_STYLE.size.pageTitle, bold: true } },
+      { text: ` - ${subtitleText}`, options: { fontSize: HW_STYLE.size.data, bold: true } },
+    ], cloneOptions({
+      x: HW_STYLE.slide.marginX,
+      y: HW_STYLE.slide.titleY,
+      w: 12.2,
+      h: 0.5,
+      fontFace: HW_STYLE.font.cn,
+      fontSize: HW_STYLE.size.pageTitle,
+      color: HW_STYLE.color.red,
+      margin: 0.05,
+      breakLine: false,
+      lineSpacingMultiple: 1,
+      valign: "top",
+    }));
+  } else {
+    textBox(slide, title, {
+      x: HW_STYLE.slide.marginX,
+      y: HW_STYLE.slide.titleY,
+      w: 12.2,
+      h: 0.5,
+      fontSize: HW_STYLE.size.pageTitle,
+      bold: true,
+      color: HW_STYLE.color.red,
+    });
+  }
+  addLine(slide, HW_STYLE.slide.marginX, HW_STYLE.slide.titleRuleY, 12.78, HW_STYLE.slide.titleRuleY, {
     line: { color: HW_STYLE.color.red, width: 0.5 },
   });
 }
@@ -194,6 +235,119 @@ function redTitleCard(slide, title, x, y, w, h = 0.32) {
     bold: true,
     color: HW_STYLE.color.white,
     valign: "mid",
+  });
+}
+
+function normalizeSummary(summary, fallbackTitle = "分析总结") {
+  if (!summary) {
+    return {
+      title: fallbackTitle,
+      body: [
+        { label: "核心判断", text: "围绕本页后续内容提炼一句明确观点。" },
+        { label: "内容取舍", text: "总结不超过三点，详细证据放在下方内容区。" },
+      ],
+      fill: HW_STYLE.color.card,
+    };
+  }
+  if (Array.isArray(summary)) {
+    return { title: fallbackTitle, body: summary, fill: HW_STYLE.color.card };
+  }
+  if (typeof summary === "string") {
+    return { title: fallbackTitle, body: summary, fill: HW_STYLE.color.card };
+  }
+  return { title: summary.label || fallbackTitle, body: summary.body || summary.items || summary.title || "", fill: summary.fill || HW_STYLE.color.card };
+}
+
+function normalizeSummaryLines(body) {
+  if (Array.isArray(body)) {
+    return body.slice(0, 3).map((line, idx) => normalizeSummaryLine(line, idx));
+  }
+  return [normalizeSummaryLine(body, 0)];
+}
+
+function normalizeSummaryLine(line, idx = 0) {
+  if (line && typeof line === "object") {
+    return {
+      label: safeText(line.label || line.title || fallbackSummaryLabel(idx)),
+      text: safeText(line.text || line.body || line.value || ""),
+    };
+  }
+  const text = safeText(line);
+  const match = text.match(/^([^：:]{2,10})[：:]\s*(.+)$/);
+  if (match && !/^结论\d*$/.test(match[1])) {
+    return { label: safeText(match[1]), text: safeText(match[2]) };
+  }
+  return { label: fallbackSummaryLabel(idx), text };
+}
+
+function fallbackSummaryLabel(idx) {
+  return ["核心判断", "内容取舍", "行动指向"][idx] || "关键总结";
+}
+
+function addSummaryRichText(slide, lines, options) {
+  const lineH = Math.min(0.28, (options.h || 0.56) / Math.max(lines.length, 1));
+  lines.forEach((line, idx) => {
+    slide.addText([
+      { text: `${line.label}：`, options: { bold: true } },
+      { text: line.text, options: { bold: false } },
+    ], cloneOptions({
+      fontFace: HW_STYLE.font.cn,
+      fontSize: HW_STYLE.size.bodyLarge,
+      color: HW_STYLE.color.text,
+      margin: 0.01,
+      breakLine: false,
+      lineSpacingMultiple: 1,
+      paraSpaceAfterPt: 0,
+      ...options,
+      y: options.y + idx * lineH,
+      h: lineH,
+    }));
+  });
+}
+
+function addAnalysisSummary(slide, summary, options = {}) {
+  const {
+    x = HW_STYLE.slide.marginX,
+    y = HW_STYLE.summary.y,
+    w = 12.23,
+    h = HW_STYLE.summary.h,
+    labelW = 1.06,
+    title = "分析总结",
+  } = options;
+  const data = normalizeSummary(summary, title);
+  addRect(slide, {
+    x,
+    y: y + 0.16,
+    w: labelW,
+    h: h - 0.32,
+    fill: { color: HW_STYLE.color.red },
+    line: { color: HW_STYLE.color.red, width: 0.5 },
+  });
+  textBox(slide, data.title || title, {
+    x: x + 0.06,
+    y: y + 0.24,
+    w: labelW - 0.12,
+    h: h - 0.48,
+    fontSize: HW_STYLE.size.bodyLarge,
+    bold: true,
+    color: HW_STYLE.color.white,
+    align: "center",
+    valign: "mid",
+    lineSpacingMultiple: 1.05,
+  });
+  addRect(slide, {
+    x: x + labelW + 0.12,
+    y: y + 0.16,
+    w: w - labelW - 0.12,
+    h: h - 0.32,
+    fill: { color: data.fill || HW_STYLE.color.card },
+    line: { color: data.fill || HW_STYLE.color.card, width: 0.5 },
+  });
+  addSummaryRichText(slide, normalizeSummaryLines(data.body), {
+    x: x + labelW + 0.35,
+    y: y + 0.23,
+    w: w - labelW - 0.58,
+    h: h - 0.46,
   });
 }
 
@@ -341,7 +495,7 @@ function addTocSlide(pptx, data = {}) {
 function addSectionSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
   slide.background = { color: HW_STYLE.color.white };
-  addPageTitle(slide, data.title || "章节标题");
+  addPageTitle(slide, data.title || "章节标题", { subtitle: data.titleNote || data.titleSubtitle || "" });
   addRect(slide, { x: HW_STYLE.slide.marginX, y: 1.35, w: 1.05, h: 0.5, fill: { color: HW_STYLE.color.red }, line: { color: HW_STYLE.color.red, width: 0.5 } });
   textBox(slide, data.number || "01", {
     x: HW_STYLE.slide.marginX,
@@ -380,15 +534,16 @@ function addSectionSlide(pptx, data = {}) {
 
 function addContentCardsSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "页面标题", data.kicker || "");
+  addPageTitle(slide, data.title || "页面标题", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addAnalysisSummary(slide, data.summary);
   const cards = data.cards || [];
   const cols = data.columns || (cards.length > 2 ? 3 : 1);
   const density = data.density || "compact";
   const gap = 0.12;
   const areaX = HW_STYLE.slide.marginX;
-  const areaY = HW_STYLE.slide.contentTop;
+  const areaY = HW_STYLE.summary.contentTop;
   const areaW = 12.23;
-  const areaH = 6.0;
+  const areaH = HW_STYLE.slide.footerY - areaY - 0.25;
   const colW = (areaW - gap * (cols - 1)) / cols;
   const rows = Math.ceil(cards.length / cols);
   const fullRowH = (areaH - gap * (rows - 1)) / Math.max(rows, 1);
@@ -410,38 +565,24 @@ function addContentCardsSlide(pptx, data = {}) {
       fill: card.fill || HW_STYLE.color.card,
     });
   });
-  if (data.summary || (density !== "dense" && rows === 1 && cards.length >= 2)) {
-    const summaryY = areaY + rowH + 0.22;
-    const summary = data.summary || {
-      title: "综合判断",
-      body: "补充证据区：优先放置表格、图表、流程、源图或结论说明，避免三栏内容页出现大面积空白。",
-    };
-    grayCard(slide, {
-      x: areaX,
-      y: summaryY,
-      w: areaW,
-      h: Math.min(1.35, HW_STYLE.slide.footerY - summaryY - 0.25),
-      title: summary.title,
-      body: summary.body,
-      fill: summary.fill || HW_STYLE.color.softRed,
-    });
-  }
   addFooter(slide, { source: data.source, page: data.page });
   return slide;
 }
 
 function addColumnsSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "分栏页面", data.kicker || "");
+  addPageTitle(slide, data.title || "分栏页面", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addAnalysisSummary(slide, data.summary);
   const columns = data.columns || [];
   const weights = data.weights || columns.map(() => 1);
   const density = data.density || "compact";
   const total = weights.reduce((sum, value) => sum + value, 0) || 1;
   const gap = 0.12;
   const areaX = HW_STYLE.slide.marginX;
-  const areaY = HW_STYLE.slide.contentTop;
+  const areaY = HW_STYLE.summary.contentTop;
   const areaW = 12.23;
-  const cardH = density === "dense" ? 5.85 : Math.min(data.cardHeight || 2.65, 5.85);
+  const maxCardH = HW_STYLE.slide.footerY - areaY - 0.25;
+  const cardH = density === "dense" ? maxCardH : Math.min(data.cardHeight || 2.65, maxCardH);
   let x = areaX;
   columns.forEach((column, idx) => {
     const w = (areaW - gap * (columns.length - 1)) * (weights[idx] / total);
@@ -457,29 +598,14 @@ function addColumnsSlide(pptx, data = {}) {
     });
     x += w + gap;
   });
-  if (data.summary || (density !== "dense" && columns.length >= 2)) {
-    const summaryY = areaY + cardH + 0.58;
-    const summary = data.summary || {
-      title: "补充证据区",
-      body: "分栏页默认保持紧凑；剩余空间应用于图表、流程、表格、源图或总结，不要放大空卡片。",
-    };
-    grayCard(slide, {
-      x: areaX,
-      y: summaryY,
-      w: areaW,
-      h: Math.min(1.35, HW_STYLE.slide.footerY - summaryY - 0.25),
-      title: summary.title,
-      body: summary.body,
-      fill: summary.fill || HW_STYLE.color.softRed,
-    });
-  }
   addFooter(slide, { source: data.source, page: data.page });
   return slide;
 }
 
 function addDataCardsSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "数据概览", data.kicker || "");
+  addPageTitle(slide, data.title || "数据概览", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addAnalysisSummary(slide, data.summary);
   const cards = data.cards || [];
   const gap = 0.12;
   const cols = Math.min(4, Math.max(1, data.columns || cards.length || 1));
@@ -489,7 +615,7 @@ function addDataCardsSlide(pptx, data = {}) {
     const col = idx % cols;
     const row = Math.floor(idx / cols);
     const x = HW_STYLE.slide.marginX + col * (colW + gap);
-    const y = HW_STYLE.slide.contentTop + row * (rowH + gap);
+    const y = HW_STYLE.summary.contentTop + row * (rowH + gap);
     addRect(slide, { x, y, w: colW, h: rowH, fill: { color: card.fill || HW_STYLE.color.pale }, line: { color: HW_STYLE.color.line, width: 0.5 } });
     textBox(slide, card.value || "0", {
       x: x + 0.16,
@@ -517,16 +643,14 @@ function addDataCardsSlide(pptx, data = {}) {
       color: HW_STYLE.color.text,
     });
   });
-  if (data.summary) {
-    grayCard(slide, { x: HW_STYLE.slide.marginX, y: 4.2, w: 12.23, h: 1.6, title: data.summary.title, body: data.summary.body, fill: HW_STYLE.color.softRed });
-  }
   addFooter(slide, { source: data.source, page: data.page });
   return slide;
 }
 
 function addTableSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "表格分析", data.kicker || "");
+  addPageTitle(slide, data.title || "表格分析", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addAnalysisSummary(slide, data.summary);
   const rows = data.rows || [];
   const tableData = rows.map((row, rIdx) =>
     row.map((cell) => ({
@@ -544,9 +668,9 @@ function addTableSlide(pptx, data = {}) {
   );
   slide.addTable(tableData, {
     x: HW_STYLE.slide.marginX,
-    y: HW_STYLE.slide.contentTop,
+    y: HW_STYLE.summary.contentTop,
     w: 12.23,
-    h: 5.78,
+    h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - 0.35,
     border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
     margin: 0.03,
   });
@@ -556,13 +680,14 @@ function addTableSlide(pptx, data = {}) {
 
 function addBarChartSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "柱状图分析", data.kicker || "");
+  addPageTitle(slide, data.title || "柱状图分析", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addAnalysisSummary(slide, data.summary);
   const series = data.series || [];
   const maxValue = Math.max(...series.map((item) => Number(item.value) || 0), 1);
   const chartX = 0.85;
-  const chartY = 1.22;
+  const chartY = HW_STYLE.summary.contentTop + 0.1;
   const chartW = 7.35;
-  const chartH = 4.7;
+  const chartH = 3.72;
   addLine(slide, chartX, chartY + chartH, chartX + chartW, chartY + chartH, { line: { color: HW_STYLE.color.line, width: 0.5 } });
   const gap = 0.12;
   const barW = Math.min(0.55, (chartW - gap * Math.max(series.length - 1, 0)) / Math.max(series.length, 1));
@@ -577,9 +702,9 @@ function addBarChartSlide(pptx, data = {}) {
   });
   grayCard(slide, {
     x: 8.45,
-    y: 1.2,
+    y: chartY,
     w: 3.9,
-    h: 4.72,
+    h: chartH,
     title: data.insightTitle || "关键观察",
     body: data.insights || [],
     fill: HW_STYLE.color.card,
@@ -590,10 +715,11 @@ function addBarChartSlide(pptx, data = {}) {
 
 function addFlowSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "流程设计", data.kicker || "");
+  addPageTitle(slide, data.title || "流程设计", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addAnalysisSummary(slide, data.summary);
   const steps = data.steps || [];
   const areaX = 0.7;
-  const y = 1.55;
+  const y = HW_STYLE.summary.contentTop + 0.1;
   const gap = 0.12;
   const stepW = (12.0 - gap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1);
   steps.forEach((step, idx) => {
@@ -605,9 +731,6 @@ function addFlowSlide(pptx, data = {}) {
       addLine(slide, x + stepW + 0.02, y + 0.24, x + stepW + gap - 0.02, y + 0.24, { line: { color: HW_STYLE.color.line, width: 0.5, endArrowType: "triangle" } });
     }
   });
-  if (data.summary) {
-    grayCard(slide, { x: 0.7, y: 5.62, w: 12.0, h: 0.75, title: data.summary.title, body: data.summary.body, fill: HW_STYLE.color.softRed });
-  }
   addFooter(slide, { source: data.source, page: data.page });
   return slide;
 }
@@ -621,6 +744,7 @@ module.exports = {
   addDataCardsSlide,
   addFlowSlide,
   addFooter,
+  addAnalysisSummary,
   addPageTitle,
   addSectionSlide,
   addTableSlide,

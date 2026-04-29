@@ -59,7 +59,7 @@ function main() {
 
   const review = {
     generated_at: new Date().toISOString(),
-    instruction: "Fill observations and applied_to_slides before writing deck-generation code. Do not leave them empty.",
+    instruction: "Fill observations and applied_to_slides before writing deck-generation code. For content-page references, explicitly note the top 分析总结 band: red label, gray conclusion body, and how detailed content begins below it. Do not leave entries empty.",
     status: "needs_human_visual_observations",
     references,
   };

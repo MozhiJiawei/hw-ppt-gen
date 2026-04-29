@@ -197,6 +197,89 @@ function availableTextLines(shape, fontSize, lineSpacingMultiple = 1.5) {
   return Math.max(shape.h / lineHeight, 0);
 }
 
+function titleShape(shapes) {
+  return shapes
+    .filter((shape) => shape.text && shape.y !== null && shape.y < 0.82 && shape.x !== null && shape.x < 1.2)
+    .sort((a, b) => a.y - b.y || a.x - b.x)[0];
+}
+
+function isTocSlide(shapes) {
+  const title = titleShape(shapes);
+  return Boolean(title && /目录|CONTENTS/i.test(title.text));
+}
+
+function isSectionSlide(shapes) {
+  const sectionBadge = shapes.some((shape) =>
+    shape.fill === "C00000" &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.w !== null &&
+    shape.h !== null &&
+    shape.x >= 0.45 &&
+    shape.x <= 0.75 &&
+    shape.y >= 1.25 &&
+    shape.y <= 1.5 &&
+    shape.w >= 0.9 &&
+    shape.w <= 1.2 &&
+    shape.h >= 0.4 &&
+    shape.h <= 0.65
+  );
+  const sectionNumber = shapes.some((shape) =>
+    /^\d{1,2}$/.test(shape.text) &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.x >= 0.45 &&
+    shape.x <= 0.8 &&
+    shape.y >= 1.3 &&
+    shape.y <= 1.65
+  );
+  const sectionSubtitle = shapes.some((shape) =>
+    shape.text &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.x >= 1.6 &&
+    shape.x <= 2.1 &&
+    shape.y >= 1.2 &&
+    shape.y <= 1.7
+  );
+  return sectionBadge && (sectionNumber || sectionSubtitle);
+}
+
+function isContentSlide(slide, shapes) {
+  if (!slide || slide <= 1) return false;
+  if (isTocSlide(shapes)) return false;
+  if (isSectionSlide(shapes)) return false;
+  return Boolean(titleShape(shapes));
+}
+
+function hasAnalysisSummary(shapes) {
+  const hasLabel = shapes.some((shape) =>
+    /分析总结/.test(shape.text) &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.x >= 0.5 &&
+    shape.x <= 2.0 &&
+    shape.y >= 0.9 &&
+    shape.y <= 1.8
+  );
+  const hasSemanticSummary = shapes.some((shape) =>
+    /[\u3400-\u9fff]{2,10}[：:][\u3400-\u9fff]/.test(shape.text) &&
+    shape.y !== null &&
+    shape.y >= 0.9 &&
+    shape.y <= 1.9
+  );
+  return hasLabel && hasSemanticSummary;
+}
+
+function hasGenericConclusionLabels(shapes) {
+  return shapes.some((shape) =>
+    /结论\s*\d+\s*[：:]/.test(shape.text) &&
+    shape.y !== null &&
+    shape.y >= 0.9 &&
+    shape.y <= 1.9
+  );
+}
+
 function shapeBounds(shape) {
   if ([shape.x, shape.y, shape.w, shape.h].some((value) => value === null)) return null;
   return { left: shape.x, top: shape.y, right: shape.x + shape.w, bottom: shape.y + shape.h };
@@ -294,9 +377,7 @@ function checkSlideXml(name, xml) {
   }
 
   if (slide && slide > 1) {
-    const title = shapes
-      .filter((shape) => shape.text && shape.y !== null && shape.y < 0.82 && shape.x !== null && shape.x < 1.2)
-      .sort((a, b) => a.y - b.y || a.x - b.x)[0];
+    const title = titleShape(shapes);
     if (!title) {
       issues.push(issue(slide, "page_title_missing", "error", "Content slide is missing a top-left page title."));
     } else {
@@ -320,6 +401,14 @@ function checkSlideXml(name, xml) {
         issues.push(issue(slide, "page_title_overflow_estimate", "error", "Page title text is estimated to exceed its text box height.", { estimated_lines: titleLines, available_lines: Math.round(availableTextLines(title, maxSize || 24, 1.15) * 10) / 10, text: title.text }));
       }
     }
+  }
+
+  if (isContentSlide(slide, shapes) && !hasAnalysisSummary(shapes)) {
+    issues.push(issue(slide, "analysis_summary_missing", "error", "Content slide is missing the required top analysis summary block with an 分析总结 label and semantic summary labels."));
+  }
+
+  if (isContentSlide(slide, shapes) && hasGenericConclusionLabels(shapes)) {
+    issues.push(issue(slide, "analysis_summary_generic_label", "error", "Analysis summary uses generic labels such as 结论1; replace them with meaning-specific labels that summarize the content below."));
   }
 
   for (const shape of shapes.filter((item) => item.text)) {
@@ -365,7 +454,7 @@ function checkSlideXml(name, xml) {
     }
   }
 
-  const largeCards = shapes.filter((shape) => CONTENT_CARD_FILLS.has(shape.fill) && shape.area >= 2.8);
+  const largeCards = shapes.filter((shape) => CONTENT_CARD_FILLS.has(shape.fill) && shape.area >= 2.8 && (shape.y === null || shape.y >= 1.95));
   for (const card of largeCards) {
     const containedText = shapes
       .filter((shape) => shape.text && isInside(shape, card))

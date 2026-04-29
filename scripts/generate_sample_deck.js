@@ -34,7 +34,14 @@ async function main() {
   });
 
   addContentCardsSlide(pptx, {
-    title: "生成前先规划页面，将内容结构和视觉落版分开处理",
+    title: "生成前先规划页面",
+    titleNote: "将内容结构和视觉落版分开处理",
+    summary: {
+      body: [
+        { label: "规划先行", text: "先完成页面级观点规划，再进入生成脚本，能显著减少返工。" },
+        { label: "信息收束", text: "每页只保留三条以内核心信息，详细证据放在下方内容区。" },
+      ],
+    },
     columns: 3,
     cards: [
       { title: "输入分析", subtitle: "识别材料类型", body: ["网页、论文解析、代码库分析、Markdown 或用户 prompt", "提取目标受众、汇报目的和关键证据"] },
@@ -45,7 +52,14 @@ async function main() {
   });
 
   addColumnsSlide(pptx, {
-    title: "组件库固化华为红黑白灰视觉语言，避免每次从提示词重造样式",
+    title: "组件库固化视觉语言",
+    titleNote: "避免每次从提示词重造样式",
+    summary: {
+      body: [
+        { label: "组件固化", text: "视觉约束应沉淀到 helper 组件，减少单页手写样式漂移。" },
+        { label: "关系驱动", text: "内容关系决定布局形态，分栏只服务于比较、并列和主次关系。" },
+      ],
+    },
     weights: [1, 1.45],
     columns: [
       { title: "风格约束", subtitle: "可机械判断的规则进入代码", body: ["16:9 宽屏", "微软雅黑 / Arial / Impact", "华为红 C00000", "线框 0.5pt", "字号不低于 6pt"] },
@@ -55,7 +69,8 @@ async function main() {
   });
 
   addDataCardsSlide(pptx, {
-    title: "数据卡用于高密度呈现关键指标，并用克制红色标注重点",
+    title: "数据卡呈现关键指标",
+    titleNote: "用克制红色标注重点",
     columns: 4,
     cards: [
       { value: "10", label: "参考图数量", note: "用于生成前视觉定向", highlight: true },
@@ -63,12 +78,19 @@ async function main() {
       { value: "3", label: "单页核心观点", note: "标题和正文保持一致" },
       { value: ".tmp", label: "生成产物目录", note: "PPTX、报告、截图均写入此目录", highlight: true },
     ],
-    summary: { title: "结论", body: "生成质量来自页面规划、组件固化和 QA 闭环，而不是单纯依赖自然语言提示。" },
+    summary: { body: { label: "质量来源", text: "生成质量来自页面规划、组件固化和 QA 闭环，而不是单纯依赖自然语言提示。" } },
     page: "05",
   });
 
   addTableSlide(pptx, {
-    title: "硬规则检查覆盖字体、字号、颜色、动画和线框等稳定约束",
+    title: "硬规则检查覆盖稳定约束",
+    titleNote: "字体、字号、颜色、动画和线框均可机械验证",
+    summary: {
+      body: [
+        { label: "规则入脚本", text: "可机械判断的风格规则必须进入检查脚本，避免只靠人工目测。" },
+        { label: "错误即阻塞", text: "错误作为阻塞项处理，警告需要修复或在 QA 记录中说明接受理由。" },
+      ],
+    },
     rows: [
       ["检查项", "规则", "级别", "处理方式"],
       ["字体", "微软雅黑 / Arial / Impact", "Warning", "修正生成脚本中的 fontFace"],
@@ -81,7 +103,14 @@ async function main() {
   });
 
   addBarChartSlide(pptx, {
-    title: "柱状图采用灰色主体和红色重点，保持商务材料的克制表达",
+    title: "柱状图保持克制表达",
+    titleNote: "灰色主体承载趋势，红色只标注重点",
+    summary: {
+      body: [
+        { label: "先判后证", text: "图表页先给出判断，再用下方图形说明差异和趋势。" },
+        { label: "红色克制", text: "红色只标注重点类别，避免把整页变成装饰性强调。" },
+      ],
+    },
     series: [
       { label: "规划", value: 42 },
       { label: "组件", value: 68, highlight: true },
@@ -95,7 +124,8 @@ async function main() {
   });
 
   addFlowSlide(pptx, {
-    title: "端到端流程要求先看参考图，再写生成脚本，最后验证并修正",
+    title: "端到端流程先定视觉",
+    titleNote: "看参考图、写脚本、验证后再修正",
     steps: [
       { title: "看材料", body: ["提炼受众、目的、证据"] },
       { title: "看参考图", body: ["确定密度、红灰比例和组件形态"] },
@@ -103,7 +133,7 @@ async function main() {
       { title: "生成", body: ["用 pptxgenjs helper 生成 .tmp PPTX"] },
       { title: "检查", body: ["内容 QA、视觉 QA、硬规则 QA"] },
     ],
-    summary: { title: "交付要求", body: "若不能渲染为图片，不得声称完成渲染级视觉 QA，需说明残余风险。" },
+    summary: { body: { label: "交付底线", text: "若不能渲染为图片，不得声称完成渲染级视觉 QA，需说明残余风险。" } },
     page: "08",
   });
 

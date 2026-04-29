@@ -41,7 +41,7 @@ const HW_STYLE = Object.freeze({
     data: 18,
   },
   line: { normal: 0.5 },
-  summary: { y: 0.96, h: 1.12, contentTop: 2.35 },
+  summary: { y: 1.08, h: 1.12, contentTop: 2.47 },
 });
 
 function cloneOptions(value) {
@@ -148,10 +148,14 @@ function addPageTitle(slide, title, options = {}) {
   const opts = typeof options === "string" ? { kicker: options } : (options || {});
   const kicker = opts.kicker || "";
   const subtitle = opts.subtitle || opts.titleNote || "";
+  const hasSectionTabs = Array.isArray(opts.sections) && opts.sections.length > 0;
+  const titleW = 12.2;
+  const titleY = opts.titleY ?? (hasSectionTabs ? 0.46 : HW_STYLE.slide.titleY);
+  const titleRuleY = opts.titleRuleY ?? (hasSectionTabs ? 1.0 : HW_STYLE.slide.titleRuleY);
   if (kicker) {
     textBox(slide, kicker, {
       x: HW_STYLE.slide.marginX,
-      y: 0.14,
+      y: titleY - 0.16,
       w: 1.25,
       h: 0.18,
       fontSize: 12,
@@ -166,8 +170,8 @@ function addPageTitle(slide, title, options = {}) {
       { text: ` - ${subtitleText}`, options: { fontSize: HW_STYLE.size.data, bold: true } },
     ], cloneOptions({
       x: HW_STYLE.slide.marginX,
-      y: HW_STYLE.slide.titleY,
-      w: 12.2,
+      y: titleY,
+      w: titleW,
       h: 0.5,
       fontFace: HW_STYLE.font.cn,
       fontSize: HW_STYLE.size.pageTitle,
@@ -180,16 +184,85 @@ function addPageTitle(slide, title, options = {}) {
   } else {
     textBox(slide, title, {
       x: HW_STYLE.slide.marginX,
-      y: HW_STYLE.slide.titleY,
-      w: 12.2,
+      y: titleY,
+      w: titleW,
       h: 0.5,
       fontSize: HW_STYLE.size.pageTitle,
       bold: true,
       color: HW_STYLE.color.red,
     });
   }
-  addLine(slide, HW_STYLE.slide.marginX, HW_STYLE.slide.titleRuleY, 12.78, HW_STYLE.slide.titleRuleY, {
+  if (hasSectionTabs) {
+    addSectionTabs(slide, opts.sections, opts.currentSection ?? opts.activeSection ?? opts.section);
+  }
+  addLine(slide, HW_STYLE.slide.marginX, titleRuleY, 12.78, titleRuleY, {
     line: { color: HW_STYLE.color.red, width: 0.5 },
+  });
+}
+
+function normalizeSectionTabs(sections, currentSection) {
+  const titles = (sections || [])
+    .map((section) => {
+      if (section && typeof section === "object") return section.shortTitle || section.title || section.name || section.label || "";
+      return section;
+    })
+    .map(safeText)
+    .filter(Boolean);
+  if (!titles.length) return { titles: [], activeIndex: -1 };
+
+  let activeIndex = 0;
+  if (Number.isInteger(currentSection)) {
+    activeIndex = currentSection >= 1 && currentSection <= titles.length ? currentSection - 1 : Math.max(0, Math.min(currentSection, titles.length - 1));
+  } else if (currentSection) {
+    const normalized = safeText(currentSection);
+    const exact = titles.findIndex((title) => title === normalized);
+    const partial = titles.findIndex((title) => normalized.includes(title) || title.includes(normalized));
+    activeIndex = exact >= 0 ? exact : (partial >= 0 ? partial : 0);
+  }
+  return { titles, activeIndex };
+}
+
+function addSectionTabs(slide, sections, currentSection, options = {}) {
+  const { titles, activeIndex } = normalizeSectionTabs(sections, currentSection);
+  if (!titles.length) return;
+  const minTabW = options.minTabW ?? 0.88;
+  const maxTabW = options.maxTabW ?? 1.55;
+  const maxW = options.maxW ?? 5.25;
+  const naturalWidths = titles.map((title) => Math.max(minTabW, Math.min(maxTabW, estimateTextWidth(title, 8) + 0.38)));
+  const naturalTotal = naturalWidths.reduce((sum, value) => sum + value, 0);
+  const scale = naturalTotal > maxW ? maxW / naturalTotal : 1;
+  const widths = naturalWidths.map((value) => value * scale);
+  const w = options.w ?? widths.reduce((sum, value) => sum + value, 0);
+  const x = options.x ?? (12.78 - w);
+  const y = options.y ?? 0;
+  const h = options.h ?? 0.32;
+  let cursorX = x;
+  titles.forEach((title, idx) => {
+    const active = idx === activeIndex;
+    const tabW = widths[idx] ?? (w / titles.length);
+    addRect(slide, {
+      x: cursorX,
+      y,
+      w: tabW,
+      h,
+      fill: { color: active ? HW_STYLE.color.red : HW_STYLE.color.white },
+      line: { color: HW_STYLE.color.black, width: 0.5 },
+    });
+    textBox(slide, title, {
+      x: cursorX + 0.05,
+      y: y + 0.065,
+      w: tabW - 0.1,
+      h: h - 0.1,
+      fontSize: 8,
+      bold: true,
+      color: active ? HW_STYLE.color.white : HW_STYLE.color.black,
+      align: "center",
+      valign: "mid",
+      lineSpacingMultiple: 1,
+      margin: 0,
+      fit: "shrink",
+    });
+    cursorX += tabW;
   });
 }
 
@@ -217,20 +290,21 @@ function addFooter(slide, options = {}) {
   });
 }
 
-function redTitleCard(slide, title, x, y, w, h = 0.32) {
+function redTitleCard(slide, title, x, y, w, h = 0.36) {
+  const boxH = Math.max(h, 0.34);
   addRect(slide, {
     x,
     y,
     w,
-    h,
+    h: boxH,
     fill: { color: HW_STYLE.color.red },
     line: { color: HW_STYLE.color.red, width: 0.5 },
   });
   textBox(slide, title, {
-    x: x + 0.12,
-    y: y + 0.04,
-    w: w - 0.24,
-    h: h - 0.08,
+    x: x + 0.16,
+    y: y + 0.055,
+    w: w - 0.32,
+    h: boxH - 0.11,
     fontSize: HW_STYLE.size.cardTitle,
     bold: true,
     color: HW_STYLE.color.white,
@@ -495,7 +569,11 @@ function addTocSlide(pptx, data = {}) {
 function addSectionSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
   slide.background = { color: HW_STYLE.color.white };
-  addPageTitle(slide, data.title || "章节标题", { subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "章节标题", {
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section || data.title,
+  });
   addRect(slide, { x: HW_STYLE.slide.marginX, y: 1.35, w: 1.05, h: 0.5, fill: { color: HW_STYLE.color.red }, line: { color: HW_STYLE.color.red, width: 0.5 } });
   textBox(slide, data.number || "01", {
     x: HW_STYLE.slide.marginX,
@@ -534,7 +612,12 @@ function addSectionSlide(pptx, data = {}) {
 
 function addContentCardsSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "页面标题", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "页面标题", {
+    kicker: data.kicker || "",
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section,
+  });
   addAnalysisSummary(slide, data.summary);
   const cards = data.cards || [];
   const cols = data.columns || (cards.length > 2 ? 3 : 1);
@@ -571,7 +654,12 @@ function addContentCardsSlide(pptx, data = {}) {
 
 function addColumnsSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "分栏页面", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "分栏页面", {
+    kicker: data.kicker || "",
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section,
+  });
   addAnalysisSummary(slide, data.summary);
   const columns = data.columns || [];
   const weights = data.weights || columns.map(() => 1);
@@ -604,7 +692,12 @@ function addColumnsSlide(pptx, data = {}) {
 
 function addDataCardsSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "数据概览", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "数据概览", {
+    kicker: data.kicker || "",
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section,
+  });
   addAnalysisSummary(slide, data.summary);
   const cards = data.cards || [];
   const gap = 0.12;
@@ -647,32 +740,58 @@ function addDataCardsSlide(pptx, data = {}) {
   return slide;
 }
 
+function addHuaweiTable(slide, rows, options = {}) {
+  const dataRows = rows || [];
+  const tableData = dataRows.map((row, rIdx) =>
+    row.map((cell, cIdx) => {
+      const cellText = typeof cell === "object" && cell !== null ? cell.text : cell;
+      const cellOptions = typeof cell === "object" && cell !== null ? (cell.options || {}) : {};
+      return {
+        text: safeText(cellText),
+        options: cloneOptions({
+          fontFace: HW_STYLE.font.cn,
+          fontSize: options.fontSize || HW_STYLE.size.body,
+          color: rIdx === 0 ? HW_STYLE.color.white : HW_STYLE.color.text,
+          bold: rIdx === 0 || (options.boldFirstColumn && cIdx === 0),
+          fill: { color: rIdx === 0 ? HW_STYLE.color.red : (rIdx % 2 ? HW_STYLE.color.white : HW_STYLE.color.pale) },
+          margin: options.margin ?? 0.06,
+          align: "left",
+          border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
+          ...cellOptions,
+        }),
+      };
+    })
+  );
+  const tableOptions = {
+    x: options.x ?? HW_STYLE.slide.marginX,
+    y: options.y ?? HW_STYLE.summary.contentTop,
+    w: options.w ?? 12.23,
+    border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
+    margin: options.margin ?? 0.06,
+  };
+  if (options.h !== undefined) tableOptions.h = options.h;
+  if (options.colW !== undefined) tableOptions.colW = options.colW;
+  if (options.rowH !== undefined) tableOptions.rowH = options.rowH;
+  slide.addTable(tableData, tableOptions);
+}
+
 function addTableSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "表格分析", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "表格分析", {
+    kicker: data.kicker || "",
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section,
+  });
   addAnalysisSummary(slide, data.summary);
-  const rows = data.rows || [];
-  const tableData = rows.map((row, rIdx) =>
-    row.map((cell) => ({
-      text: safeText(cell),
-      options: {
-        fontFace: HW_STYLE.font.cn,
-        fontSize: rIdx === 0 ? HW_STYLE.size.body : HW_STYLE.size.body,
-        color: rIdx === 0 ? HW_STYLE.color.white : HW_STYLE.color.text,
-        bold: rIdx === 0,
-        fill: { color: rIdx === 0 ? HW_STYLE.color.red : rIdx % 2 ? HW_STYLE.color.white : HW_STYLE.color.pale },
-        margin: 0.03,
-        border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
-      },
-    }))
-  );
-  slide.addTable(tableData, {
+  addHuaweiTable(slide, data.rows || [], {
     x: HW_STYLE.slide.marginX,
     y: HW_STYLE.summary.contentTop,
     w: 12.23,
     h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - 0.35,
-    border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
-    margin: 0.03,
+    colW: data.colW,
+    rowH: data.rowH,
+    boldFirstColumn: data.boldFirstColumn ?? true,
   });
   addFooter(slide, { source: data.source, page: data.page });
   return slide;
@@ -680,7 +799,12 @@ function addTableSlide(pptx, data = {}) {
 
 function addBarChartSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "柱状图分析", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "柱状图分析", {
+    kicker: data.kicker || "",
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section,
+  });
   addAnalysisSummary(slide, data.summary);
   const series = data.series || [];
   const maxValue = Math.max(...series.map((item) => Number(item.value) || 0), 1);
@@ -715,7 +839,12 @@ function addBarChartSlide(pptx, data = {}) {
 
 function addFlowSlide(pptx, data = {}) {
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "流程设计", { kicker: data.kicker || "", subtitle: data.titleNote || data.titleSubtitle || "" });
+  addPageTitle(slide, data.title || "流程设计", {
+    kicker: data.kicker || "",
+    subtitle: data.titleNote || data.titleSubtitle || "",
+    sections: data.sections || [],
+    currentSection: data.currentSection || data.section,
+  });
   addAnalysisSummary(slide, data.summary);
   const steps = data.steps || [];
   const areaX = 0.7;
@@ -744,8 +873,10 @@ module.exports = {
   addDataCardsSlide,
   addFlowSlide,
   addFooter,
+  addHuaweiTable,
   addAnalysisSummary,
   addPageTitle,
+  addSectionTabs,
   addSectionSlide,
   addTableSlide,
   addTocSlide,

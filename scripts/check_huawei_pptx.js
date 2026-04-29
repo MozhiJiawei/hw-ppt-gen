@@ -33,7 +33,7 @@ const ALLOWED_COLORS = new Set([
 ]);
 
 const STANDARD_LINE_WIDTH = 6350;
-const ALLOWED_FONT_SIZES = new Set([6, 12, 14, 18, 24]);
+const ALLOWED_FONT_SIZES = new Set([6, 8, 12, 14, 18, 24]);
 const CONTENT_CARD_FILLS = new Set(["F2F2F2", "F7F7F7", "FFF1EF", "FCE4E0"]);
 const LANGUAGE_ALLOWLIST = new Set([
   "ai",
@@ -280,6 +280,88 @@ function hasGenericConclusionLabels(shapes) {
   );
 }
 
+function hasSectionIndicator(shapes) {
+  const topRightTabs = shapes.filter((shape) =>
+    shape.text &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.x >= 7.5 &&
+    shape.y >= 0.0 &&
+    shape.y <= 0.55
+  );
+  const activeTab = shapes.some((shape) =>
+    shape.fill === "C00000" &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.w !== null &&
+    shape.h !== null &&
+    shape.x >= 7.5 &&
+    shape.y >= 0.0 &&
+    shape.y <= 0.55 &&
+    shape.w >= 0.3 &&
+    shape.h >= 0.16
+  );
+  return activeTab && topRightTabs.length >= 2;
+}
+
+function sectionIndicatorInfo(shapes) {
+  const tabLabels = shapes
+    .filter((shape) =>
+      shape.text &&
+      shape.x !== null &&
+      shape.y !== null &&
+      shape.w !== null &&
+      shape.x >= 7.5 &&
+      shape.y >= 0.0 &&
+      shape.y <= 0.55
+    )
+    .sort((a, b) => a.x - b.x);
+  const activeTab = shapes
+    .filter((shape) =>
+      shape.fill === "C00000" &&
+      shape.x !== null &&
+      shape.y !== null &&
+      shape.w !== null &&
+      shape.h !== null &&
+      shape.x >= 7.5 &&
+      shape.y >= 0.0 &&
+      shape.y <= 0.55 &&
+      shape.w >= 0.3 &&
+      shape.h >= 0.16
+    )
+    .sort((a, b) => b.w * b.h - a.w * a.h)[0];
+  if (!tabLabels.length || !activeTab) return null;
+  const activeCenter = activeTab.x + activeTab.w / 2;
+  const activeIndex = tabLabels.findIndex((shape) => activeCenter >= shape.x && activeCenter <= shape.x + shape.w);
+  return {
+    activeIndex: activeIndex >= 0 ? activeIndex : tabLabels.filter((shape) => shape.x + shape.w / 2 < activeCenter).length,
+    labels: tabLabels.map((shape) => shape.text),
+    left: Math.min(...tabLabels.map((shape) => shape.x)),
+    right: Math.max(...tabLabels.map((shape) => shape.x + shape.w)),
+  };
+}
+
+function checkSectionOrder(slideEntries) {
+  const issues = [];
+  let last = null;
+  for (const entry of slideEntries) {
+    const slide = slideNumber(entry.name);
+    const shapes = extractShapes(entry.xml);
+    if (!isContentSlide(slide, shapes)) continue;
+    const info = sectionIndicatorInfo(shapes);
+    if (!info) continue;
+    if (last && info.activeIndex < last.activeIndex) {
+      issues.push(issue(slide, "section_order_regression", "error", "Content slides must follow the contents-page section order; the active chapter indicator moved backward.", {
+        previous_slide: last.slide,
+        previous_section: last.labels[last.activeIndex] || "",
+        current_section: info.labels[info.activeIndex] || "",
+      }));
+    }
+    last = { slide, ...info };
+  }
+  return issues;
+}
+
 function shapeBounds(shape) {
   if ([shape.x, shape.y, shape.w, shape.h].some((value) => value === null)) return null;
   return { left: shape.x, top: shape.y, right: shape.x + shape.w, bottom: shape.y + shape.h };
@@ -332,9 +414,9 @@ function checkSlideXml(name, xml) {
   }
   const unexpectedFontSizes = [...fontSizes].filter((points) => !ALLOWED_FONT_SIZES.has(points));
   if (unexpectedFontSizes.length) {
-    issues.push(issue(slide, "font_size_unexpected", "warning", `Slide uses font sizes outside the Huawei size set 12/14/18/24pt plus 6pt footer/caption exception.`, { values: unexpectedFontSizes.sort((a, b) => a - b) }));
+    issues.push(issue(slide, "font_size_unexpected", "warning", `Slide uses font sizes outside the Huawei size set 12/14/18/24pt plus 6pt footer/caption and 8pt section-tab exceptions.`, { values: unexpectedFontSizes.sort((a, b) => a - b) }));
   }
-  if (fontSizes.size > 5) {
+  if (fontSizes.size > 6) {
     issues.push(issue(slide, "font_size_variety", "warning", `Slide uses ${fontSizes.size} font sizes; keep typography to the approved size set.`, { values: [...fontSizes].sort((a, b) => a - b) }));
   }
 
@@ -403,12 +485,28 @@ function checkSlideXml(name, xml) {
     }
   }
 
+  if (isSectionSlide(shapes)) {
+    issues.push(issue(slide, "section_divider_slide_present", "error", "Standalone chapter divider slides are not allowed; use the top-right section indicator on content slides instead."));
+    return issues;
+  }
+
   if (isContentSlide(slide, shapes) && !hasAnalysisSummary(shapes)) {
     issues.push(issue(slide, "analysis_summary_missing", "error", "Content slide is missing the required top analysis summary block with an 分析总结 label and semantic summary labels."));
   }
 
   if (isContentSlide(slide, shapes) && hasGenericConclusionLabels(shapes)) {
     issues.push(issue(slide, "analysis_summary_generic_label", "error", "Analysis summary uses generic labels such as 结论1; replace them with meaning-specific labels that summarize the content below."));
+  }
+
+  if (isContentSlide(slide, shapes) && !hasSectionIndicator(shapes)) {
+    issues.push(issue(slide, "section_indicator_missing", "error", "Content slide is missing the required top-right chapter/outline indicator with the current section highlighted in Huawei red."));
+  }
+  const sectionInfo = sectionIndicatorInfo(shapes);
+  if (isContentSlide(slide, shapes) && sectionInfo && Math.abs(sectionInfo.right - 12.78) > 0.12) {
+    issues.push(issue(slide, "section_indicator_alignment", "error", "Top-right chapter indicator must be right-aligned to the title/content edge.", {
+      right_edge: Math.round(sectionInfo.right * 100) / 100,
+      expected_right_edge: 12.78,
+    }));
   }
 
   for (const shape of shapes.filter((item) => item.text)) {
@@ -558,6 +656,7 @@ async function main() {
   for (const slide of slides) {
     issues.push(...checkSlideXml(slide.name, slide.xml));
   }
+  issues.push(...checkSectionOrder(slides));
   issues.push(...checkRenderEvidence(args.requireRenderDir, slides.length));
   issues.push(...checkReferenceReviewEvidence(args.requireReferenceReview));
 

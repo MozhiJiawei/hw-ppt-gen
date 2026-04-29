@@ -15,6 +15,7 @@ const {
 async function main() {
   const output = ensureTmpPath(process.argv[2] || path.join(".tmp", "sample_huawei_deck.pptx"));
   const pptx = createHuaweiDeck({ title: "Huawei-style PPTX generator sample" });
+  const sections = ["生成工作流", "华为版式组件", "质量检查闭环"];
 
   addCoverSlide(pptx, {
     title: "华为风格 PPTX 生成能力样例",
@@ -36,6 +37,8 @@ async function main() {
   addContentCardsSlide(pptx, {
     title: "生成前先规划页面",
     titleNote: "将内容结构和视觉落版分开处理",
+    sections,
+    currentSection: "生成工作流",
     summary: {
       body: [
         { label: "规划先行", text: "先完成页面级观点规划，再进入生成脚本，能显著减少返工。" },
@@ -54,6 +57,8 @@ async function main() {
   addColumnsSlide(pptx, {
     title: "组件库固化视觉语言",
     titleNote: "避免每次从提示词重造样式",
+    sections,
+    currentSection: "华为版式组件",
     summary: {
       body: [
         { label: "组件固化", text: "视觉约束应沉淀到 helper 组件，减少单页手写样式漂移。" },
@@ -71,6 +76,8 @@ async function main() {
   addDataCardsSlide(pptx, {
     title: "数据卡呈现关键指标",
     titleNote: "用克制红色标注重点",
+    sections,
+    currentSection: "华为版式组件",
     columns: 4,
     cards: [
       { value: "10", label: "参考图数量", note: "用于生成前视觉定向", highlight: true },
@@ -82,29 +89,11 @@ async function main() {
     page: "05",
   });
 
-  addTableSlide(pptx, {
-    title: "硬规则检查覆盖稳定约束",
-    titleNote: "字体、字号、颜色、动画和线框均可机械验证",
-    summary: {
-      body: [
-        { label: "规则入脚本", text: "可机械判断的风格规则必须进入检查脚本，避免只靠人工目测。" },
-        { label: "错误即阻塞", text: "错误作为阻塞项处理，警告需要修复或在 QA 记录中说明接受理由。" },
-      ],
-    },
-    rows: [
-      ["检查项", "规则", "级别", "处理方式"],
-      ["字体", "微软雅黑 / Arial / Impact", "Warning", "修正生成脚本中的 fontFace"],
-      ["字号", "最小 6pt，页面字号种类受控", "Error/Warning", "压缩内容或调整布局"],
-      ["颜色", "红黑白灰为主，不使用 8 位 hex", "Error/Warning", "替换为内置色板"],
-      ["动画", "禁止动画与复杂切换", "Error", "删除动画相关 XML 或重新生成"],
-      ["线框", "普通边框和箭头使用 0.5pt", "Warning", "统一 helper 组件参数"],
-    ],
-    page: "06",
-  });
-
   addBarChartSlide(pptx, {
     title: "柱状图保持克制表达",
     titleNote: "灰色主体承载趋势，红色只标注重点",
+    sections,
+    currentSection: "华为版式组件",
     summary: {
       body: [
         { label: "先判后证", text: "图表页先给出判断，再用下方图形说明差异和趋势。" },
@@ -120,12 +109,36 @@ async function main() {
     ],
     insightTitle: "关键进展",
     insights: ["组件化减少重复样式实现", "硬规则检查降低字体、颜色和字号漂移", "视觉 QA 仍需结合参考图判断密度和对齐"],
+    page: "06",
+  });
+
+  addTableSlide(pptx, {
+    title: "硬规则检查覆盖稳定约束",
+    titleNote: "字体、字号、颜色、动画和线框均可机械验证",
+    sections,
+    currentSection: "质量检查闭环",
+    summary: {
+      body: [
+        { label: "规则入脚本", text: "可机械判断的风格规则必须进入检查脚本，避免只靠人工目测。" },
+        { label: "错误即阻塞", text: "错误作为阻塞项处理，警告需要修复或在 QA 记录中说明接受理由。" },
+      ],
+    },
+    rows: [
+      ["检查项", "规则", "级别", "处理方式"],
+      ["字体", "微软雅黑 / Arial / Impact", "Warning", "修正生成脚本中的 fontFace"],
+      ["字号", "最小 6pt，页面字号种类受控", "Error/Warning", "压缩内容或调整布局"],
+      ["颜色", "红黑白灰为主，不使用 8 位 hex", "Error/Warning", "替换为内置色板"],
+      ["动画", "禁止动画与复杂切换", "Error", "删除动画相关 XML 或重新生成"],
+      ["线框", "普通边框和箭头使用 0.5pt", "Warning", "统一 helper 组件参数"],
+    ],
     page: "07",
   });
 
   addFlowSlide(pptx, {
     title: "端到端流程先定视觉",
     titleNote: "看参考图、写脚本、验证后再修正",
+    sections,
+    currentSection: "质量检查闭环",
     steps: [
       { title: "看材料", body: ["提炼受众、目的、证据"] },
       { title: "看参考图", body: ["确定密度、红灰比例和组件形态"] },

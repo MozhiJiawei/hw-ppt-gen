@@ -1,0 +1,202 @@
+{
+  "cases": [
+    {
+      "id": "layered_architecture",
+      "title": "Hand-Drawn Layered AI Agent Architecture",
+      "intent": "Hierarchy",
+      "template": "layered_architecture",
+      "claim": "Agent 系统的稳定性来自网关、工具编排、记忆检索、模型服务和观测链路的分层协同。",
+      "scenario": "Create one Huawei-style slide showing a hand-drawn layered AI agent architecture. The user enters from the top, calls three client surfaces, flows through an agent gateway, branches into tool orchestration and memory/retrieval, then reaches model/runtime services and observability on the side.",
+      "visual_spec": {
+        "layers": [
+          { "id": "entry", "label": "用户", "items": ["用户"] },
+          { "id": "clients", "label": "入口层", "items": ["Web", "App", "API"] },
+          { "id": "gateway", "label": "接入层", "items": ["Agent Gateway"] },
+          { "id": "orchestration", "label": "编排层", "items": ["工具编排", "记忆检索"] },
+          { "id": "runtime", "label": "运行层", "items": ["模型服务", "任务队列"] }
+        ],
+        "side_modules": ["服务发现", "链路追踪", "权限审计"],
+        "edges": [
+          ["用户", "Web"],
+          ["用户", "App"],
+          ["用户", "API"],
+          ["Web", "Agent Gateway"],
+          ["App", "Agent Gateway"],
+          ["API", "Agent Gateway"],
+          ["Agent Gateway", "工具编排"],
+          ["Agent Gateway", "记忆检索"],
+          ["工具编排", "模型服务"],
+          ["记忆检索", "模型服务"],
+          ["模型服务", "任务队列"]
+        ]
+      },
+      "human_review_focus": [
+        "Does it feel like a real hand-drawn architecture sketch?",
+        "Are layer relationships clear without becoming rigid business boxes?",
+        "Are arrows and side modules readable?",
+        "Does the diagram add visual soul beyond cards/text?"
+      ]
+    },
+    {
+      "id": "benchmark_grouped_bars",
+      "title": "Benchmark Improvement Bars",
+      "intent": "Quantity",
+      "template": "grouped_bar_chart",
+      "claim": "DGM agent 在不同基座模型上都显著高于 Base agent，收益不是单模型偶然现象。",
+      "scenario": "Create one hand-drawn grouped bar chart comparing Base agent and DGM agent across three model backbones.",
+      "visual_spec": {
+        "y_label": "SWE-bench (%)",
+        "categories": ["o3-mini", "Claude 3.5", "Claude 3.7"],
+        "series": [
+          { "name": "Base agent", "values": [23.0, 20.0, 19.0], "color": "gray" },
+          { "name": "DGM agent", "values": [33.0, 50.0, 59.5], "color": "red" }
+        ],
+        "highlight": { "category": "Claude 3.7", "series": "DGM agent" },
+        "annotation": "跨模型迁移仍保留收益，说明改进落在工作流层。"
+      },
+      "human_review_focus": [
+        "Are the grouped bars immediately readable?",
+        "Is the DGM improvement visually obvious?",
+        "Are values and category labels legible?",
+        "Does it feel more alive than a plain business chart?"
+      ]
+    },
+    {
+      "id": "archive_evolution_tree",
+      "title": "Archive Evolution Tree",
+      "intent": "Hierarchy",
+      "template": "tree",
+      "claim": "Archive 通过保留分支，让暂时低分节点也可能成为未来高分节点的踏脚石。",
+      "scenario": "Create one slide explaining why Archive is not cache but a search strategy. Show an agent evolution tree where low-scoring branches remain selectable and one branch eventually reaches 50%.",
+      "visual_spec": {
+        "nodes": ["0", "6", "12", "24", "31", "44", "56", "79"],
+        "edges": [["0", "6"], ["0", "12"], ["6", "24"], ["12", "31"], ["24", "44"], ["31", "56"], ["44", "79"]],
+        "labels": {
+          "0": "20%",
+          "6": "26%",
+          "12": "23%",
+          "24": "31%",
+          "31": "28%",
+          "44": "38%",
+          "56": "34%",
+          "79": "50%"
+        },
+        "highlight": "79",
+        "annotation": "所有节点保留非零选择概率，旧分支不会被过早丢弃。"
+      },
+      "human_review_focus": [
+        "Is the branching lineage immediately understandable?",
+        "Is the final high-score node visually emphasized?",
+        "Does the visual avoid looking like a generic card list?",
+        "Are scores readable and spatially attached to nodes?"
+      ]
+    },
+    {
+      "id": "self_improvement_loop",
+      "title": "Self-Improvement Loop",
+      "intent": "Loop",
+      "template": "closed_loop",
+      "claim": "自我改进不是单次 prompt 优化，而是可评测、可归档、可继续选择的闭环。",
+      "scenario": "Create one slide explaining an agent self-improvement loop: inspect failures, propose improvement, edit its own workflow/tools, evaluate on benchmark, archive successful variants, then select the next parent.",
+      "visual_spec": {
+        "steps": [
+          { "id": "inspect", "label": "分析失败", "note": "读取日志与错误模式" },
+          { "id": "propose", "label": "提出改进", "note": "生成工具或流程改动" },
+          { "id": "edit", "label": "修改自身", "note": "改 workflow / tools / prompt" },
+          { "id": "eval", "label": "基准评测", "note": "验证收益与回归" },
+          { "id": "archive", "label": "归档选择", "note": "保留可继续演化版本" }
+        ],
+        "center": "Self-improving Agent",
+        "highlight": "archive"
+      },
+      "human_review_focus": [
+        "Does the loop read as a cycle rather than a linear list?",
+        "Is the center concept clear?",
+        "Are step labels short and legible?",
+        "Does the style remain professional enough for a technical deck?"
+      ]
+    },
+    {
+      "id": "agent_workflow_sequence",
+      "title": "Agent Workflow Sequence",
+      "intent": "Sequence",
+      "template": "horizontal_sequence",
+      "claim": "稳定的 Agent 交付链路来自可观察、可评审、可回滚的阶段化流程。",
+      "scenario": "Create one hand-drawn sequence diagram showing how an agent task moves from user request to planning, tool execution, review, delivery, and archive.",
+      "visual_spec": {
+        "steps": [
+          { "id": "request", "label": "需求输入", "note": "澄清目标与约束" },
+          { "id": "plan", "label": "任务规划", "note": "拆分步骤与证据" },
+          { "id": "execute", "label": "工具执行", "note": "生成代码或文档" },
+          { "id": "review", "label": "规则校验", "note": "导出与视觉检查" },
+          { "id": "deliver", "label": "交付归档", "note": "保留产物与结论" }
+        ],
+        "highlight": "review"
+      },
+      "human_review_focus": [
+        "Does it clearly read left-to-right as a process?",
+        "Is the highlighted quality gate visible?",
+        "Are notes readable without becoming cards?",
+        "Does the sequence feel hand-drawn rather than a rigid SmartArt clone?"
+      ]
+    },
+    {
+      "id": "visual_anchor_choice_matrix",
+      "title": "Visual Anchor Choice Matrix",
+      "intent": "Matrix",
+      "template": "quadrant_matrix",
+      "claim": "渲染路径选择取决于手绘表现力与工程可控性的平衡。",
+      "scenario": "Create one 2x2 matrix comparing visual anchor choices by evidence value and visual soul.",
+      "visual_spec": {
+        "x_axis": { "left": "弱证据", "right": "强证据", "label": "证据价值" },
+        "y_axis": { "bottom": "弱视觉", "top": "强视觉", "label": "视觉灵魂" },
+        "items": [
+          { "label": "原图", "x": 0.86, "y": 0.72, "note": "证据最强" },
+          { "label": "Rough SVG", "x": 0.62, "y": 0.82, "note": "自绘主路径" },
+          { "label": "文本卡片", "x": 0.32, "y": 0.28, "note": "只作辅助" }
+        ],
+        "highlight": "Rough SVG"
+      },
+      "human_review_focus": [
+        "Are the two axes immediately understandable?",
+        "Does each renderer sit in a plausible quadrant?",
+        "Is the highlighted recommendation clear?",
+        "Does it avoid becoming a normal text card comparison?"
+      ]
+    },
+    {
+      "id": "agent_tool_network",
+      "title": "Agent Tool Network",
+      "intent": "Network",
+      "template": "hub_spoke_network",
+      "claim": "Agent 能力不是单点工具，而是模型、记忆、代码、浏览器和评审环节的协同网络。",
+      "scenario": "Create one small network diagram with Agent as the hub and five connected capability modules.",
+      "visual_spec": {
+        "hub": { "id": "agent", "label": "Agent" },
+        "nodes": [
+          { "id": "model", "label": "模型推理", "note": "生成与判断" },
+          { "id": "memory", "label": "记忆检索", "note": "上下文复用" },
+          { "id": "code", "label": "代码执行", "note": "验证假设" },
+          { "id": "browser", "label": "浏览器检查", "note": "视觉验收" },
+          { "id": "review", "label": "外部评审", "note": "发现盲点" }
+        ],
+        "edges": [
+          ["agent", "model"],
+          ["agent", "memory"],
+          ["agent", "code"],
+          ["agent", "browser"],
+          ["agent", "review"],
+          ["memory", "review"],
+          ["code", "browser"]
+        ],
+        "highlight": "review"
+      },
+      "human_review_focus": [
+        "Does the network show collaboration instead of hierarchy?",
+        "Are cross-links readable and not too messy?",
+        "Is the hub visually dominant?",
+        "Does the highlighted review node stand out?"
+      ]
+    }
+  ]
+}

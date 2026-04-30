@@ -33,6 +33,7 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    - Each slide has at most three core messages.
    - Choose a layout by content count and relationship, not by decoration.
    - Record the source evidence for important claims and figures.
+   - When a slide needs a real relationship diagram and no usable source figure exists, load `references/visual_diagram_rules.md` before coding that slide. If the selected renderer is `rough_svg`, also load `references/visual_diagram_spec_schema.md` to build a valid structured spec. Original source figures/tables outrank generated hand-drawn diagrams. Do not load the diagram rules for ordinary lists, text cards, tables, or simple parallel item pages.
    - Every embedded source figure or table must be treated as an evidence module, not a picture-only box. Prefer `visual + Chinese figure legend + 1-3 short interpretation lines` inside the same module when space permits. If the module would otherwise look empty, add source-grounded observations, conclusions, or reading guidance instead of leaving blank space.
    - Every embedded source figure or table must have a Chinese figure-legend description tightly attached below the visual, not pinned to the bottom of the card. By default, center the visual within its available visual area; the legend follows the visual's actual bottom edge. Use 12 pt, bold, italic text for the legend, for example `semi-PD 实验结果：Llama3-8B / 70B 的实验结果`. Keep the smaller source/caption note directly below the legend at 6 pt, then place optional interpretation lines below the source note. Leave extra whitespace beneath the interpretation, not between the visual and legend.
    - For tables that you create or transcribe, use native PowerPoint tables via `slide.addTable` / `addHuaweiTable`. Do not simulate a table by stacking rectangles and text boxes. Use source table screenshots only when the table is being cited as visual evidence from the paper.
@@ -133,6 +134,8 @@ For content-page helpers, pass the 24 pt title as `title` and the 18 pt explanat
 For content-page helpers, also pass `sections` and `currentSection`. `sections` should be an array of top-level contents-page chapter names, and `currentSection` may be a matching string or a 1-based index. The helper draws the top-right chapter indicator, dynamically sizes each tab from the visible label length, caps total width, right-aligns the indicator, and highlights the active tab in Huawei red.
 
 Write custom deck scripts by composing these helpers. For uncommon layouts, create a small local helper in `.tmp/` that still uses `HW_STYLE`, `addPageTitle`, `addFooter`, `redTitleCard`, `grayCard`, and `safeText`.
+
+For self-drawn relationship diagrams, lazily import `scripts/hw_diagram_helpers.js` only in deck scripts that need it. Use `addHandDrawnDiagramSlide`, `writeHandDrawnDiagramSvg`, or `createHandDrawnDiagramSvg` with structured specs, and validate the resulting PPTX through exported PNGs. The current hand-drawn path is for diagrams such as layered architecture, evolution trees, and closed loops; use normal text boxes for simple parallel lists.
 
 ## pptxgenjs Guardrails
 

@@ -22,6 +22,44 @@ const DIAGRAM_STYLE = Object.freeze({
   },
 });
 
+function parseAspectRatio(value) {
+  if (!value) return DIAGRAM_STYLE.width / DIAGRAM_STYLE.height;
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
+  if (typeof value === "string") {
+    const match = value.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
+    if (match) return Number(match[1]) / Number(match[2]);
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  }
+  if (typeof value === "object" && value.width && value.height) return Number(value.width) / Number(value.height);
+  throw new Error(`Invalid diagram aspectRatio: ${value}`);
+}
+
+function resolveCanvasOptions(options = {}) {
+  const ratio = parseAspectRatio(options.aspectRatio);
+  const width = Number(options.width || options.canvas?.width || DIAGRAM_STYLE.width);
+  const height = Number(options.height || options.canvas?.height || Math.round(width / ratio));
+  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+    throw new Error("Diagram canvas width and height must be positive numbers.");
+  }
+  return { width: Math.round(width), height: Math.round(height), ratio };
+}
+
+function scaledCanvas(options = {}) {
+  const canvas = resolveCanvasOptions(options);
+  return {
+    ...canvas,
+    sx: canvas.width / DIAGRAM_STYLE.width,
+    sy: canvas.height / DIAGRAM_STYLE.height,
+    x(value) {
+      return value * this.sx;
+    },
+    y(value) {
+      return value * this.sy;
+    },
+  };
+}
+
 function escapeXml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -54,6 +92,7 @@ function svgText(x, y, text, opts = {}) {
 function wrapCjk(text, chars = 12) {
   const value = safeText(text);
   if (!value) return [""];
+  if (/^[\x00-\x7F]+$/.test(value)) return [value];
   if (value.includes("workflow")) return ["改 workflow / tools", "/ prompt"];
   if (value.length <= chars) return [value];
   return value.match(new RegExp(`.{1,${chars}}`, "g")) || [value];
@@ -182,18 +221,25 @@ function curve(canvas, rc, x1, y1, x2, y2, bend = 0, opts = {}) {
 }
 
 function baseSvg(title, claim, body, options = {}) {
-  const width = options.width || DIAGRAM_STYLE.width;
-  const height = options.height || DIAGRAM_STYLE.height;
+  const { width, height } = resolveCanvasOptions(options);
   const colors = DIAGRAM_STYLE.color;
+  const sx = width / DIAGRAM_STYLE.width;
+  const sy = height / DIAGRAM_STYLE.height;
+  const scale = `transform="scale(${sx} ${sy})"`;
+  const header = options.renderHeader
+    ? `${svgText(90, 66, safeText(title), { size: 36, weight: 800, anchor: "start", fill: colors.red })}
+${svgText(90, 112, safeText(claim), { size: 24, weight: 500, anchor: "start", fill: colors.muted })}`
+    : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
 <rect width="${width}" height="${height}" fill="${colors.paper}"/>
+<g ${scale}>
 <g opacity="0.48">
   <path d="M80 120 C310 86 518 111 742 89 S1205 116 1510 82" fill="none" stroke="#e8dcc9" stroke-width="2"/>
   <path d="M88 812 C358 790 606 830 894 802 S1266 788 1514 816" fill="none" stroke="#e8dcc9" stroke-width="2"/>
 </g>
-${svgText(90, 66, safeText(title), { size: 36, weight: 800, anchor: "start", fill: colors.red })}
-${svgText(90, 112, safeText(claim), { size: 24, weight: 500, anchor: "start", fill: colors.muted })}
+${header}
 ${body}
+</g>
 </svg>`;
 }
 
@@ -201,65 +247,104 @@ function drawLayeredArchitecture(spec) {
   const colors = DIAGRAM_STYLE.color;
   const { rc } = roughSvg(101);
   const canvas = createCanvas();
-  const centers = {
-    "用户": [420, 185],
-    Web: [250, 295],
-    App: [420, 295],
-    API: [590, 295],
-    "Agent Gateway": [420, 425],
-    "工具编排": [300, 565],
-    "记忆检索": [540, 565],
-    "模型服务": [360, 705],
-    "任务队列": [600, 705],
-  };
-  [
-    ["入口层", 155, 250, 540, 92, colors.blue],
-    ["接入层", 155, 378, 540, 92, colors.warm],
-    ["编排层", 155, 516, 540, 104, colors.green],
-    ["运行层", 155, 656, 620, 104, colors.pink],
-  ].forEach(([label, x, y, w, h, fill], i) => {
-    rect(canvas, rc, x, y, w, h, { fill, hachureGap: 14, stroke: "#364149", roughness: 2.1, seed: 20 + i });
-    canvas.add(svgText(x - 40, y + h / 2 + 8, label, { size: 24, fill: colors.red, weight: 700 }));
+  const visual = spec.visual_spec || {};
+  const layers = visual.layers || [];
+  const centers = new Map();
+  const left = 145;
+  const top = 190;
+  const stackW = 890;
+  const stackH = 590;
+  const rowGap = 18;
+  const layerH = Math.max(78, (stackH - rowGap * Math.max(0, layers.length - 1)) / Math.max(1, layers.length));
+  const palette = [colors.blue, colors.warm, colors.green, colors.pink, colors.yellow, colors.gray];
+
+  layers.forEach((layer, layerIdx) => {
+    const y = top + layerIdx * (layerH + rowGap);
+    rect(canvas, rc, left, y, stackW, layerH, {
+      fill: palette[layerIdx % palette.length],
+      hachureGap: 14,
+      stroke: "#364149",
+      roughness: 2.1,
+      seed: 20 + layerIdx,
+    });
+    canvas.add(svgText(left - 34, y + layerH / 2 + 8, layer.label || layer.id, {
+      size: 22,
+      fill: colors.red,
+      weight: 750,
+    }));
+
+    const items = layer.items || [];
+    const itemGap = 24;
+    const itemW = Math.min(210, (stackW - 80 - itemGap * Math.max(0, items.length - 1)) / Math.max(1, items.length));
+    const itemH = Math.min(66, layerH - 28);
+    const totalW = items.length * itemW + itemGap * Math.max(0, items.length - 1);
+    const startX = left + stackW / 2 - totalW / 2;
+    items.forEach((label, itemIdx) => {
+      const x = startX + itemIdx * (itemW + itemGap);
+      const cx = x + itemW / 2;
+      const cy = y + layerH / 2;
+      centers.set(label, [cx, cy]);
+      rect(canvas, rc, x, cy - itemH / 2, itemW, itemH, {
+        fill: "#ffffff",
+        fillStyle: itemIdx % 2 ? "hachure" : "zigzag",
+        seed: 40 + layerIdx * 10 + itemIdx,
+      });
+      canvas.add(svgText(cx, cy + 7, wrapCjk(label, Math.max(7, Math.floor(itemW / 18))).slice(0, 2), {
+        size: itemW < 140 ? 20 : 23,
+        weight: 750,
+        lineHeight: 24,
+      }));
+    });
   });
 
-  ellipse(canvas, rc, 420, 185, 112, 70, { fill: colors.yellow, seed: 10 });
-  canvas.add(svgText(420, 193, "用户", { size: 28, weight: 700 }));
-  ["Web", "App", "API"].forEach((label, i) => {
-    const [x, y] = centers[label];
-    rect(canvas, rc, x - 56, y - 31, 112, 62, { fill: "#ffffff", fillStyle: "zigzag", seed: 30 + i });
-    canvas.add(svgText(x, y + 8, label, { size: 26, weight: 700 }));
-  });
-  rect(canvas, rc, 265, 386, 310, 78, { fill: "#fff7e8", hachureAngle: -20, hachureGap: 8, strokeWidth: 3, seed: 40 });
-  canvas.add(svgText(420, 434, "Agent Gateway", { size: 28, weight: 800 }));
-  ["工具编排", "记忆检索", "模型服务", "任务队列"].forEach((label, i) => {
-    const [x, y] = centers[label];
-    rect(canvas, rc, x - 82, y - 34, 164, 68, { fill: i < 2 ? "#fafff4" : "#fff2f5", seed: 50 + i });
-    canvas.add(svgText(x, y + 8, label, { size: 25, weight: 700 }));
-  });
+  const sideModules = visual.side_modules || [];
+  if (sideModules.length) {
+    const sideX = 1120;
+    const sideY = 210;
+    const sideW = 340;
+    const sideH = 540;
+    rect(canvas, rc, sideX - 30, sideY - 30, sideW + 60, sideH + 60, {
+      fill: "#f8f8f8",
+      fillStyle: "cross-hatch",
+      hachureGap: 18,
+      stroke: "#444",
+      roughness: 2.2,
+      seed: 130,
+    });
+    canvas.add(svgText(sideX + sideW / 2, sideY - 58, visual.side_label || "侧向能力", { size: 27, weight: 800, fill: colors.red }));
+    const gap = Math.max(18, (sideH - sideModules.length * 72) / Math.max(1, sideModules.length - 1));
+    sideModules.forEach((label, i) => {
+      const y = sideY + 36 + i * (72 + gap);
+      centers.set(label, [sideX + sideW / 2, y]);
+      ellipse(canvas, rc, sideX + sideW / 2, y, 230, 70, {
+        fill: palette[(i + 1) % palette.length],
+        hachureAngle: -45 + i * 15,
+        seed: 140 + i,
+      });
+      canvas.add(svgText(sideX + sideW / 2, y + 8, wrapCjk(label, 10).slice(0, 2), { size: 22, weight: 700, lineHeight: 25 }));
+      const target = [...centers.values()][Math.min(i, Math.max(0, centers.size - 1))];
+      if (target) line(canvas, rc, target[0] + 86, target[1], sideX + 36, y, { arrow: true, stroke: colors.muted, strokeWidth: 1.8, seed: 160 + i });
+    });
+  }
 
-  (spec.visual_spec?.edges || []).forEach(([from, to], i) => {
-    const a = centers[from];
-    const b = centers[to];
+  (visual.edges || []).forEach(([from, to], i) => {
+    const a = centers.get(from);
+    const b = centers.get(to);
     if (!a || !b) return;
-    curve(canvas, rc, a[0], a[1] + 36, b[0], b[1] - 38, (i % 3 - 1) * 8, {
+    const vertical = Math.abs(a[0] - b[0]) < 12;
+    const fromSide = sideModules.includes(from);
+    const toSide = sideModules.includes(to);
+    curve(canvas, rc, a[0], a[1] + (fromSide ? 0 : 32), b[0], b[1] - (toSide ? 0 : 32), vertical ? 0 : (i % 3 - 1) * 12, {
       arrow: true,
-      stroke: i > 5 ? colors.red : colors.ink,
-      strokeWidth: i > 5 ? 2.7 : 2.1,
+      stroke: i >= Math.floor((visual.edges || []).length * 0.55) ? colors.red : colors.ink,
+      strokeWidth: i >= Math.floor((visual.edges || []).length * 0.55) ? 2.7 : 2.1,
       seed: 90 + i,
     });
   });
 
-  rect(canvas, rc, 965, 228, 330, 444, { fill: "#f8f8f8", fillStyle: "cross-hatch", hachureGap: 18, stroke: "#444", roughness: 2.2, seed: 130 });
-  canvas.add(svgText(1130, 190, "观测与治理侧栏", { size: 28, weight: 800, fill: colors.red }));
-  (spec.visual_spec?.side_modules || ["服务发现", "链路追踪", "权限审计"]).slice(0, 3).forEach((label, i) => {
-    const y = 325 + i * 110;
-    ellipse(canvas, rc, 1130, y, 210, 70, { fill: [colors.blue, colors.yellow, colors.green][i], hachureAngle: -45 + i * 20, seed: 140 + i });
-    canvas.add(svgText(1130, y + 8, label, { size: 26, weight: 700 }));
-    line(canvas, rc, 780, 425 + i * 58, 1018, y, { arrow: true, stroke: colors.muted, strokeWidth: 1.9, seed: 160 + i });
-  });
-  canvas.add(`<path d="M830 190 C780 315 804 600 860 734" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 12" opacity="0.8"/>`);
-  canvas.add(svgText(875, 748, "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start" }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+  canvas.add(`<path d="M1060 180 C1035 320 1040 594 1072 770" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 12" opacity="0.55"/>`);
+  canvas.add(svgText(1088, 792, visual.summary || "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start" }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
 }
 
 function drawGroupedBarChart(spec) {
@@ -267,15 +352,15 @@ function drawGroupedBarChart(spec) {
   const { rc } = roughSvg(707);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
-  const categories = (visual.categories || []).slice(0, 6);
-  const series = (visual.series || []).slice(0, 3);
+  const categories = visual.categories || [];
+  const series = visual.series || [];
   const values = series.flatMap((item) => item.values || []).map(Number).filter(Number.isFinite);
   const maxValue = Math.max(10, Math.ceil(Math.max(...values, 1) / 10) * 10);
-  const chart = { x: 190, y: 220, w: 950, h: 520 };
+  const chart = { x: 170, y: 220, w: series.length > 3 ? 880 : 950, h: 520 };
   const baseline = chart.y + chart.h;
   const groupW = chart.w / Math.max(categories.length, 1);
-  const barGap = 12;
-  const barW = Math.min(62, (groupW - 70 - barGap * Math.max(series.length - 1, 0)) / Math.max(series.length, 1));
+  const barGap = Math.max(5, Math.min(12, 42 / Math.max(1, series.length)));
+  const barW = Math.max(12, Math.min(62, (groupW - 34 - barGap * Math.max(series.length - 1, 0)) / Math.max(series.length, 1)));
 
   rect(canvas, rc, chart.x - 18, chart.y - 12, chart.w + 44, chart.h + 48, {
     fill: "#ffffff",
@@ -322,14 +407,14 @@ function drawGroupedBarChart(spec) {
       });
       canvas.add(svgText(x + barW / 2, y - 18, value.toFixed(value % 1 ? 1 : 0), { size: 18, weight: highlighted ? 900 : 700, fill: highlighted ? colors.red : colors.ink }));
     });
-    canvas.add(svgText(groupX, baseline + 42, category, { size: 21, weight: 650, fill: colors.ink }));
+    canvas.add(svgText(groupX, baseline + 42, wrapCjk(category, 6).slice(0, 2), { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21 }));
   });
 
   series.forEach((entry, idx) => {
-    const x = 1220;
-    const y = 295 + idx * 54;
+    const x = series.length > 3 ? 1130 : 1220;
+    const y = 252 + idx * Math.max(40, Math.min(54, 260 / Math.max(1, series.length)));
     rect(canvas, rc, x, y - 18, 46, 28, { fill: seriesColor(entry, idx, false), stroke: "#39434d", seed: 820 + idx });
-    canvas.add(svgText(x + 62, y + 4, entry.name, { size: 22, weight: 700, anchor: "start", fill: colors.ink }));
+    canvas.add(svgText(x + 62, y + 4, wrapCjk(entry.name, 10).slice(0, 2), { size: series.length > 4 ? 18 : 22, weight: 700, anchor: "start", fill: colors.ink, lineHeight: 22 }));
   });
   pathRough(canvas, rc, "M 1188 470 C 1320 420 1435 462 1450 566 C 1462 666 1328 724 1205 666 C 1098 614 1100 514 1188 470 Z", {
     fill: "#fff8df",
@@ -341,28 +426,144 @@ function drawGroupedBarChart(spec) {
   });
   canvas.add(svgText(1320, 532, "跨模型收益", { size: 29, weight: 900, fill: colors.red }));
   canvas.add(svgText(1320, 594, wrapCjk(visual.annotation || "", 10), { size: 21, weight: 600, fill: colors.ink, lineHeight: 26 }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawLineChart(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(708);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const categories = visual.categories || [];
+  const series = visual.series || [];
+  const values = series.flatMap((item) => item.values || []).map(Number).filter(Number.isFinite);
+  const maxValue = Math.max(10, Math.ceil(Math.max(...values, 1) / 10) * 10);
+  const chart = { x: 190, y: 220, w: 980, h: 510 };
+  const baseline = chart.y + chart.h;
+  rect(canvas, rc, chart.x - 18, chart.y - 12, chart.w + 44, chart.h + 48, { fill: "#ffffff", fillStyle: "hachure", hachureGap: 32, stroke: "#d7d2c8", strokeWidth: 1.6, seed: 910 });
+  line(canvas, rc, chart.x, chart.y, chart.x, baseline, { stroke: colors.ink, strokeWidth: 2.5, seed: 911 });
+  line(canvas, rc, chart.x, baseline, chart.x + chart.w, baseline, { stroke: colors.ink, strokeWidth: 2.5, seed: 912 });
+  const xFor = (idx) => chart.x + (idx / Math.max(1, categories.length - 1)) * chart.w;
+  const yFor = (value) => baseline - (Number(value || 0) / maxValue) * chart.h;
+  categories.forEach((category, idx) => {
+    const x = xFor(idx);
+    line(canvas, rc, x, baseline, x, baseline + 8, { stroke: colors.ink, strokeWidth: 1.6, seed: 920 + idx });
+    canvas.add(svgText(x, baseline + 42, wrapCjk(category, 6).slice(0, 2), { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21 }));
+  });
+  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label || "Value", { size: 22, weight: 800, anchor: "start", fill: colors.red }));
+  series.forEach((entry, seriesIdx) => {
+    const points = (entry.values || []).map((value, idx) => [xFor(idx), yFor(value)]);
+    for (let i = 0; i < points.length - 1; i += 1) {
+      line(canvas, rc, points[i][0], points[i][1], points[i + 1][0], points[i + 1][1], {
+        stroke: seriesIdx === 0 ? colors.red : colors.ink,
+        strokeWidth: seriesIdx === 0 ? 3 : 2.3,
+        seed: 940 + seriesIdx * 20 + i,
+      });
+    }
+    points.forEach(([x, y], idx) => {
+      const highlighted = visual.highlight?.category === categories[idx] && visual.highlight?.series === entry.name;
+      ellipse(canvas, rc, x, y, highlighted ? 44 : 32, highlighted ? 34 : 26, {
+        fill: highlighted ? colors.pink : "#ffffff",
+        stroke: highlighted ? colors.red : (seriesIdx === 0 ? colors.red : colors.ink),
+        strokeWidth: highlighted ? 3.2 : 2,
+        seed: 980 + seriesIdx * 20 + idx,
+      });
+      canvas.add(svgText(x, y - 24, String(entry.values[idx]), { size: 16, weight: 700, fill: highlighted ? colors.red : colors.muted }));
+    });
+    const legendX = 1230;
+    const legendY = 282 + seriesIdx * 52;
+    line(canvas, rc, legendX, legendY, legendX + 46, legendY, { stroke: seriesIdx === 0 ? colors.red : colors.ink, strokeWidth: 3, seed: 1020 + seriesIdx });
+    canvas.add(svgText(legendX + 62, legendY + 6, entry.name, { size: 22, weight: 700, anchor: "start", fill: colors.ink }));
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawDonutProportionChart(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(709);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const segments = visual.segments || [];
+  const total = segments.reduce((sum, item) => sum + Math.max(0, Number(item.value) || 0), 0) || 1;
+  const center = [610, 480];
+  let start = -Math.PI / 2;
+  segments.forEach((segment, idx) => {
+    const value = Math.max(0, Number(segment.value) || 0);
+    const end = start + (value / total) * Math.PI * 2;
+    const large = end - start > Math.PI ? 1 : 0;
+    const rOuter = segment.label === visual.highlight ? 214 : 198;
+    const rInner = 104;
+    const p1 = [center[0] + Math.cos(start) * rOuter, center[1] + Math.sin(start) * rOuter];
+    const p2 = [center[0] + Math.cos(end) * rOuter, center[1] + Math.sin(end) * rOuter];
+    const p3 = [center[0] + Math.cos(end) * rInner, center[1] + Math.sin(end) * rInner];
+    const p4 = [center[0] + Math.cos(start) * rInner, center[1] + Math.sin(start) * rInner];
+    const fill = [colors.blue, colors.green, colors.warm, colors.pink, colors.yellow, colors.gray][idx % 6];
+    pathRough(canvas, rc, `M ${p1[0]} ${p1[1]} A ${rOuter} ${rOuter} 0 ${large} 1 ${p2[0]} ${p2[1]} L ${p3[0]} ${p3[1]} A ${rInner} ${rInner} 0 ${large} 0 ${p4[0]} ${p4[1]} Z`, {
+      fill: segment.label === visual.highlight ? colors.pink : fill,
+      stroke: segment.label === visual.highlight ? colors.red : colors.ink,
+      strokeWidth: segment.label === visual.highlight ? 3.4 : 2.1,
+      fillStyle: segment.label === visual.highlight ? "cross-hatch" : "hachure",
+      seed: 1040 + idx,
+    });
+    const mid = (start + end) / 2;
+    const lx = center[0] + Math.cos(mid) * 285;
+    const ly = center[1] + Math.sin(mid) * 210;
+    canvas.add(svgText(lx, ly, [`${segment.label}`, `${segment.value}`], { size: 23, weight: segment.label === visual.highlight ? 900 : 700, fill: segment.label === visual.highlight ? colors.red : colors.ink, lineHeight: 28 }));
+    start = end;
+  });
+  ellipse(canvas, rc, center[0], center[1], 180, 120, { fill: "#fffdf7", stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
+  canvas.add(svgText(center[0], center[1] + 8, wrapCjk(visual.total_label || "合计", 8).slice(0, 2), { size: 28, weight: 900, fill: colors.red, lineHeight: 32 }));
+  pathRough(canvas, rc, "M 1005 308 C 1188 246 1376 312 1412 458 C 1448 607 1305 704 1116 672 C 974 648 908 426 1005 308 Z", { fill: "#fff8df", stroke: colors.red, strokeWidth: 2.4, fillStyle: "zigzag", seed: 1090 });
+  canvas.add(svgText(1190, 438, "比例关系", { size: 31, weight: 900, fill: colors.red }));
+  canvas.add(svgText(1190, 504, "用面积/角度强调\n份额结构", { size: 26, weight: 700, lineHeight: 34 }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawHeatmap(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(710);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const rows = visual.rows || [];
+  const columns = visual.columns || [];
+  const values = visual.values || [];
+  const numericValues = values.flat().map(Number).filter(Number.isFinite);
+  const max = Math.max(...numericValues, 1);
+  const min = Math.min(...numericValues, 0);
+  const grid = { x: 330, y: 220, w: 820, h: 500 };
+  const cellW = grid.w / Math.max(1, columns.length);
+  const cellH = grid.h / Math.max(1, rows.length);
+  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, wrapCjk(column, 8).slice(0, 2), { size: 22, weight: 800, fill: colors.red, lineHeight: 24 })));
+  rows.forEach((row, rowIdx) => {
+    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(row, 8).slice(0, 2), { size: 22, weight: 800, fill: colors.ink, anchor: "end", lineHeight: 24 }));
+    columns.forEach((column, colIdx) => {
+      const value = Number(values[rowIdx]?.[colIdx]) || 0;
+      const t = max === min ? 0.5 : (value - min) / (max - min);
+      const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
+      const fill = t > 0.66 ? colors.pink : t > 0.33 ? colors.warm : colors.blue;
+      rect(canvas, rc, grid.x + colIdx * cellW, grid.y + rowIdx * cellH, cellW - 10, cellH - 10, {
+        fill: highlighted ? colors.pink : fill,
+        stroke: highlighted ? colors.red : colors.ink,
+        strokeWidth: highlighted ? 3.2 : 1.8,
+        fillStyle: highlighted ? "cross-hatch" : "hachure",
+        seed: 1120 + rowIdx * 20 + colIdx,
+      });
+      canvas.add(svgText(grid.x + colIdx * cellW + cellW / 2 - 5, grid.y + rowIdx * cellH + cellH / 2 + 8, String(value), { size: 24, weight: 850, fill: highlighted ? colors.red : colors.ink }));
+    });
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
 }
 
 function drawArchiveEvolutionTree(spec) {
   const colors = DIAGRAM_STYLE.color;
   const { rc } = roughSvg(202);
   const canvas = createCanvas();
-  const pos = {
-    0: [270, 260],
-    6: [185, 410],
-    12: [425, 405],
-    24: [250, 560],
-    31: [560, 548],
-    44: [405, 675],
-    56: [730, 650],
-    79: [600, 765],
-  };
   const visual = spec.visual_spec || {};
-  const mainPath = findPathToHighlight(visual.edges || [], visual.highlight || "79");
+  const pos = layoutTree(visual.nodes || [], visual.edges || []);
+  const mainPath = findPathToHighlight(visual.edges || [], visual.highlight);
   (visual.edges || []).forEach(([from, to], i) => {
-    const a = pos[from];
-    const b = pos[to];
+    const a = pos.get(from);
+    const b = pos.get(to);
     if (!a || !b) return;
     curve(canvas, rc, a[0], a[1] + 42, b[0], b[1] - 46, (i % 2 ? 20 : -16), {
       arrow: true,
@@ -371,7 +572,8 @@ function drawArchiveEvolutionTree(spec) {
       seed: 210 + i,
     });
   });
-  Object.entries(pos).forEach(([id, [x, y]], i) => {
+  (visual.nodes || []).forEach((id, i) => {
+    const [x, y] = pos.get(id);
     const isHighlight = id === visual.highlight;
     ellipse(canvas, rc, x, y, isHighlight ? 132 : 104, isHighlight ? 86 : 70, {
       fill: isHighlight ? colors.pink : (i % 2 ? colors.blue : colors.gray),
@@ -384,7 +586,7 @@ function drawArchiveEvolutionTree(spec) {
     canvas.add(svgText(x, y - 4, `#${id}`, { size: isHighlight ? 26 : 22, weight: 800 }));
     canvas.add(svgText(x, y + 25, visual.labels?.[id] || "", { size: isHighlight ? 28 : 23, weight: 800, fill: isHighlight ? colors.red : colors.muted }));
   });
-  pathRough(canvas, rc, "M 852 282 C 1008 230 1218 264 1330 348 C 1434 426 1415 568 1290 654 C 1148 750 925 724 810 640 C 690 552 710 332 852 282 Z", {
+  pathRough(canvas, rc, "M 920 282 C 1070 230 1255 264 1370 348 C 1470 426 1452 568 1325 654 C 1188 750 978 724 872 640 C 760 552 785 332 920 282 Z", {
     fill: "#fff8df",
     stroke: colors.red,
     strokeWidth: 2.6,
@@ -393,16 +595,59 @@ function drawArchiveEvolutionTree(spec) {
     roughness: 2,
     seed: 301,
   });
-  canvas.add(svgText(1080, 365, "Archive 不是 cache", { size: 32, weight: 900, fill: colors.red }));
-  canvas.add(svgText(1080, 420, "它让低分旧分支\n仍有机会被选中", { size: 30, weight: 700 }));
+  canvas.add(svgText(1130, 365, visual.callout_title || "分支保留策略", { size: 32, weight: 900, fill: colors.red }));
+  canvas.add(svgText(1130, 420, wrapCjk(visual.callout || "弱分支仍可能成为高分路径", 12).slice(0, 2), { size: 29, weight: 700, lineHeight: 36 }));
   const scorePath = mainPath.length
     ? mainPath.map((id) => visual.labels?.[id]).filter(Boolean).join(" → ")
-    : Object.values(visual.labels || {}).slice(0, 5).join(" → ");
-  canvas.add(svgText(1080, 510, scorePath, { size: 27, weight: 800 }));
-  canvas.add(svgText(910, 602, wrapCjk(visual.annotation || "", 22).slice(0, 2), { size: 24, fill: colors.muted, weight: 500, anchor: "start" }));
-  line(canvas, rc, 830, 655, 645, 745, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 330 });
-  canvas.add(`<path d="M544 724 C593 702 645 707 682 740" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+    : Object.values(visual.labels || {}).join(" → ");
+  canvas.add(svgText(1130, 510, wrapCjk(scorePath, 18).slice(0, 3), { size: 25, weight: 800, lineHeight: 31 }));
+  canvas.add(svgText(960, 622, wrapCjk(visual.annotation || "", 22).slice(0, 3), { size: 23, fill: colors.muted, weight: 500, anchor: "start", lineHeight: 28 }));
+  const highlightPos = pos.get(visual.highlight);
+  if (highlightPos) line(canvas, rc, 900, 655, highlightPos[0] + 52, highlightPos[1] - 16, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 330 });
+  if (highlightPos) canvas.add(`<path d="M${highlightPos[0] - 56} ${highlightPos[1] + 42} C${highlightPos[0] - 5} ${highlightPos[1] + 20} ${highlightPos[0] + 45} ${highlightPos[1] + 24} ${highlightPos[0] + 84} ${highlightPos[1] + 55}" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function layoutTree(nodes, edges) {
+  const childrenByParent = new Map();
+  const childNodes = new Set();
+  nodes.forEach((node) => childrenByParent.set(node, []));
+  edges.forEach(([from, to]) => {
+    if (!childrenByParent.has(from)) childrenByParent.set(from, []);
+    childrenByParent.get(from).push(to);
+    childNodes.add(to);
+  });
+  const roots = nodes.filter((node) => !childNodes.has(node));
+  const levels = [];
+  const queue = roots.length ? roots.map((node) => [node, 0]) : nodes.map((node) => [node, 0]);
+  const seen = new Set();
+  while (queue.length) {
+    const [node, level] = queue.shift();
+    if (seen.has(node)) continue;
+    seen.add(node);
+    if (!levels[level]) levels[level] = [];
+    levels[level].push(node);
+    (childrenByParent.get(node) || []).forEach((child) => queue.push([child, level + 1]));
+  }
+  nodes.forEach((node) => {
+    if (!seen.has(node)) {
+      if (!levels[0]) levels[0] = [];
+      levels[0].push(node);
+    }
+  });
+  const positions = new Map();
+  const xMin = 150;
+  const xMax = 780;
+  const yMin = 220;
+  const yMax = 770;
+  levels.forEach((levelNodes, levelIdx) => {
+    const y = yMin + (levelIdx / Math.max(1, levels.length - 1)) * (yMax - yMin);
+    levelNodes.forEach((node, idx) => {
+      const x = xMin + ((idx + 1) / (levelNodes.length + 1)) * (xMax - xMin);
+      positions.set(node, [x, y]);
+    });
+  });
+  return positions;
 }
 
 function findPathToHighlight(edges, highlight) {
@@ -439,12 +684,15 @@ function drawSelfImprovementLoop(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const center = [800, 480];
-  const angles = [-92, -20, 55, 128, 205].map((deg) => (deg * Math.PI) / 180);
-  const steps = (visual.steps || []).slice(0, 5).map((step, i) => ({
+  const sourceSteps = visual.steps || [];
+  const steps = sourceSteps.map((step, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(sourceSteps.length, 1);
+    return {
     ...step,
-    x: center[0] + Math.cos(angles[i]) * 430,
-    y: center[1] + Math.sin(angles[i]) * 250,
-  }));
+    x: center[0] + Math.cos(angle) * 440,
+    y: center[1] + Math.sin(angle) * 250,
+  };
+  });
   for (let i = 0; i < steps.length; i += 1) {
     const a = steps[i];
     const b = steps[(i + 1) % steps.length];
@@ -456,12 +704,11 @@ function drawSelfImprovementLoop(spec) {
     });
   }
   ellipse(canvas, rc, center[0], center[1], 300, 150, { fill: colors.yellow, stroke: colors.red, strokeWidth: 3.4, fillStyle: "cross-hatch", hachureGap: 12, seed: 370 });
-  canvas.add(svgText(center[0], center[1] - 8, "Self-improving", { size: 31, weight: 900, fill: colors.red }));
-  canvas.add(svgText(center[0], center[1] + 32, "Agent", { size: 34, weight: 900 }));
+  canvas.add(svgText(center[0], center[1] + 8, wrapCjk(visual.center, 12).slice(0, 2), { size: 31, weight: 900, fill: colors.red, lineHeight: 36 }));
   steps.forEach((step, i) => {
     const highlighted = step.id === visual.highlight;
     rect(canvas, rc, step.x - 132, step.y - 52, 264, 104, {
-      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray, colors.pink][i],
+      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray, colors.pink, colors.yellow][i % 6],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.3 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -474,7 +721,55 @@ function drawSelfImprovementLoop(spec) {
   });
   canvas.add(`<path d="M438 729 C612 835 938 842 1158 710" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.78"/>`);
   canvas.add(svgText(800, 825, "评测结果回到 Archive，再选择下一代 parent", { size: 26, weight: 800, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawDualLoop(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(304);
+  const canvas = createCanvas();
+  const loops = spec.visual_spec?.loops || [];
+  const centers = [[565, 480], [1015, 480]];
+  loops.forEach((loopSpec, loopIdx) => {
+    const center = centers[loopIdx] || [565 + loopIdx * 450, 480];
+    const steps = loopSpec.steps || [];
+    const highlighted = loopSpec.id === spec.visual_spec?.highlight;
+    ellipse(canvas, rc, center[0], center[1], 330, 210, { fill: highlighted ? colors.pink : [colors.blue, colors.warm][loopIdx % 2], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.4 : 2.4, seed: 1360 + loopIdx });
+    canvas.add(svgText(center[0], center[1] - 10, loopSpec.label, { size: 30, weight: 900, fill: highlighted ? colors.red : colors.ink }));
+    steps.forEach((step, i) => {
+      const angle = -Math.PI / 2 + i * 2 * Math.PI / Math.max(1, steps.length);
+      const x = center[0] + Math.cos(angle) * 180;
+      const y = center[1] + Math.sin(angle) * 125;
+      ellipse(canvas, rc, x, y, 96, 50, { fill: "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 1380 + loopIdx * 20 + i });
+      canvas.add(svgText(x, y + 7, wrapCjk(step.label, 6).slice(0, 2), { size: 18, weight: 800, lineHeight: 20 }));
+    });
+  });
+  line(canvas, rc, 742, 480, 838, 480, { arrow: true, stroke: colors.red, strokeWidth: 3.2, seed: 1400 });
+  line(canvas, rc, 838, 535, 742, 535, { arrow: true, stroke: colors.muted, strokeWidth: 2.2, seed: 1401 });
+  canvas.add(svgText(790, 448, "互相校准", { size: 23, weight: 900, fill: colors.red }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawSpiralIterationLadder(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(305);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const steps = visual.steps || [];
+  let last = null;
+  steps.forEach((step, i) => {
+    const t = i / Math.max(1, steps.length - 1);
+    const x = 260 + t * 1020;
+    const y = 700 - t * 420 + Math.sin(i * 1.2) * 70;
+    const highlighted = step.id === visual.highlight;
+    if (last) curve(canvas, rc, last[0], last[1], x, y, i % 2 ? -42 : 42, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3 : 2.1, seed: 1420 + i });
+    ellipse(canvas, rc, x, y, highlighted ? 146 : 124, highlighted ? 84 : 70, { fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.3 : 2.2, seed: 1440 + i });
+    canvas.add(svgText(x, y - 4, wrapCjk(step.label, 7).slice(0, 2), { size: 23, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 25 }));
+    canvas.add(svgText(x, y + 25, wrapCjk(step.note || "", 8).slice(0, 1), { size: 16, fill: colors.muted }));
+    last = [x, y];
+  });
+  canvas.add(svgText(760, 216, visual.center || "迭代爬升", { size: 35, weight: 900, fill: colors.red }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
 }
 
 function drawHorizontalSequence(spec) {
@@ -482,11 +777,11 @@ function drawHorizontalSequence(spec) {
   const { rc } = roughSvg(404);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
-  const steps = (visual.steps || []).slice(0, 6);
-  const startX = 150;
+  const steps = visual.steps || [];
+  const startX = 120;
   const y = 455;
-  const gap = 32;
-  const stepW = Math.min(220, (1300 - gap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1));
+  const gap = Math.max(14, Math.min(32, 170 / Math.max(1, steps.length)));
+  const stepW = Math.max(110, Math.min(220, (1360 - gap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1)));
   const palette = [colors.blue, colors.warm, colors.green, colors.yellow, colors.pink, colors.gray];
 
   canvas.add(`<path d="M120 454 C390 421 665 487 913 445 S1280 428 1460 470" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.35"/>`);
@@ -503,8 +798,8 @@ function drawHorizontalSequence(spec) {
     });
     ellipse(canvas, rc, x + 24, y - 70, 44, 34, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 450 + i });
     canvas.add(svgText(x + 24, y - 61, String(i + 1), { size: 18, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
-    canvas.add(svgText(x + stepW / 2, y - 16, step.label, { size: 26, weight: 850, fill: highlighted ? colors.red : colors.ink }));
-    canvas.add(svgText(x + stepW / 2, y + 28, wrapCjk(step.note, 9), { size: 19, weight: 500, fill: colors.muted, lineHeight: 23 }));
+    canvas.add(svgText(x + stepW / 2, y - 16, wrapCjk(step.label, stepW < 140 ? 4 : 7).slice(0, 2), { size: stepW < 140 ? 20 : 26, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
+    canvas.add(svgText(x + stepW / 2, y + 28, wrapCjk(step.note, stepW < 140 ? 5 : 9).slice(0, 2), { size: stepW < 140 ? 16 : 19, weight: 500, fill: colors.muted, lineHeight: 20 }));
     if (i < steps.length - 1) {
       curve(canvas, rc, x + stepW + 8, y, x + stepW + gap - 8, y, i % 2 ? -18 : 18, {
         arrow: true,
@@ -515,7 +810,90 @@ function drawHorizontalSequence(spec) {
     }
   });
   canvas.add(svgText(800, 725, "每一步都留下可检查证据，质量门槛前置到交付之前", { size: 25, weight: 800, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawVerticalProcess(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(405);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const steps = visual.steps || [];
+  const x = 560;
+  const top = 205;
+  const stepH = Math.max(78, Math.min(130, 520 / Math.max(1, steps.length)));
+  const gap = Math.max(12, Math.min(28, 130 / Math.max(1, steps.length)));
+  const palette = [colors.blue, colors.warm, colors.green, colors.yellow, colors.pink, colors.gray];
+  steps.forEach((step, i) => {
+    const y = top + i * (stepH + gap);
+    const highlighted = step.id === visual.highlight;
+    rect(canvas, rc, x - 230, y, 460, stepH, {
+      fill: highlighted ? colors.pink : palette[i % palette.length],
+      stroke: highlighted ? colors.red : colors.ink,
+      strokeWidth: highlighted ? 3.3 : 2.2,
+      fillStyle: highlighted ? "cross-hatch" : "hachure",
+      seed: 1160 + i,
+    });
+    ellipse(canvas, rc, x - 190, y + stepH / 2, 52, 42, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 1180 + i });
+    canvas.add(svgText(x - 190, y + stepH / 2 + 8, String(i + 1), { size: 18, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
+    canvas.add(svgText(x, y + stepH / 2 - 8, step.label, { size: 27, weight: 850, fill: highlighted ? colors.red : colors.ink }));
+    canvas.add(svgText(x, y + stepH / 2 + 28, wrapCjk(step.note || step.time || "", 14).slice(0, 2), { size: 19, fill: colors.muted, lineHeight: 22 }));
+    if (i < steps.length - 1) line(canvas, rc, x, y + stepH + 8, x, y + stepH + gap - 8, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: 2.2, seed: 1200 + i });
+  });
+  pathRough(canvas, rc, "M 970 260 C 1140 216 1342 285 1370 446 C 1398 610 1220 724 1018 650 C 902 608 868 314 970 260 Z", { fill: "#fff8df", stroke: colors.red, strokeWidth: 2.3, fillStyle: "zigzag", seed: 1220 });
+  canvas.add(svgText(1170, 430, "自上而下推进", { size: 31, weight: 900, fill: colors.red }));
+  canvas.add(svgText(1170, 492, "适合阶段门\n和审批链路", { size: 25, weight: 700, lineHeight: 32 }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawTimeline(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(406);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const steps = visual.steps || [];
+  const y = 470;
+  const startX = 160;
+  const endX = 1420;
+  line(canvas, rc, startX, y, endX, y, { arrow: true, stroke: colors.red, strokeWidth: 4, seed: 1240 });
+  steps.forEach((step, i) => {
+    const x = startX + (i / Math.max(1, steps.length - 1)) * (endX - startX - 40);
+    const highlighted = step.id === visual.highlight;
+    ellipse(canvas, rc, x, y, highlighted ? 76 : 58, highlighted ? 58 : 46, { fill: highlighted ? colors.pink : "#ffffff", stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.2 : 2.1, seed: 1260 + i });
+    canvas.add(svgText(x, y - 70, step.time || `T${i + 1}`, { size: 23, weight: 900, fill: highlighted ? colors.red : colors.ink }));
+    rect(canvas, rc, x - 95, y + 52, 190, 118, { fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, seed: 1280 + i });
+    canvas.add(svgText(x, y + 96, wrapCjk(step.label, 7).slice(0, 2), { size: 24, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 26 }));
+    canvas.add(svgText(x, y + 132, wrapCjk(step.note || "", 8).slice(0, 2), { size: 17, fill: colors.muted, lineHeight: 20 }));
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawSwimlane(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(407);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const lanes = visual.lanes || [];
+  const x0 = 170;
+  const y0 = 205;
+  const w = 1220;
+  const laneH = Math.max(120, Math.min(170, 530 / Math.max(1, lanes.length)));
+  lanes.forEach((lane, laneIdx) => {
+    const y = y0 + laneIdx * laneH;
+    rect(canvas, rc, x0, y, w, laneH - 12, { fill: [colors.blue, colors.green, colors.warm, colors.gray][laneIdx % 4], stroke: "#d7d2c8", strokeWidth: 1.6, hachureGap: 26, seed: 1300 + laneIdx });
+    canvas.add(svgText(x0 + 70, y + laneH / 2, lane.label, { size: 25, weight: 900, fill: colors.red }));
+    const laneSteps = lane.steps || [];
+    const slotW = (w - 190) / Math.max(1, laneSteps.length);
+    laneSteps.forEach((step, stepIdx) => {
+      const cx = x0 + 170 + stepIdx * slotW + slotW / 2;
+      const cy = y + laneH / 2;
+      const highlighted = step.id === visual.highlight;
+      rect(canvas, rc, cx - 95, cy - 42, 190, 84, { fill: highlighted ? colors.pink : "#ffffff", stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.1 : 2, seed: 1320 + laneIdx * 20 + stepIdx });
+      canvas.add(svgText(cx, cy + 8, wrapCjk(step.label, 8).slice(0, 2), { size: 22, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
+      if (stepIdx < laneSteps.length - 1) line(canvas, rc, cx + 100, cy, cx + slotW - 100, cy, { arrow: true, stroke: colors.ink, strokeWidth: 2, seed: 1340 + laneIdx * 20 + stepIdx });
+    });
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
 }
 
 function drawQuadrantMatrix(spec) {
@@ -542,22 +920,125 @@ function drawQuadrantMatrix(spec) {
   canvas.add(svgText(x0 - 58, y0 + h, visual.y_axis?.bottom || "低", { size: 20, anchor: "end", fill: colors.muted }));
   canvas.add(svgText(x0 - 58, y0, visual.y_axis?.top || "高", { size: 20, anchor: "end", fill: colors.muted }));
 
-  (visual.items || []).slice(0, 8).forEach((item, i) => {
+  (visual.items || []).forEach((item, i) => {
     const px = x0 + Math.max(0.06, Math.min(0.94, Number(item.x) || 0.5)) * w;
     const py = y0 + (1 - Math.max(0.06, Math.min(0.94, Number(item.y) || 0.5))) * h;
     const highlighted = item.label === visual.highlight || item.id === visual.highlight;
-    ellipse(canvas, rc, px, py, highlighted ? 190 : 170, highlighted ? 96 : 84, {
+    const itemW = visual.items.length > 8 ? 140 : 170;
+    ellipse(canvas, rc, px, py, highlighted ? itemW + 24 : itemW, highlighted ? 86 : 74, {
       fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][i % 4],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.5 : 2.3,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
       seed: 530 + i,
     });
-    canvas.add(svgText(px, py - 8, item.label, { size: 25, weight: 850, fill: highlighted ? colors.red : colors.ink }));
-    canvas.add(svgText(px, py + 25, wrapCjk(item.note || "", 8), { size: 17, fill: colors.muted, lineHeight: 20 }));
+    canvas.add(svgText(px, py - 8, wrapCjk(item.label, visual.items.length > 8 ? 5 : 8).slice(0, 2), { size: visual.items.length > 8 ? 20 : 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 22 }));
+    canvas.add(svgText(px, py + 25, wrapCjk(item.note || "", 8).slice(0, 2), { size: 17, fill: colors.muted, lineHeight: 20 }));
   });
   canvas.add(svgText(1130, 170, "先定位关系，再选渲染器", { size: 24, weight: 800, fill: colors.red, anchor: "end" }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawMatrixGrid(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(506);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const rows = visual.rows || [];
+  const columns = visual.columns || [];
+  const values = visual.values || [];
+  const grid = { x: 310, y: 220, w: 900, h: 500 };
+  const cellW = grid.w / Math.max(1, columns.length);
+  const cellH = grid.h / Math.max(1, rows.length);
+  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, wrapCjk(column, 8).slice(0, 2), { size: 22, weight: 850, fill: colors.red, lineHeight: 24 })));
+  rows.forEach((row, rowIdx) => {
+    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(row, 8).slice(0, 2), { size: 22, weight: 850, anchor: "end", fill: colors.ink, lineHeight: 24 }));
+    columns.forEach((column, colIdx) => {
+      const value = values[rowIdx]?.[colIdx] ?? "";
+      const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
+      rect(canvas, rc, grid.x + colIdx * cellW, grid.y + rowIdx * cellH, cellW - 10, cellH - 10, {
+        fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][(rowIdx + colIdx) % 4],
+        stroke: highlighted ? colors.red : colors.ink,
+        strokeWidth: highlighted ? 3.2 : 1.8,
+        fillStyle: highlighted ? "cross-hatch" : "hachure",
+        seed: 1460 + rowIdx * 20 + colIdx,
+      });
+      canvas.add(svgText(grid.x + colIdx * cellW + cellW / 2 - 5, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(value, 8).slice(0, 2), { size: 22, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
+    });
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawPyramidCapabilityStack(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(203);
+  const canvas = createCanvas();
+  const levels = spec.visual_spec?.levels || [];
+  const centerX = 760;
+  const top = 215;
+  const totalH = 540;
+  const maxW = 980;
+  const minW = 260;
+  const levelH = totalH / Math.max(1, levels.length);
+  levels.forEach((level, idx) => {
+    const t = levels.length === 1 ? 1 : idx / (levels.length - 1);
+    const wTop = minW + t * (maxW - minW);
+    const wBottom = minW + ((idx + 1) / Math.max(1, levels.length)) * (maxW - minW);
+    const y = top + idx * levelH;
+    const highlighted = level.label === spec.visual_spec?.highlight || level.id === spec.visual_spec?.highlight;
+    pathRough(canvas, rc, `M ${centerX - wTop / 2} ${y} L ${centerX + wTop / 2} ${y} L ${centerX + wBottom / 2} ${y + levelH - 10} L ${centerX - wBottom / 2} ${y + levelH - 10} Z`, {
+      fill: highlighted ? colors.pink : [colors.yellow, colors.warm, colors.green, colors.blue, colors.gray][idx % 5],
+      stroke: highlighted ? colors.red : colors.ink,
+      strokeWidth: highlighted ? 3.4 : 2.2,
+      fillStyle: highlighted ? "cross-hatch" : "hachure",
+      seed: 1500 + idx,
+    });
+    canvas.add(svgText(centerX, y + levelH / 2 - 4, level.label, { size: 28, weight: 900, fill: highlighted ? colors.red : colors.ink }));
+    canvas.add(svgText(centerX, y + levelH / 2 + 32, wrapCjk(level.note || "", 12).slice(0, 1), { size: 18, fill: colors.muted }));
+  });
+  canvas.add(svgText(1240, 445, "越往上越接近\n业务判断", { size: 26, weight: 800, fill: colors.red, lineHeight: 34 }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+}
+
+function drawGenericNetworkGraph(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(607);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const nodes = visual.nodes || [];
+  const center = [800, 475];
+  const radiusX = 480;
+  const radiusY = 270;
+  const positions = new Map();
+  nodes.forEach((node, i) => {
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(nodes.length, 1);
+    positions.set(node.id, [center[0] + Math.cos(angle) * radiusX, center[1] + Math.sin(angle) * radiusY]);
+  });
+  (visual.edges || []).forEach(([from, to], i) => {
+    const a = positions.get(from);
+    const b = positions.get(to);
+    if (!a || !b) return;
+    curve(canvas, rc, a[0], a[1], b[0], b[1], i % 2 ? 35 : -25, {
+      arrow: true,
+      stroke: from === visual.highlight || to === visual.highlight ? colors.red : colors.muted,
+      strokeWidth: from === visual.highlight || to === visual.highlight ? 2.9 : 2,
+      seed: 1540 + i,
+    });
+  });
+  nodes.forEach((node, i) => {
+    const [x, y] = positions.get(node.id);
+    const highlighted = node.id === visual.highlight || node.label === visual.highlight;
+    rect(canvas, rc, x - 116, y - 52, 232, 104, {
+      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray, colors.yellow][i % 5],
+      stroke: highlighted ? colors.red : colors.ink,
+      strokeWidth: highlighted ? 3.3 : 2.2,
+      fillStyle: highlighted ? "cross-hatch" : "hachure",
+      seed: 1580 + i,
+    });
+    canvas.add(svgText(x, y - 9, wrapCjk(node.label, 8).slice(0, 2), { size: 23, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 25 }));
+    canvas.add(svgText(x, y + 25, wrapCjk(node.note || "", 8).slice(0, 1), { size: 16, fill: colors.muted }));
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
 }
 
 function drawHubSpokeNetwork(spec) {
@@ -566,7 +1047,7 @@ function drawHubSpokeNetwork(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const hub = visual.hub || { id: "hub", label: "中心" };
-  const nodes = (visual.nodes || []).slice(0, 7);
+  const nodes = visual.nodes || [];
   const center = [800, 475];
   const radiusX = 455;
   const radiusY = 245;
@@ -607,20 +1088,43 @@ function drawHubSpokeNetwork(spec) {
   });
   canvas.add(`<path d="M250 720 C505 795 1040 800 1345 708" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.45"/>`);
   canvas.add(svgText(800, 785, "网络图只用于真正的多实体协同，不替代层级或流程", { size: 24, weight: 800, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
 }
 
 function createHandDrawnDiagramSvg(spec, options = {}) {
   validateHandDrawnDiagramSpec(spec);
+  const renderSpec = { ...spec, _canvasOptions: resolveCanvasOptions(options) };
   const template = spec.template || spec.intent;
-  if (template === "grouped_bar_chart") return drawGroupedBarChart(spec, options);
-  if (template === "layered_architecture") return drawLayeredArchitecture(spec, options);
-  if (template === "tree") return drawArchiveEvolutionTree(spec, options);
-  if (template === "closed_loop") return drawSelfImprovementLoop(spec, options);
-  if (template === "horizontal_sequence") return drawHorizontalSequence(spec, options);
-  if (template === "quadrant_matrix") return drawQuadrantMatrix(spec, options);
-  if (template === "hub_spoke_network") return drawHubSpokeNetwork(spec, options);
+  if (template === "grouped_bar_chart") return drawGroupedBarChart(renderSpec);
+  if (template === "line_chart") return drawLineChart(renderSpec);
+  if (template === "donut_proportion_chart" || template === "donut_chart" || template === "proportion_chart") return drawDonutProportionChart(renderSpec);
+  if (template === "heatmap") return drawHeatmap(renderSpec);
+  if (template === "layered_architecture") return drawLayeredArchitecture(renderSpec);
+  if (template === "tree") return drawArchiveEvolutionTree(renderSpec);
+  if (template === "pyramid_capability_stack" || template === "pyramid" || template === "capability_stack") return drawPyramidCapabilityStack(renderSpec);
+  if (template === "closed_loop") return drawSelfImprovementLoop(renderSpec);
+  if (template === "dual_loop") return drawDualLoop(renderSpec);
+  if (template === "spiral_iteration_ladder") return drawSpiralIterationLadder(renderSpec);
+  if (template === "horizontal_sequence" || template === "horizontal_process") return drawHorizontalSequence(renderSpec);
+  if (template === "vertical_process") return drawVerticalProcess(renderSpec);
+  if (template === "timeline") return drawTimeline(renderSpec);
+  if (template === "swimlane") return drawSwimlane(renderSpec);
+  if (template === "quadrant_matrix") return drawQuadrantMatrix(renderSpec);
+  if (template === "capability_matrix") return drawMatrixGrid(renderSpec);
+  if (template === "hub_spoke_network") return drawHubSpokeNetwork(renderSpec);
+  if (template === "dependency_graph" || template === "module_interaction_map" || template === "causal_influence_graph") return drawGenericNetworkGraph(renderSpec);
   throw new Error(`Unsupported hand-drawn diagram template: ${template}`);
+}
+
+function createHandDrawnDiagramImage(spec, options = {}) {
+  const canvas = resolveCanvasOptions(options);
+  return {
+    format: "svg",
+    mimeType: "image/svg+xml",
+    width: canvas.width,
+    height: canvas.height,
+    svg: createHandDrawnDiagramSvg(spec, options),
+  };
 }
 
 function validateHandDrawnDiagramSpec(spec) {
@@ -635,39 +1139,65 @@ function validateHandDrawnDiagramSpec(spec) {
   if (spec.intent && !validIntents.has(spec.intent)) errors.push(`Unsupported intent: ${spec.intent}`);
   const visual = spec.visual_spec;
   if (!visual || typeof visual !== "object") errors.push("Missing required object: visual_spec");
+  const template = spec.template;
 
   if (visual && spec.template === "layered_architecture") {
     if (!Array.isArray(visual.layers) || visual.layers.length < 3) errors.push("layered_architecture requires at least three visual_spec.layers.");
     if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push("layered_architecture requires visual_spec.edges.");
     if (!Array.isArray(visual.side_modules)) errors.push("layered_architecture requires visual_spec.side_modules.");
+    if (Array.isArray(visual.layers) && Array.isArray(visual.edges)) {
+      const itemIds = new Set([...visual.layers.flatMap((layer) => layer.items || []), ...(visual.side_modules || [])]);
+      collectUnknownEdgeEndpoints(visual.edges, itemIds, "layered_architecture").forEach((error) => errors.push(error));
+    }
   }
 
-  if (visual && spec.template === "grouped_bar_chart") {
-    if (!Array.isArray(visual.categories) || visual.categories.length < 1) errors.push("grouped_bar_chart requires visual_spec.categories.");
-    if (!Array.isArray(visual.series) || visual.series.length < 1) errors.push("grouped_bar_chart requires visual_spec.series.");
-    if (Array.isArray(visual.series)) {
-      visual.series.forEach((entry, idx) => {
-        if (!safeText(entry.name)) errors.push(`grouped_bar_chart series ${idx + 1} missing name.`);
-        if (!Array.isArray(entry.values)) errors.push(`grouped_bar_chart series ${idx + 1} missing values.`);
-        if (Array.isArray(entry.values) && Array.isArray(visual.categories) && entry.values.length !== visual.categories.length) {
-          errors.push(`grouped_bar_chart series ${idx + 1} values must match category count.`);
-        }
+  if (visual && ["grouped_bar_chart", "line_chart"].includes(template)) {
+    if (!Array.isArray(visual.categories) || visual.categories.length < 1) errors.push(`${template} requires visual_spec.categories.`);
+    if (!Array.isArray(visual.series) || visual.series.length < 1) errors.push(`${template} requires visual_spec.series.`);
+    validateSeriesValues(visual, template).forEach((error) => errors.push(error));
+  }
+
+  if (visual && ["donut_proportion_chart", "donut_chart", "proportion_chart"].includes(template)) {
+    if (!Array.isArray(visual.segments) || visual.segments.length < 2) errors.push(`${template} requires at least two visual_spec.segments.`);
+    if (Array.isArray(visual.segments)) {
+      visual.segments.forEach((segment, idx) => {
+        if (!safeText(segment.label)) errors.push(`${template} segment ${idx + 1} missing label.`);
+        if (!Number.isFinite(Number(segment.value))) errors.push(`${template} segment ${idx + 1} requires numeric value.`);
       });
     }
   }
 
-  if (visual && spec.template === "tree") {
+  if (visual && template === "heatmap") {
+    validateGridValues(visual, template).forEach((error) => errors.push(error));
+  }
+
+  if (visual && template === "tree") {
     if (!Array.isArray(visual.nodes) || visual.nodes.length < 2) errors.push("tree requires at least two visual_spec.nodes.");
     if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push("tree requires visual_spec.edges.");
     if (!visual.labels || typeof visual.labels !== "object") errors.push("tree requires visual_spec.labels.");
     if (!safeText(visual.highlight)) errors.push("tree requires visual_spec.highlight.");
+    if (Array.isArray(visual.nodes) && safeText(visual.highlight) && !visual.nodes.includes(visual.highlight)) {
+      errors.push("tree visual_spec.highlight must be one of visual_spec.nodes.");
+    }
     if (Array.isArray(visual.nodes) && visual.labels) {
       const unlabeled = visual.nodes.filter((node) => !safeText(visual.labels[node]));
       if (unlabeled.length) errors.push(`tree labels missing for nodes: ${unlabeled.join(", ")}`);
     }
+    if (Array.isArray(visual.nodes) && Array.isArray(visual.edges)) {
+      collectUnknownEdgeEndpoints(visual.edges, new Set(visual.nodes), "tree").forEach((error) => errors.push(error));
+    }
   }
 
-  if (visual && spec.template === "closed_loop") {
+  if (visual && ["pyramid_capability_stack", "pyramid", "capability_stack"].includes(template)) {
+    if (!Array.isArray(visual.levels) || visual.levels.length < 2) errors.push(`${template} requires at least two visual_spec.levels.`);
+    if (Array.isArray(visual.levels)) {
+      visual.levels.forEach((level, idx) => {
+        if (!safeText(level.label)) errors.push(`${template} level ${idx + 1} missing label.`);
+      });
+    }
+  }
+
+  if (visual && ["closed_loop", "spiral_iteration_ladder"].includes(template)) {
     if (!Array.isArray(visual.steps) || visual.steps.length < 3) errors.push("closed_loop requires at least three visual_spec.steps.");
     if (!safeText(visual.center)) errors.push("closed_loop requires visual_spec.center.");
     if (Array.isArray(visual.steps)) {
@@ -675,16 +1205,52 @@ function validateHandDrawnDiagramSpec(spec) {
         if (!safeText(step.id)) errors.push(`closed_loop step ${idx + 1} missing id.`);
         if (!safeText(step.label)) errors.push(`closed_loop step ${idx + 1} missing label.`);
       });
+      if (safeText(visual.highlight) && !visual.steps.some((step) => step.id === visual.highlight)) {
+        errors.push("closed_loop visual_spec.highlight must match a step id.");
+      }
     }
   }
 
-  if (visual && spec.template === "horizontal_sequence") {
+  if (visual && ["horizontal_sequence", "horizontal_process", "vertical_process", "timeline"].includes(template)) {
     if (!Array.isArray(visual.steps) || visual.steps.length < 2) errors.push("horizontal_sequence requires at least two visual_spec.steps.");
     if (Array.isArray(visual.steps)) {
       visual.steps.forEach((step, idx) => {
         if (!safeText(step.id)) errors.push(`horizontal_sequence step ${idx + 1} missing id.`);
         if (!safeText(step.label)) errors.push(`horizontal_sequence step ${idx + 1} missing label.`);
       });
+      if (safeText(visual.highlight) && !visual.steps.some((step) => step.id === visual.highlight)) {
+        errors.push("horizontal_sequence visual_spec.highlight must match a step id.");
+      }
+    }
+  }
+
+  if (visual && template === "swimlane") {
+    if (!Array.isArray(visual.lanes) || visual.lanes.length < 1) errors.push("swimlane requires visual_spec.lanes.");
+    if (Array.isArray(visual.lanes)) {
+      const stepIds = [];
+      visual.lanes.forEach((lane, laneIdx) => {
+        if (!safeText(lane.id)) errors.push(`swimlane lane ${laneIdx + 1} missing id.`);
+        if (!safeText(lane.label)) errors.push(`swimlane lane ${laneIdx + 1} missing label.`);
+        if (!Array.isArray(lane.steps) || lane.steps.length < 1) errors.push(`swimlane lane ${laneIdx + 1} requires steps.`);
+        (lane.steps || []).forEach((step, stepIdx) => {
+          if (!safeText(step.id)) errors.push(`swimlane lane ${laneIdx + 1} step ${stepIdx + 1} missing id.`);
+          if (!safeText(step.label)) errors.push(`swimlane lane ${laneIdx + 1} step ${stepIdx + 1} missing label.`);
+          stepIds.push(step.id);
+        });
+      });
+      if (safeText(visual.highlight) && !stepIds.includes(visual.highlight)) errors.push("swimlane visual_spec.highlight must match a lane step id.");
+    }
+  }
+
+  if (visual && template === "dual_loop") {
+    if (!Array.isArray(visual.loops) || visual.loops.length < 2) errors.push("dual_loop requires at least two visual_spec.loops.");
+    if (Array.isArray(visual.loops)) {
+      visual.loops.forEach((loop, loopIdx) => {
+        if (!safeText(loop.id)) errors.push(`dual_loop loop ${loopIdx + 1} missing id.`);
+        if (!safeText(loop.label)) errors.push(`dual_loop loop ${loopIdx + 1} missing label.`);
+        if (!Array.isArray(loop.steps) || loop.steps.length < 2) errors.push(`dual_loop loop ${loopIdx + 1} requires at least two steps.`);
+      });
+      if (safeText(visual.highlight) && !visual.loops.some((loop) => loop.id === visual.highlight)) errors.push("dual_loop visual_spec.highlight must match a loop id.");
     }
   }
 
@@ -700,6 +1266,10 @@ function validateHandDrawnDiagramSpec(spec) {
     }
   }
 
+  if (visual && template === "capability_matrix") {
+    validateGridValues(visual, template).forEach((error) => errors.push(error));
+  }
+
   if (visual && spec.template === "hub_spoke_network") {
     if (!visual.hub || typeof visual.hub !== "object" || !safeText(visual.hub.id) || !safeText(visual.hub.label)) errors.push("hub_spoke_network requires visual_spec.hub with id and label.");
     if (!Array.isArray(visual.nodes) || visual.nodes.length < 2) errors.push("hub_spoke_network requires at least two visual_spec.nodes.");
@@ -710,12 +1280,74 @@ function validateHandDrawnDiagramSpec(spec) {
         if (!safeText(node.label)) errors.push(`hub_spoke_network node ${idx + 1} missing label.`);
       });
     }
+    if (visual.hub && Array.isArray(visual.nodes) && Array.isArray(visual.edges)) {
+      const ids = new Set([visual.hub.id, ...visual.nodes.map((node) => node.id)]);
+      collectUnknownEdgeEndpoints(visual.edges, ids, "hub_spoke_network").forEach((error) => errors.push(error));
+    }
+  }
+
+  if (visual && ["dependency_graph", "module_interaction_map", "causal_influence_graph"].includes(template)) {
+    if (!Array.isArray(visual.nodes) || visual.nodes.length < 2) errors.push(`${template} requires at least two visual_spec.nodes.`);
+    if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push(`${template} requires visual_spec.edges.`);
+    if (Array.isArray(visual.nodes)) {
+      visual.nodes.forEach((node, idx) => {
+        if (!safeText(node.id)) errors.push(`${template} node ${idx + 1} missing id.`);
+        if (!safeText(node.label)) errors.push(`${template} node ${idx + 1} missing label.`);
+      });
+    }
+    if (Array.isArray(visual.nodes) && Array.isArray(visual.edges)) {
+      collectUnknownEdgeEndpoints(visual.edges, new Set(visual.nodes.map((node) => node.id)), template).forEach((error) => errors.push(error));
+    }
   }
 
   if (errors.length) {
     throw new Error(`Invalid hand-drawn diagram spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
   }
   return true;
+}
+
+function collectUnknownEdgeEndpoints(edges, validIds, template) {
+  const errors = [];
+  edges.forEach((edge, idx) => {
+    if (!Array.isArray(edge) || edge.length !== 2) {
+      errors.push(`${template} edge ${idx + 1} must be a [from, to] pair.`);
+      return;
+    }
+    const [from, to] = edge;
+    if (!validIds.has(from)) errors.push(`${template} edge ${idx + 1} references unknown source: ${from}`);
+    if (!validIds.has(to)) errors.push(`${template} edge ${idx + 1} references unknown target: ${to}`);
+  });
+  return errors;
+}
+
+function validateSeriesValues(visual, template) {
+  const errors = [];
+  if (!Array.isArray(visual.series)) return errors;
+  visual.series.forEach((entry, idx) => {
+    if (!safeText(entry.name)) errors.push(`${template} series ${idx + 1} missing name.`);
+    if (!Array.isArray(entry.values)) errors.push(`${template} series ${idx + 1} missing values.`);
+    if (Array.isArray(entry.values) && Array.isArray(visual.categories) && entry.values.length !== visual.categories.length) {
+      errors.push(`${template} series ${idx + 1} values must match category count.`);
+    }
+    (entry.values || []).forEach((value, valueIdx) => {
+      if (!Number.isFinite(Number(value))) errors.push(`${template} series ${idx + 1} value ${valueIdx + 1} must be numeric.`);
+    });
+  });
+  return errors;
+}
+
+function validateGridValues(visual, template) {
+  const errors = [];
+  if (!Array.isArray(visual.rows) || visual.rows.length < 1) errors.push(`${template} requires visual_spec.rows.`);
+  if (!Array.isArray(visual.columns) || visual.columns.length < 1) errors.push(`${template} requires visual_spec.columns.`);
+  if (!Array.isArray(visual.values) || visual.values.length < 1) errors.push(`${template} requires visual_spec.values.`);
+  if (Array.isArray(visual.rows) && Array.isArray(visual.columns) && Array.isArray(visual.values)) {
+    if (visual.values.length !== visual.rows.length) errors.push(`${template} values row count must match rows.`);
+    visual.values.forEach((row, idx) => {
+      if (!Array.isArray(row) || row.length !== visual.columns.length) errors.push(`${template} values row ${idx + 1} must match column count.`);
+    });
+  }
+  return errors;
 }
 
 function writeHandDrawnDiagramSvg(spec, outDir, options = {}) {
@@ -726,25 +1358,15 @@ function writeHandDrawnDiagramSvg(spec, outDir, options = {}) {
   return filePath;
 }
 
-function addHandDrawnDiagramSlide(pptx, spec, options = {}) {
-  const outDir = options.outDir || path.join(".tmp", "hand_drawn_diagrams");
-  const svgPath = writeHandDrawnDiagramSvg(spec, outDir, options);
-  const slide = pptx.addSlide();
-  slide.background = { color: "FFFDF7" };
-  slide.addImage({
-    path: svgPath,
-    x: options.x ?? 0,
-    y: options.y ?? 0,
-    w: options.w ?? DIAGRAM_STYLE.pptW,
-    h: options.h ?? DIAGRAM_STYLE.pptH,
-  });
-  return { slide, svgPath };
+function writeHandDrawnDiagramImage(spec, outDir, options = {}) {
+  return writeHandDrawnDiagramSvg(spec, outDir, options);
 }
 
 module.exports = {
   DIAGRAM_STYLE,
-  addHandDrawnDiagramSlide,
+  createHandDrawnDiagramImage,
   createHandDrawnDiagramSvg,
   validateHandDrawnDiagramSpec,
+  writeHandDrawnDiagramImage,
   writeHandDrawnDiagramSvg,
 };

@@ -9,14 +9,15 @@
     "sample": "node scripts/generate_sample_deck.js",
     "check-sample": "node scripts/check_huawei_pptx.js .tmp/sample_huawei_deck.pptx",
     "export-sample": "node scripts/export_pptx_images.js .tmp/sample_huawei_deck.pptx --out .tmp/sample_huawei_deck_slides",
+    "test:diagram": "node scripts/test_diagram_helpers.js",
     "diagram-smoke": "node scripts/verify_diagram_components.js",
-    "export-diagram-smoke": "node scripts/export_pptx_images.js .tmp/diagram_component_smoke/diagram_component_smoke.pptx --out .tmp/diagram_component_smoke/exported_png --renderer auto",
     "reference-review-template": "node scripts/prepare_reference_review.js --out .tmp/reference_review.json",
     "smoke": "npm run sample && npm run check-sample"
   },
   "dependencies": {
     "jszip": "^3.10.1",
     "pptxgenjs": "^4.0.1",
-    "roughjs": "^4.6.6"
+    "roughjs": "^4.6.6",
+    "sharp": "^0.34.5"
   }
 }

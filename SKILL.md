@@ -135,7 +135,7 @@ For content-page helpers, also pass `sections` and `currentSection`. `sections` 
 
 Write custom deck scripts by composing these helpers. For uncommon layouts, create a small local helper in `.tmp/` that still uses `HW_STYLE`, `addPageTitle`, `addFooter`, `redTitleCard`, `grayCard`, and `safeText`.
 
-For self-drawn relationship diagrams, lazily import `scripts/hw_diagram_helpers.js` only in deck scripts that need it. Use `addHandDrawnDiagramSlide`, `writeHandDrawnDiagramSvg`, or `createHandDrawnDiagramSvg` with structured specs, and validate the resulting PPTX through exported PNGs. The current hand-drawn path is for diagrams such as layered architecture, evolution trees, and closed loops; use normal text boxes for simple parallel lists.
+For self-drawn relationship diagrams, lazily import `scripts/hw_diagram_helpers.js` only in deck scripts that need it. Use `createHandDrawnDiagramImage`, `writeHandDrawnDiagramImage`, or `createHandDrawnDiagramSvg` with structured specs and an explicit canvas ratio, then embed the SVG inside a standard content-page helper rather than creating a full diagram slide directly. Validate the SVG with `npm run test:diagram` / `npm run diagram-smoke`, and validate the final deck composition through exported PNGs. The current hand-drawn path is for diagrams such as layered architecture, evolution trees, and closed loops; use normal text boxes for simple parallel lists.
 
 ## pptxgenjs Guardrails
 

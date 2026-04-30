@@ -1,202 +1,320 @@
 {
   "cases": [
     {
-      "id": "layered_architecture",
-      "title": "Hand-Drawn Layered AI Agent Architecture",
-      "intent": "Hierarchy",
-      "template": "layered_architecture",
-      "claim": "Agent 系统的稳定性来自网关、工具编排、记忆检索、模型服务和观测链路的分层协同。",
-      "scenario": "Create one Huawei-style slide showing a hand-drawn layered AI agent architecture. The user enters from the top, calls three client surfaces, flows through an agent gateway, branches into tool orchestration and memory/retrieval, then reaches model/runtime services and observability on the side.",
-      "visual_spec": {
-        "layers": [
-          { "id": "entry", "label": "用户", "items": ["用户"] },
-          { "id": "clients", "label": "入口层", "items": ["Web", "App", "API"] },
-          { "id": "gateway", "label": "接入层", "items": ["Agent Gateway"] },
-          { "id": "orchestration", "label": "编排层", "items": ["工具编排", "记忆检索"] },
-          { "id": "runtime", "label": "运行层", "items": ["模型服务", "任务队列"] }
-        ],
-        "side_modules": ["服务发现", "链路追踪", "权限审计"],
-        "edges": [
-          ["用户", "Web"],
-          ["用户", "App"],
-          ["用户", "API"],
-          ["Web", "Agent Gateway"],
-          ["App", "Agent Gateway"],
-          ["API", "Agent Gateway"],
-          ["Agent Gateway", "工具编排"],
-          ["Agent Gateway", "记忆检索"],
-          ["工具编排", "模型服务"],
-          ["记忆检索", "模型服务"],
-          ["模型服务", "任务队列"]
-        ]
-      },
-      "human_review_focus": [
-        "Does it feel like a real hand-drawn architecture sketch?",
-        "Are layer relationships clear without becoming rigid business boxes?",
-        "Are arrows and side modules readable?",
-        "Does the diagram add visual soul beyond cards/text?"
-      ]
-    },
-    {
-      "id": "benchmark_grouped_bars",
-      "title": "Benchmark Improvement Bars",
+      "id": "quantity_grouped_bar_chart",
+      "title": "Grouped Bar Chart",
       "intent": "Quantity",
       "template": "grouped_bar_chart",
-      "claim": "DGM agent 在不同基座模型上都显著高于 Base agent，收益不是单模型偶然现象。",
-      "scenario": "Create one hand-drawn grouped bar chart comparing Base agent and DGM agent across three model backbones.",
+      "claim": "多系列柱状图用于比较不同阶段的关键指标。",
       "visual_spec": {
-        "y_label": "SWE-bench (%)",
-        "categories": ["o3-mini", "Claude 3.5", "Claude 3.7"],
+        "y_label": "Score",
+        "categories": ["Q1", "Q2", "Q3", "Q4"],
         "series": [
-          { "name": "Base agent", "values": [23.0, 20.0, 19.0], "color": "gray" },
-          { "name": "DGM agent", "values": [33.0, 50.0, 59.5], "color": "red" }
+          { "name": "Base", "values": [12, 18, 20, 22] },
+          { "name": "Agent", "values": [18, 24, 31, 35] }
         ],
-        "highlight": { "category": "Claude 3.7", "series": "DGM agent" },
-        "annotation": "跨模型迁移仍保留收益，说明改进落在工作流层。"
-      },
-      "human_review_focus": [
-        "Are the grouped bars immediately readable?",
-        "Is the DGM improvement visually obvious?",
-        "Are values and category labels legible?",
-        "Does it feel more alive than a plain business chart?"
-      ]
+        "highlight": { "category": "Q4", "series": "Agent" },
+        "annotation": "关键改善集中在最后阶段。"
+      }
     },
     {
-      "id": "archive_evolution_tree",
-      "title": "Archive Evolution Tree",
-      "intent": "Hierarchy",
-      "template": "tree",
-      "claim": "Archive 通过保留分支，让暂时低分节点也可能成为未来高分节点的踏脚石。",
-      "scenario": "Create one slide explaining why Archive is not cache but a search strategy. Show an agent evolution tree where low-scoring branches remain selectable and one branch eventually reaches 50%.",
+      "id": "quantity_line_chart",
+      "title": "Line Chart",
+      "intent": "Quantity",
+      "template": "line_chart",
+      "claim": "折线图用于表达连续阶段中的趋势变化。",
       "visual_spec": {
-        "nodes": ["0", "6", "12", "24", "31", "44", "56", "79"],
-        "edges": [["0", "6"], ["0", "12"], ["6", "24"], ["12", "31"], ["24", "44"], ["31", "56"], ["44", "79"]],
-        "labels": {
-          "0": "20%",
-          "6": "26%",
-          "12": "23%",
-          "24": "31%",
-          "31": "28%",
-          "44": "38%",
-          "56": "34%",
-          "79": "50%"
-        },
-        "highlight": "79",
-        "annotation": "所有节点保留非零选择概率，旧分支不会被过早丢弃。"
-      },
-      "human_review_focus": [
-        "Is the branching lineage immediately understandable?",
-        "Is the final high-score node visually emphasized?",
-        "Does the visual avoid looking like a generic card list?",
-        "Are scores readable and spatially attached to nodes?"
-      ]
+        "y_label": "Rate",
+        "categories": ["Q1", "Q2", "Q3", "Q4"],
+        "series": [
+          { "name": "转化率", "values": [10, 16, 21, 30] },
+          { "name": "留存率", "values": [44, 46, 53, 61] }
+        ],
+        "highlight": { "category": "Q4", "series": "留存率" }
+      }
     },
     {
-      "id": "self_improvement_loop",
-      "title": "Self-Improvement Loop",
+      "id": "quantity_donut_proportion_chart",
+      "title": "Donut Proportion Chart",
+      "intent": "Quantity",
+      "template": "donut_proportion_chart",
+      "claim": "环形比例图用于强调整体中的份额结构。",
+      "visual_spec": {
+        "total_label": "流量占比",
+        "segments": [
+          { "label": "搜索", "value": 52 },
+          { "label": "推荐", "value": 33 },
+          { "label": "直达", "value": 15 }
+        ],
+        "highlight": "推荐"
+      }
+    },
+    {
+      "id": "quantity_heatmap",
+      "title": "Quantity Heatmap",
+      "intent": "Quantity",
+      "template": "heatmap",
+      "claim": "热力图用于比较二维数值强弱。",
+      "visual_spec": {
+        "rows": ["安全", "效率", "成本"],
+        "columns": ["方案A", "方案B", "方案C"],
+        "values": [[0.2, 0.7, 0.4], [0.8, 0.5, 0.3], [0.3, 0.6, 0.9]],
+        "highlight": { "row": "成本", "column": "方案C" }
+      }
+    },
+    {
+      "id": "sequence_horizontal_process",
+      "title": "Horizontal Process",
+      "intent": "Sequence",
+      "template": "horizontal_process",
+      "claim": "横向流程图用于表达从左到右的交付顺序。",
+      "visual_spec": {
+        "steps": [
+          { "id": "s1", "label": "发现", "note": "定位问题" },
+          { "id": "s2", "label": "设计", "note": "形成方案" },
+          { "id": "s3", "label": "验证", "note": "检查收益" },
+          { "id": "s4", "label": "交付", "note": "沉淀证据" }
+        ],
+        "highlight": "s3"
+      }
+    },
+    {
+      "id": "sequence_vertical_process",
+      "title": "Vertical Process",
+      "intent": "Sequence",
+      "template": "vertical_process",
+      "claim": "纵向流程图用于表达阶段门和审批链路。",
+      "visual_spec": {
+        "steps": [
+          { "id": "s1", "label": "发现", "note": "定位问题" },
+          { "id": "s2", "label": "设计", "note": "形成方案" },
+          { "id": "s3", "label": "验证", "note": "检查收益" },
+          { "id": "s4", "label": "交付", "note": "沉淀证据" }
+        ],
+        "highlight": "s2"
+      }
+    },
+    {
+      "id": "sequence_timeline",
+      "title": "Timeline",
+      "intent": "Sequence",
+      "template": "timeline",
+      "claim": "时间线用于强调阶段与时间点的对应关系。",
+      "visual_spec": {
+        "steps": [
+          { "id": "s1", "time": "T1", "label": "发现", "note": "定位问题" },
+          { "id": "s2", "time": "T2", "label": "设计", "note": "形成方案" },
+          { "id": "s3", "time": "T3", "label": "验证", "note": "检查收益" },
+          { "id": "s4", "time": "T4", "label": "交付", "note": "沉淀证据" }
+        ],
+        "highlight": "s4"
+      }
+    },
+    {
+      "id": "sequence_swimlane",
+      "title": "Swimlane",
+      "intent": "Sequence",
+      "template": "swimlane",
+      "claim": "泳道图用于表达多个角色共同参与的流程。",
+      "visual_spec": {
+        "lanes": [
+          { "id": "biz", "label": "业务", "steps": [{ "id": "b1", "label": "提出目标" }, { "id": "b2", "label": "确认价值" }] },
+          { "id": "agent", "label": "Agent", "steps": [{ "id": "a1", "label": "生成方案" }, { "id": "a2", "label": "执行验证" }] },
+          { "id": "review", "label": "评审", "steps": [{ "id": "r1", "label": "检查风险" }, { "id": "r2", "label": "批准发布" }] }
+        ],
+        "highlight": "a2"
+      }
+    },
+    {
+      "id": "loop_closed_loop",
+      "title": "Closed Loop",
       "intent": "Loop",
       "template": "closed_loop",
-      "claim": "自我改进不是单次 prompt 优化，而是可评测、可归档、可继续选择的闭环。",
-      "scenario": "Create one slide explaining an agent self-improvement loop: inspect failures, propose improvement, edit its own workflow/tools, evaluate on benchmark, archive successful variants, then select the next parent.",
+      "claim": "闭环图用于表达反馈、学习和再选择。",
       "visual_spec": {
+        "center": "闭环系统",
         "steps": [
-          { "id": "inspect", "label": "分析失败", "note": "读取日志与错误模式" },
-          { "id": "propose", "label": "提出改进", "note": "生成工具或流程改动" },
-          { "id": "edit", "label": "修改自身", "note": "改 workflow / tools / prompt" },
-          { "id": "eval", "label": "基准评测", "note": "验证收益与回归" },
-          { "id": "archive", "label": "归档选择", "note": "保留可继续演化版本" }
+          { "id": "observe", "label": "观察", "note": "收集信号" },
+          { "id": "decide", "label": "判断", "note": "选择策略" },
+          { "id": "act", "label": "执行", "note": "触发动作" },
+          { "id": "learn", "label": "学习", "note": "更新经验" }
         ],
-        "center": "Self-improving Agent",
-        "highlight": "archive"
-      },
-      "human_review_focus": [
-        "Does the loop read as a cycle rather than a linear list?",
-        "Is the center concept clear?",
-        "Are step labels short and legible?",
-        "Does the style remain professional enough for a technical deck?"
-      ]
+        "highlight": "learn"
+      }
     },
     {
-      "id": "agent_workflow_sequence",
-      "title": "Agent Workflow Sequence",
-      "intent": "Sequence",
-      "template": "horizontal_sequence",
-      "claim": "稳定的 Agent 交付链路来自可观察、可评审、可回滚的阶段化流程。",
-      "scenario": "Create one hand-drawn sequence diagram showing how an agent task moves from user request to planning, tool execution, review, delivery, and archive.",
+      "id": "loop_dual_loop",
+      "title": "Dual Loop",
+      "intent": "Loop",
+      "template": "dual_loop",
+      "claim": "双环图用于表达快反馈和慢学习之间的互相校准。",
       "visual_spec": {
-        "steps": [
-          { "id": "request", "label": "需求输入", "note": "澄清目标与约束" },
-          { "id": "plan", "label": "任务规划", "note": "拆分步骤与证据" },
-          { "id": "execute", "label": "工具执行", "note": "生成代码或文档" },
-          { "id": "review", "label": "规则校验", "note": "导出与视觉检查" },
-          { "id": "deliver", "label": "交付归档", "note": "保留产物与结论" }
+        "loops": [
+          { "id": "inner", "label": "快速反馈", "steps": [{ "id": "o", "label": "观察" }, { "id": "d", "label": "判断" }, { "id": "a", "label": "执行" }] },
+          { "id": "outer", "label": "长期学习", "steps": [{ "id": "d2", "label": "判断" }, { "id": "a2", "label": "执行" }, { "id": "l2", "label": "学习" }] }
         ],
-        "highlight": "review"
-      },
-      "human_review_focus": [
-        "Does it clearly read left-to-right as a process?",
-        "Is the highlighted quality gate visible?",
-        "Are notes readable without becoming cards?",
-        "Does the sequence feel hand-drawn rather than a rigid SmartArt clone?"
-      ]
+        "highlight": "outer"
+      }
     },
     {
-      "id": "visual_anchor_choice_matrix",
-      "title": "Visual Anchor Choice Matrix",
+      "id": "loop_spiral_iteration_ladder",
+      "title": "Spiral Iteration Ladder",
+      "intent": "Loop",
+      "template": "spiral_iteration_ladder",
+      "claim": "螺旋迭代梯用于表达能力逐步爬升。",
+      "visual_spec": {
+        "center": "能力演进",
+        "steps": [
+          { "id": "observe", "label": "观察", "note": "收集信号" },
+          { "id": "decide", "label": "判断", "note": "选择策略" },
+          { "id": "act", "label": "执行", "note": "触发动作" },
+          { "id": "learn", "label": "学习", "note": "更新经验" },
+          { "id": "scale", "label": "扩展", "note": "放大收益" }
+        ],
+        "highlight": "scale"
+      }
+    },
+    {
+      "id": "hierarchy_tree",
+      "title": "Tree",
+      "intent": "Hierarchy",
+      "template": "tree",
+      "claim": "树图用于表达父子分支关系。",
+      "visual_spec": {
+        "nodes": ["Root", "A", "B", "A1", "A2", "B1"],
+        "edges": [["Root", "A"], ["Root", "B"], ["A", "A1"], ["A", "A2"], ["B", "B1"]],
+        "labels": { "Root": "Root 能力", "A": "A 能力", "B": "B 能力", "A1": "A1 能力", "A2": "A2 能力", "B1": "B1 能力" },
+        "highlight": "A2"
+      }
+    },
+    {
+      "id": "hierarchy_layered_architecture",
+      "title": "Layered Architecture",
+      "intent": "Hierarchy",
+      "template": "layered_architecture",
+      "claim": "分层架构图用于表达层间协同。",
+      "visual_spec": {
+        "layers": [
+          { "id": "l1", "label": "入口层", "items": ["门户", "API"] },
+          { "id": "l2", "label": "服务层", "items": ["策略", "编排"] },
+          { "id": "l3", "label": "资源层", "items": ["模型", "数据"] }
+        ],
+        "side_modules": ["审计"],
+        "edges": [["门户", "策略"], ["API", "编排"], ["编排", "模型"], ["审计", "策略"]]
+      }
+    },
+    {
+      "id": "hierarchy_pyramid_capability_stack",
+      "title": "Pyramid Capability Stack",
+      "intent": "Hierarchy",
+      "template": "pyramid_capability_stack",
+      "claim": "金字塔能力栈用于表达层级成熟度。",
+      "visual_spec": {
+        "levels": [
+          { "label": "体验层", "note": "用户价值" },
+          { "label": "平台层", "note": "通用能力" },
+          { "label": "基础层", "note": "数据模型" }
+        ],
+        "highlight": "平台层"
+      }
+    },
+    {
+      "id": "matrix_quadrant_matrix",
+      "title": "Quadrant Matrix",
       "intent": "Matrix",
       "template": "quadrant_matrix",
-      "claim": "渲染路径选择取决于手绘表现力与工程可控性的平衡。",
-      "scenario": "Create one 2x2 matrix comparing visual anchor choices by evidence value and visual soul.",
+      "claim": "四象限矩阵用于表达两个维度下的位置。",
       "visual_spec": {
-        "x_axis": { "left": "弱证据", "right": "强证据", "label": "证据价值" },
-        "y_axis": { "bottom": "弱视觉", "top": "强视觉", "label": "视觉灵魂" },
-        "items": [
-          { "label": "原图", "x": 0.86, "y": 0.72, "note": "证据最强" },
-          { "label": "Rough SVG", "x": 0.62, "y": 0.82, "note": "自绘主路径" },
-          { "label": "文本卡片", "x": 0.32, "y": 0.28, "note": "只作辅助" }
-        ],
-        "highlight": "Rough SVG"
-      },
-      "human_review_focus": [
-        "Are the two axes immediately understandable?",
-        "Does each renderer sit in a plausible quadrant?",
-        "Is the highlighted recommendation clear?",
-        "Does it avoid becoming a normal text card comparison?"
-      ]
+        "x_axis": { "left": "低", "right": "高", "label": "价值" },
+        "y_axis": { "bottom": "低", "top": "高", "label": "可行性" },
+        "items": [{ "label": "方案A", "x": 0.2, "y": 0.7 }, { "label": "方案B", "x": 0.8, "y": 0.8 }],
+        "highlight": "方案B"
+      }
     },
     {
-      "id": "agent_tool_network",
-      "title": "Agent Tool Network",
+      "id": "matrix_capability_matrix",
+      "title": "Capability Matrix",
+      "intent": "Matrix",
+      "template": "capability_matrix",
+      "claim": "能力矩阵用于比较对象在多个维度上的状态。",
+      "visual_spec": {
+        "rows": ["产品", "工程"],
+        "columns": ["当前", "目标"],
+        "values": [["可用", "优秀"], ["手工", "自动"]],
+        "highlight": { "row": "工程", "column": "目标" }
+      }
+    },
+    {
+      "id": "network_hub_spoke_network",
+      "title": "Hub Spoke Network",
       "intent": "Network",
       "template": "hub_spoke_network",
-      "claim": "Agent 能力不是单点工具，而是模型、记忆、代码、浏览器和评审环节的协同网络。",
-      "scenario": "Create one small network diagram with Agent as the hub and five connected capability modules.",
+      "claim": "中心辐射网络用于表达中心节点与外围能力的协同。",
       "visual_spec": {
         "hub": { "id": "agent", "label": "Agent" },
         "nodes": [
-          { "id": "model", "label": "模型推理", "note": "生成与判断" },
-          { "id": "memory", "label": "记忆检索", "note": "上下文复用" },
-          { "id": "code", "label": "代码执行", "note": "验证假设" },
-          { "id": "browser", "label": "浏览器检查", "note": "视觉验收" },
-          { "id": "review", "label": "外部评审", "note": "发现盲点" }
+          { "id": "model", "label": "模型", "note": "推理" },
+          { "id": "memory", "label": "记忆", "note": "检索" },
+          { "id": "tool", "label": "工具", "note": "执行" },
+          { "id": "eval", "label": "评测", "note": "反馈" }
         ],
-        "edges": [
-          ["agent", "model"],
-          ["agent", "memory"],
-          ["agent", "code"],
-          ["agent", "browser"],
-          ["agent", "review"],
-          ["memory", "review"],
-          ["code", "browser"]
+        "edges": [["agent", "model"], ["agent", "memory"], ["agent", "tool"], ["agent", "eval"], ["memory", "eval"]],
+        "highlight": "eval"
+      }
+    },
+    {
+      "id": "network_dependency_graph",
+      "title": "Dependency Graph",
+      "intent": "Network",
+      "template": "dependency_graph",
+      "claim": "依赖图用于表达模块之间的先后依赖。",
+      "visual_spec": {
+        "nodes": [
+          { "id": "agent", "label": "Agent", "note": "调度" },
+          { "id": "model", "label": "模型", "note": "推理" },
+          { "id": "memory", "label": "记忆", "note": "检索" },
+          { "id": "tool", "label": "工具", "note": "执行" },
+          { "id": "eval", "label": "评测", "note": "反馈" }
         ],
-        "highlight": "review"
-      },
-      "human_review_focus": [
-        "Does the network show collaboration instead of hierarchy?",
-        "Are cross-links readable and not too messy?",
-        "Is the hub visually dominant?",
-        "Does the highlighted review node stand out?"
-      ]
+        "edges": [["agent", "model"], ["agent", "memory"], ["tool", "eval"], ["memory", "tool"]],
+        "highlight": "tool"
+      }
+    },
+    {
+      "id": "network_module_interaction_map",
+      "title": "Module Interaction Map",
+      "intent": "Network",
+      "template": "module_interaction_map",
+      "claim": "模块交互图用于表达服务之间的调用和反馈。",
+      "visual_spec": {
+        "nodes": [
+          { "id": "agent", "label": "Agent", "note": "调度" },
+          { "id": "model", "label": "模型", "note": "推理" },
+          { "id": "memory", "label": "记忆", "note": "检索" },
+          { "id": "tool", "label": "工具", "note": "执行" },
+          { "id": "eval", "label": "评测", "note": "反馈" }
+        ],
+        "edges": [["agent", "model"], ["model", "memory"], ["memory", "tool"], ["tool", "eval"], ["eval", "agent"]],
+        "highlight": "eval"
+      }
+    },
+    {
+      "id": "network_causal_influence_graph",
+      "title": "Causal Influence Graph",
+      "intent": "Network",
+      "template": "causal_influence_graph",
+      "claim": "因果影响图用于表达一个变量如何影响另一个变量。",
+      "visual_spec": {
+        "nodes": [
+          { "id": "agent", "label": "Agent", "note": "调度" },
+          { "id": "model", "label": "模型", "note": "推理" },
+          { "id": "memory", "label": "记忆", "note": "检索" },
+          { "id": "tool", "label": "工具", "note": "执行" },
+          { "id": "eval", "label": "评测", "note": "反馈" }
+        ],
+        "edges": [["model", "agent"], ["memory", "agent"], ["agent", "tool"], ["tool", "eval"]],
+        "highlight": "agent"
+      }
     }
   ]
 }

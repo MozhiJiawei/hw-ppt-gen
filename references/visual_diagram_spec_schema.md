@@ -2,7 +2,7 @@
 
 Use this reference after `references/visual_diagram_rules.md` has selected `visual_strategy: "self_draw"` and renderer `rough_svg`.
 
-The renderer is deterministic. It does not infer missing relationships from prose, so the diagram spec must contain explicit nodes, edges, labels, highlights, and annotations.
+The renderer is deterministic and exports an SVG image anchor, not a PPT slide. It does not infer missing relationships from prose, so the diagram spec must contain explicit nodes, edges, labels, highlights, and annotations.
 
 ## Common Fields
 
@@ -21,11 +21,29 @@ The renderer is deterministic. It does not infer missing relationships from pros
 Required common fields:
 
 - `id`: stable id used for filenames.
-- `title`: short title rendered inside the diagram canvas.
+- `title`: short metadata title for filenames/review context; it is not rendered inside the diagram image by default.
 - `intent`: one of `Quantity`, `Sequence`, `Loop`, `Hierarchy`, `Matrix`, `Network`.
 - `template`: one supported Rough SVG template.
-- `claim`: one concise Chinese sentence under the title.
+- `claim`: one concise Chinese sentence for PPT/page-level context; it is not rendered inside the diagram image by default.
 - `visual_spec`: template-specific structure.
+
+Supported Rough SVG base templates. Each listed template should have a clear visual difference:
+
+- Quantity: `grouped_bar_chart`, `line_chart`, `donut_proportion_chart`, `heatmap`.
+- Sequence: `horizontal_process`, `vertical_process`, `timeline`, `swimlane`.
+- Loop: `closed_loop`, `dual_loop`, `spiral_iteration_ladder`.
+- Hierarchy: `tree`, `layered_architecture`, `pyramid_capability_stack`.
+- Matrix: `quadrant_matrix`, `capability_matrix`.
+- Network: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`.
+
+Semantic variants that do not change the visual form should not be added as base templates. Copy and customize the closest renderer in the deck script when a slide needs a one-off variant.
+
+Canvas options are passed to the helper, not embedded in `visual_spec`:
+
+```js
+createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1600 })
+writeHandDrawnDiagramImage(spec, ".tmp/diagram_component_smoke", { aspectRatio: "4:3", width: 1200 })
+```
 
 Keep generated visible text mostly Chinese. Technical acronyms such as `Agent Gateway`, `API`, `Archive`, `workflow`, and model names may stay in English when they are clearer.
 
@@ -54,7 +72,7 @@ Use for layered systems, architecture stacks, side modules, and cross-layer flow
 }
 ```
 
-Current implementation expects the canonical item names used in the smoke cases. When adding new architecture variants, extend the layout helper rather than forcing long labels into the existing coordinates.
+The implementation is data-driven: all layer items and edges must come from `visual_spec`. Unknown edge endpoints are rejected by validation instead of being silently dropped.
 
 ## Template: grouped_bar_chart
 
@@ -82,10 +100,10 @@ Use for small benchmark comparisons, before/after comparisons, and category comp
 
 Rules:
 
-- Use 1 to 6 categories and 1 to 3 series.
+- Use as many categories and series as the claim requires, while keeping labels short enough to remain readable.
 - All series must have the same number of values as categories.
 - Use `highlight` for the most important bar, not for every improved value.
-- For dense or exact business charts, prefer native PPT charts or source charts; use this template when a small numeric comparison also needs hand-drawn visual character.
+- For dense or exact business charts, prefer source charts or deck-level native charts; use this template when a numeric comparison also needs hand-drawn visual character.
 
 ## Template: tree
 
@@ -112,7 +130,7 @@ Rules:
 
 - Every node must have a label.
 - `highlight` must be one of the nodes.
-- Edges should form a readable shallow tree. Avoid more than 8 nodes until the layout engine is expanded.
+- Edges should form a readable shallow tree. Larger trees are supported, but the slide author should decide whether a dense tree should be split or simplified.
 - Use short labels. Put explanation in `annotation`, not inside nodes.
 
 ## Template: closed_loop
@@ -142,7 +160,7 @@ Use for feedback cycles, self-improvement loops, operating flywheels, and iterat
 
 Rules:
 
-- Use 3 to 5 steps; 5 is the current sweet spot.
+- Use 3 or more steps; 5 is the visual sweet spot, but extra steps are rendered rather than truncated.
 - Step labels should be 2 to 6 Chinese characters when possible.
 - Step notes should be short. Long prose belongs in nearby interpretation text, not inside the loop.
 - `highlight` should be a step id, usually the step that closes the mechanism.
@@ -173,7 +191,7 @@ Use for ordered workflows, pipelines, delivery phases, and quality gates.
 
 Rules:
 
-- Use 2 to 6 steps.
+- Use 2 or more steps. Long sequences are rendered with narrower cards rather than silently truncating steps.
 - Keep each `label` short; put one compact detail in `note`.
 - Use `highlight` for the quality gate, decision point, or bottleneck.
 
@@ -204,7 +222,7 @@ Use for two-axis positioning, strategy choices, risk/priority maps, and trade-of
 Rules:
 
 - `x` and `y` are normalized numbers from `0` to `1`.
-- Use 2 to 8 items.
+- Use 2 or more items. Dense matrices are supported, but short labels are mandatory for readability.
 - Keep quadrant labels short. The matrix should communicate position, not prose.
 
 ## Template: hub_spoke_network
@@ -232,7 +250,7 @@ Use only when the relationship is genuinely many-to-many or collaborative. Prefe
 
 Rules:
 
-- Use 2 to 7 outer nodes.
+- Use 2 or more outer nodes. Dense networks are supported, but cross-links should stay sparse.
 - Keep cross-links sparse. More than two non-hub links usually becomes messy.
 - The hub should remain the dominant visual anchor.
 
@@ -241,13 +259,8 @@ Rules:
 Run:
 
 ```powershell
+node scripts\test_diagram_helpers.js
 node scripts\verify_diagram_components.js
 ```
 
-Then export and inspect:
-
-```powershell
-node scripts\export_pptx_images.js .tmp\diagram_component_smoke\diagram_component_smoke.pptx --out .tmp\diagram_component_smoke\exported_png --renderer auto
-```
-
-The smoke script validates required fields before rendering and writes generated SVGs, a PPTX deck, and a manifest under `.tmp/diagram_component_smoke`.
+The smoke script validates required fields before rendering and writes generated SVG image anchors plus a manifest under `.tmp/diagram_component_smoke`. Full PPT export happens only after a deck generator embeds the image into a standard content slide.

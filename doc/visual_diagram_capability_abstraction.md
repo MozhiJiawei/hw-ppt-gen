@@ -138,14 +138,16 @@ Example:
 
 The skill should expose six intent-level capabilities to the AI, not a long menu of surface chart names. Scripts can still implement multiple templates under each intent, but the planning interface should stay small.
 
-Recommended first implementation batch:
+Implemented Rough.js base template coverage. Each base template should provide a clear visual difference, not just a semantic alias:
 
-- Quantity: grouped bar chart, line chart, donut chart
-- Sequence: horizontal process, timeline
-- Loop: closed loop
-- Hierarchy: tree diagram, layered stack
-- Matrix: 2x2 quadrant, heatmap matrix
-- Network: hub-and-spoke, small dependency graph
+- Quantity: grouped bar chart, line chart, donut/proportion chart, heatmap.
+- Sequence: horizontal process, vertical process, timeline, swimlane.
+- Loop: closed loop, dual loop, spiral/iteration ladder.
+- Hierarchy: tree diagram, layered architecture, pyramid/capability stack.
+- Matrix: quadrant matrix, capability matrix.
+- Network: hub-and-spoke, dependency graph, module interaction map, causal influence graph.
+
+Semantic variants such as decision tree, center-goal cycle, risk matrix, and heatmap matrix are not kept as base templates until they have distinct visual treatment. For one-off deck needs, copy the closest base renderer in the deck-specific generation script and customize it there.
 
 ## What Counts As Real Diagram Capability
 
@@ -369,14 +371,7 @@ Example:
 
 ## Required Test Coverage
 
-Maintain at least one prompt-guided test case for each visual intent:
-
-- Quantity: grouped bar chart or line chart from source numbers.
-- Sequence: process or timeline.
-- Loop: feedback/self-improvement cycle.
-- Hierarchy: tree or layered stack.
-- Matrix: 2x2 quadrant or heatmap matrix.
-- Network: hub-and-spoke or small dependency graph.
+Maintain at least one prompt-guided test case for each supported visual base template. The default `references/visual_diagram_test_cases.json` smoke set should cover every base template, not just one representative template per intent.
 
 Also keep at least one source-visual treatment test:
 
@@ -388,12 +383,11 @@ Also keep at least one source-visual treatment test:
 Diagram components should be improved through a small visual review loop:
 
 1. Run a prompt-guided test case.
-2. Generate a sample PPTX under `.tmp/`.
-3. Export slide PNGs with `scripts/export_pptx_images.js`.
-4. Review exported PNGs at original size.
-5. Record findings in `.tmp/<test_id>_diagram_review.json` or `.tmp/<test_id>_diagram_review.md`.
-6. Patch the diagram helper or reference guidance.
-7. Re-run the same test case.
+2. Generate SVG image anchors under `.tmp/diagram_component_smoke/`.
+3. Review the SVG at its requested canvas ratio, or embed it into a standard content slide and export the full deck when checking PPT composition.
+4. Record findings in `.tmp/<test_id>_diagram_review.json` or `.tmp/<test_id>_diagram_review.md`.
+5. Patch the diagram helper or reference guidance.
+6. Re-run the same test case.
 
 Limit each test to two regeneration iterations unless the issue is a hard rendering failure.
 
@@ -406,8 +400,8 @@ A diagram test passes only if:
 - The diagram is the primary visual anchor, not a text-card layout disguised as a diagram.
 - Labels fit and remain readable.
 - Edges, axes, loops, or spatial positioning communicate the intended relationship.
-- Huawei style constraints are preserved.
-- The slide still passes hard QA and render export.
+- The output is an image anchor that can be embedded into a normal Huawei content page.
+- If embedded into a deck, the slide still passes hard QA and render export.
 
 Record non-blocking visual concerns separately from hard failures.
 
@@ -418,7 +412,7 @@ When implementing this subsystem, prefer this structure:
 - `references/visual_diagram_rules.md`: progressive-loaded diagram guidance.
 - `references/visual_diagram_test_cases.json`: prompt-guided test cases.
 - `scripts/hw_diagram_helpers.js`: diagram rendering primitives and intent/template dispatch.
-- `scripts/generate_diagram_test_deck.js`: runs selected test cases into a sample PPTX.
+- `scripts/verify_diagram_components.js`: validates selected test cases and writes SVG image anchors plus a manifest.
 
 The main `scripts/hw_pptx_helpers.js` may import `hw_diagram_helpers.js`, but diagram-specific code should live separately so it can evolve without making the core helper file too large.
 
@@ -430,132 +424,56 @@ Main SKILL.md should instruct the AI:
 - For diagram-heavy decks, run at least one relevant diagram test case before relying on a new or modified diagram helper.
 - For ordinary decks that only use source visuals and standard tables/cards, do not load or use the diagram subsystem.
 
-## Three Implementation Paths For Diagram Rendering
+## Rough.js Image Contract
 
-The diagram subsystem should explore three implementation paths in parallel. They share the same upstream `visual_anchor` / `visual_spec` contract, but differ in rendering strategy.
-
-### Path A: Excalidraw Scene Renderer
-
-Goal: achieve the strongest hand-drawn architecture / whiteboard visual style, closest to the provided reference image.
-
-Pipeline:
+The selected implementation is Rough.js custom SVG. The diagram subsystem exports an image, not a PPT page:
 
 ```text
-visual_spec -> Excalidraw scene JSON -> exportToSvg/exportToBlob -> insert SVG/PNG into PPT
+visual_anchor -> visual_spec -> deterministic layout -> Rough.js SVG image -> standard PPT content module embeds image
 ```
 
-Best for:
+Deck-specific code is responsible for placing the SVG inside a normal Huawei content page, with analysis summary, section indicator, footer, source note, and other page-level rules. The diagram helper must not create or deliver a full PPT slide.
 
-- Hand-drawn architecture diagrams
-- Process diagrams
-- Loop diagrams
-- Dependency diagrams
-- Conceptual whiteboard visuals
+The helper accepts a canvas ratio because the downstream PPT layout tool owns final placement:
 
-Strengths:
-
-- Best match for the desired sketch-note / Keynote hand-drawn look.
-- Existing hand-drawn visual language, including rough outlines, fills, arrows, and whiteboard aesthetics.
-- Scene JSON can be saved as an intermediate artifact for debugging and future editing.
-
-Risks:
-
-- Heavier dependency and more integration work.
-- Output is image/SVG, not native editable PPT shapes.
-- Need to verify Node/headless export reliability in the local skill environment.
-
-Use when:
-
-- The slide has no strong source visual and needs a high-soul conceptual diagram.
-- The diagram is mostly qualitative and explanatory rather than numeric.
-
-### Path B: Rough.js Custom SVG Renderer
-
-Goal: provide a lighter, controlled sketch renderer without building hand-drawn stroke algorithms from scratch.
-
-Pipeline:
-
-```text
-visual_spec -> deterministic layout -> rough.js SVG primitives -> insert SVG/PNG into PPT
+```js
+createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1600 })
+writeHandDrawnDiagramImage(spec, ".tmp/diagram_component_smoke", { aspectRatio: "4:3", width: 1200 })
 ```
 
-Best for:
-
-- Tree diagrams
-- Simple process diagrams
-- Loop diagrams
-- Matrix/quadrant diagrams
-- Hub-and-spoke diagrams
-
-Strengths:
-
-- Small dependency and simpler runtime than Excalidraw/tldraw.
-- More deterministic and easier to constrain to Huawei slide regions.
-- Good for reusable diagram templates.
-
-Risks:
-
-- Requires writing our own renderer layer around rough.js primitives.
-- Less polished out of the box than Excalidraw.
-- Text, alignment, and label fitting still need custom handling.
-
-Use when:
-
-- We want hand-drawn flavor but need stronger control over layout and style.
-- We want a renderer that can evolve into stable skill infrastructure.
-
-### Path C: PPT Native Shape Renderer
-
-Goal: provide the stable, editable, QA-friendly baseline using pptxgenjs shapes and text.
-
-Pipeline:
-
-```text
-visual_spec -> deterministic layout -> pptxgenjs shapes/text/lines -> editable PPT objects
-```
-
-Best for:
-
-- Business-style process diagrams
-- Simple bar/line charts
-- Matrix diagrams
-- Evidence modules
-- Table-adjacent explanatory diagrams
-
-Strengths:
-
-- Editable in PowerPoint.
-- Works with the existing hard QA script.
-- Best integration with Huawei style constraints.
-- Lowest rendering compatibility risk.
-
-Risks:
-
-- Least hand-drawn.
-- Can look stiff or template-like if not designed carefully.
-- Harder to mimic the provided sketch-note style.
-
-Use when:
-
-- Editability, compliance, and QA matter more than hand-drawn feel.
-- The diagram must live as first-class PPT content.
-
-## Shared Contract Across Paths
-
-All paths should consume the same high-level input:
+The high-level input contract is:
 
 ```json
 {
   "visual_strategy": "self_draw",
   "intent": "Hierarchy",
   "template": "tree",
-  "renderer": "excalidraw | rough_svg | ppt_native",
+  "renderer": "rough_svg",
   "claim": "...",
   "visual_spec": {}
 }
 ```
 
-This lets the same test case compare renderer outputs side by side.
+For every deck content slide, the `visual_anchor` must also record the source-visual decision before a generated diagram is used:
+
+```json
+{
+  "slide": 4,
+  "claim": "Archive preserves useful weak branches.",
+  "source_visual_search": {
+    "performed": true,
+    "candidates": [],
+    "decision": "no_relevant_source_visual"
+  },
+  "visual_strategy": "self_draw",
+  "renderer": "rough_svg",
+  "intent": "Hierarchy",
+  "template": "tree",
+  "visual_spec": {}
+}
+```
+
+This makes "source visual first" a checkable contract instead of a prose preference.
 
 ## First Three Representative Test Cases
 
@@ -566,12 +484,6 @@ Choose three cases that stress different information relationships and visual st
 Purpose: validate the desired Keynote/whiteboard sketch-note style from the user's reference image.
 
 Expected intent: `Hierarchy` plus architecture/data-flow elements.
-
-Preferred renderers to compare:
-
-- Path A: Excalidraw scene renderer
-- Path B: Rough.js custom SVG renderer
-- Path C: PPT native shape renderer as baseline
 
 Scenario:
 
@@ -617,12 +529,6 @@ Purpose: validate branching hierarchy and highlight path, inspired by the DGM ex
 
 Expected intent: `Hierarchy`.
 
-Preferred renderers to compare:
-
-- Path B: Rough.js custom SVG renderer
-- Path C: PPT native shape renderer
-- Optional Path A: Excalidraw if scene generation is ready
-
 Scenario:
 
 ```text
@@ -657,12 +563,6 @@ Purpose: validate feedback/cycle diagrams that explain agent iteration mechanism
 
 Expected intent: `Loop`.
 
-Preferred renderers to compare:
-
-- Path A: Excalidraw scene renderer
-- Path B: Rough.js custom SVG renderer
-- Path C: PPT native shape renderer
-
 Scenario:
 
 ```text
@@ -695,18 +595,12 @@ Human review focus:
 - Are step labels short and legible?
 - Does the style remain professional enough for a technical deck?
 
-## Evaluation Plan For The Three Cases
+## Evaluation Plan For Representative Cases
 
-For each case and renderer path:
+For each case:
 
-1. Generate one sample PPTX under `.tmp/diagram_tests/`.
-2. Export slide PNGs using the existing `scripts/export_pptx_images.js`.
-3. Save renderer source artifacts:
-   - Excalidraw: `.excalidraw.json` plus exported SVG/PNG.
-   - Rough.js: SVG plus generated JS script.
-   - PPT native: generated PPTX script only.
-4. Human review the exported PNGs side by side.
+1. Run `npm run test:diagram` for the data contract and no-truncation checks.
+2. Run `npm run diagram-smoke` to generate SVG anchors under `.tmp/diagram_component_smoke/`.
+3. Review the SVG output at the requested aspect ratio.
+4. When validating full PPT composition, embed the SVG into a standard content page and export that deck with `scripts/export_pptx_images.js`.
 5. Record findings in `.tmp/diagram_tests/<case_id>_review.md`.
-6. Decide which path becomes baseline for each intent.
-
-Do not optimize all renderers equally. The first experiment should identify which path has the best visual promise per case.

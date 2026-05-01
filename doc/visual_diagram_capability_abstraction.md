@@ -371,7 +371,7 @@ Example:
 
 ## Required Test Coverage
 
-Maintain at least one prompt-guided test case for each supported visual base template. The default `references/visual_diagram_test_cases.json` smoke set should cover every base template, not just one representative template per intent.
+Maintain at least one prompt-guided test case for each supported visual base template. The maintained regression matrix in `references/visual_diagram_test_cases.js` should cover every base template with at least 10 variants, not just one representative template per intent. The matrix should vary element count and scene context inside the chosen template layout instead of stretching the same scene across multiple aspect ratios.
 
 Also keep at least one source-visual treatment test:
 
@@ -410,7 +410,7 @@ Record non-blocking visual concerns separately from hard failures.
 When implementing this subsystem, prefer this structure:
 
 - `references/visual_diagram_rules.md`: progressive-loaded diagram guidance.
-- `references/visual_diagram_test_cases.json`: prompt-guided test cases.
+- `references/visual_diagram_test_cases.js`: prompt-guided test case matrix with generated variants.
 - `scripts/hw_diagram_helpers.js`: diagram rendering primitives and intent/template dispatch.
 - `scripts/verify_diagram_components.js`: validates selected test cases and writes SVG image anchors plus a manifest.
 

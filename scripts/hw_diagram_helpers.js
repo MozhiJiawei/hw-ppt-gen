@@ -9,55 +9,95 @@ const DIAGRAM_STYLE = Object.freeze({
   pptH: 7.5,
   font: "'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif",
   color: {
-    red: "#C7000B",
-    ink: "#1f2328",
-    muted: "#59636e",
-    paper: "#fffdf7",
-    warm: "#fff0d6",
-    blue: "#e5f0ff",
-    green: "#e4f5e7",
-    pink: "#ffe8ec",
-    yellow: "#fff6bf",
-    gray: "#f4f1ea",
+    red: "#C00000",
+    red2: "#D53C44",
+    red3: "#E37882",
+    red4: "#F1B4B6",
+    redPale: "#FFF1EF",
+    ink: "#333333",
+    muted: "#595959",
+    paper: "#FFFFFF",
+    line: "#D9D9D9",
+    lineDark: "#8C8C8C",
+    gray: "#F2F2F2",
+    gray2: "#E6E6E6",
+    gray3: "#BFBFBF",
+    blue: "#115CAA",
+    blue2: "#487FBF",
+    blue3: "#7FAAD4",
+    bluePale: "#EAF5FE",
+    yellow: "#FCDC00",
+    yellow2: "#FFD464",
+    yellowPale: "#FFF3CB",
+    green: "#61B23A",
+    green2: "#85C45F",
+    greenPale: "#E7F5E0",
+    warm: "#FFF1EF",
+    pink: "#FCE4E0",
   },
 });
 
-function parseAspectRatio(value) {
-  if (!value) return DIAGRAM_STYLE.width / DIAGRAM_STYLE.height;
-  if (typeof value === "number" && Number.isFinite(value) && value > 0) return value;
-  if (typeof value === "string") {
-    const match = value.match(/^(\d+(?:\.\d+)?):(\d+(?:\.\d+)?)$/);
-    if (match) return Number(match[1]) / Number(match[2]);
-    const numeric = Number(value);
-    if (Number.isFinite(numeric) && numeric > 0) return numeric;
-  }
-  if (typeof value === "object" && value.width && value.height) return Number(value.width) / Number(value.height);
-  throw new Error(`Invalid diagram aspectRatio: ${value}`);
+const TEMPLATE_LAYOUTS = Object.freeze({
+  grouped_bar_chart: "16:9",
+  line_chart: "16:9",
+  donut_proportion_chart: "16:9",
+  donut_chart: "16:9",
+  proportion_chart: "16:9",
+  heatmap: "16:9",
+  layered_architecture: "16:9",
+  tree: "16:9",
+  pyramid_capability_stack: "16:9",
+  pyramid: "16:9",
+  capability_stack: "16:9",
+  closed_loop: "16:9",
+  dual_loop: "16:9",
+  spiral_iteration_ladder: "16:9",
+  horizontal_sequence: "16:9",
+  horizontal_process: "16:9",
+  vertical_process: "16:9",
+  timeline: "16:9",
+  swimlane: "16:9",
+  quadrant_matrix: "16:9",
+  capability_matrix: "16:9",
+  hub_spoke_network: "16:9",
+  dependency_graph: "16:9",
+  module_interaction_map: "16:9",
+  causal_influence_graph: "16:9",
+});
+
+function chooseTemplateLayout(spec) {
+  const template = spec?.template || spec?.intent;
+  return TEMPLATE_LAYOUTS[template] || "16:9";
 }
 
-function resolveCanvasOptions(options = {}) {
-  const ratio = parseAspectRatio(options.aspectRatio);
-  const width = Number(options.width || options.canvas?.width || DIAGRAM_STYLE.width);
-  const height = Number(options.height || options.canvas?.height || Math.round(width / ratio));
-  if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
-    throw new Error("Diagram canvas width and height must be positive numbers.");
+function normalizeExportOptions(spec, options = {}) {
+  if (options.aspectRatio && options.aspectRatio !== "16:9") {
+    throw new Error(`Unsupported diagram aspectRatio: ${options.aspectRatio}. Reusable diagram exports use fixed template layouts.`);
   }
-  return { width: Math.round(width), height: Math.round(height), ratio };
-}
-
-function scaledCanvas(options = {}) {
-  const canvas = resolveCanvasOptions(options);
+  const template = spec?.template || spec?.intent;
+  const width = options.width ?? options.canvas?.width ?? null;
+  const height = options.height ?? options.canvas?.height ?? null;
+  if (width != null && (!Number.isFinite(Number(width)) || Number(width) <= 0)) {
+    throw new Error("Diagram export width and height must be positive numbers.");
+  }
+  if (height != null && (!Number.isFinite(Number(height)) || Number(height) <= 0)) {
+    throw new Error("Diagram export width and height must be positive numbers.");
+  }
   return {
-    ...canvas,
-    sx: canvas.width / DIAGRAM_STYLE.width,
-    sy: canvas.height / DIAGRAM_STYLE.height,
-    x(value) {
-      return value * this.sx;
-    },
-    y(value) {
-      return value * this.sy;
-    },
+    template,
+    requestedWidth: width == null ? null : Math.round(Number(width)),
+    requestedHeight: height == null ? null : Math.round(Number(height)),
   };
+}
+
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function chunkIntoRows(items, maxPerRow) {
+  const rows = [];
+  for (let i = 0; i < items.length; i += maxPerRow) rows.push(items.slice(i, i + maxPerRow));
+  return rows;
 }
 
 function escapeXml(value) {
@@ -89,6 +129,45 @@ function svgText(x, y, text, opts = {}) {
   return `<text font-family="${family}" font-size="${size}" font-weight="${weight}" fill="${fill}" text-anchor="${anchor}">${tspans}</text>`;
 }
 
+function estimateTextWidth(text, size) {
+  const value = String(text ?? "");
+  let units = 0;
+  for (const char of value) {
+    if (char === " ") units += 0.35;
+    else if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(char)) units += 1;
+    else if (/[A-Z0-9#%@&]/.test(char)) units += 0.72;
+    else if (/[a-z]/.test(char)) units += 0.58;
+    else units += 0.6;
+  }
+  return Math.max(size * 0.8, units * size * 0.62);
+}
+
+function getTextBounds(x, y, text, opts = {}) {
+  const size = opts.size || 28;
+  const anchor = opts.anchor || "middle";
+  const lines = Array.isArray(text) ? text : String(text ?? "").split("\n");
+  const lineHeight = opts.lineHeight || size * 1.25;
+  const maxWidth = Math.max(...lines.map((line) => estimateTextWidth(line, size)), size * 0.8);
+  const totalHeight = lineHeight * Math.max(1, lines.length);
+  const padX = Math.max(8, size * 0.22);
+  const padY = Math.max(8, size * 0.28);
+  let minX = x - maxWidth / 2;
+  let maxX = x + maxWidth / 2;
+  if (anchor === "start") {
+    minX = x;
+    maxX = x + maxWidth;
+  } else if (anchor === "end") {
+    minX = x - maxWidth;
+    maxX = x;
+  }
+  return {
+    minX: minX - padX,
+    maxX: maxX + padX,
+    minY: y - totalHeight / 2 - padY,
+    maxY: y + totalHeight / 2 + padY,
+  };
+}
+
 function wrapCjk(text, chars = 12) {
   const value = safeText(text);
   if (!value) return [""];
@@ -98,11 +177,206 @@ function wrapCjk(text, chars = 12) {
   return value.match(new RegExp(`.{1,${chars}}`, "g")) || [value];
 }
 
+function mergeBounds(target, bounds) {
+  if (!bounds || !Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) return;
+  target.minX = Math.min(target.minX, bounds.minX);
+  target.minY = Math.min(target.minY, bounds.minY);
+  target.maxX = Math.max(target.maxX, bounds.maxX);
+  target.maxY = Math.max(target.maxY, bounds.maxY);
+}
+
+function boundsFromRect(x, y, w, h, pad = 0) {
+  return { minX: x - pad, minY: y - pad, maxX: x + w + pad, maxY: y + h + pad };
+}
+
+function boundsFromEllipse(cx, cy, w, h, pad = 0) {
+  return { minX: cx - w / 2 - pad, minY: cy - h / 2 - pad, maxX: cx + w / 2 + pad, maxY: cy + h / 2 + pad };
+}
+
+function boundsFromPoints(points, pad = 0) {
+  const xs = points.map((point) => point[0]);
+  const ys = points.map((point) => point[1]);
+  return {
+    minX: Math.min(...xs) - pad,
+    minY: Math.min(...ys) - pad,
+    maxX: Math.max(...xs) + pad,
+    maxY: Math.max(...ys) + pad,
+  };
+}
+
+function tokenizePath(d) {
+  return String(d || "").match(/[A-Za-z]|-?\d*\.?\d+(?:e[-+]?\d+)?/g) || [];
+}
+
+function pathBoundsFromD(d, pad = 0) {
+  const tokens = tokenizePath(d);
+  if (!tokens.length) return null;
+  let i = 0;
+  let cmd = "";
+  let x = 0;
+  let y = 0;
+  let startX = 0;
+  let startY = 0;
+  const points = [];
+  const nextNumber = () => Number(tokens[i++]);
+  const isCommand = (token) => /^[A-Za-z]$/.test(token);
+  while (i < tokens.length) {
+    if (isCommand(tokens[i])) cmd = tokens[i++];
+    if (!cmd) break;
+    const relative = cmd === cmd.toLowerCase();
+    switch (cmd.toUpperCase()) {
+      case "M":
+      case "L":
+      case "T": {
+        while (i < tokens.length && !isCommand(tokens[i])) {
+          const nx = nextNumber();
+          const ny = nextNumber();
+          x = relative ? x + nx : nx;
+          y = relative ? y + ny : ny;
+          if (cmd.toUpperCase() === "M") {
+            startX = x;
+            startY = y;
+            cmd = relative ? "l" : "L";
+          }
+          points.push([x, y]);
+        }
+        break;
+      }
+      case "H": {
+        while (i < tokens.length && !isCommand(tokens[i])) {
+          const nx = nextNumber();
+          x = relative ? x + nx : nx;
+          points.push([x, y]);
+        }
+        break;
+      }
+      case "V": {
+        while (i < tokens.length && !isCommand(tokens[i])) {
+          const ny = nextNumber();
+          y = relative ? y + ny : ny;
+          points.push([x, y]);
+        }
+        break;
+      }
+      case "C": {
+        while (i < tokens.length && !isCommand(tokens[i])) {
+          const x1 = nextNumber();
+          const y1 = nextNumber();
+          const x2 = nextNumber();
+          const y2 = nextNumber();
+          const nx = nextNumber();
+          const ny = nextNumber();
+          const p1 = [relative ? x + x1 : x1, relative ? y + y1 : y1];
+          const p2 = [relative ? x + x2 : x2, relative ? y + y2 : y2];
+          x = relative ? x + nx : nx;
+          y = relative ? y + ny : ny;
+          points.push(p1, p2, [x, y]);
+        }
+        break;
+      }
+      case "S":
+      case "Q": {
+        const step = cmd.toUpperCase() === "Q" ? 4 : 4;
+        while (i < tokens.length && !isCommand(tokens[i])) {
+          const x1 = nextNumber();
+          const y1 = nextNumber();
+          const nx = nextNumber();
+          const ny = nextNumber();
+          const p1 = [relative ? x + x1 : x1, relative ? y + y1 : y1];
+          x = relative ? x + nx : nx;
+          y = relative ? y + ny : ny;
+          points.push(p1, [x, y]);
+        }
+        break;
+      }
+      case "A": {
+        while (i < tokens.length && !isCommand(tokens[i])) {
+          const rx = nextNumber();
+          const ry = nextNumber();
+          nextNumber();
+          nextNumber();
+          nextNumber();
+          const nx = nextNumber();
+          const ny = nextNumber();
+          const endX = relative ? x + nx : nx;
+          const endY = relative ? y + ny : ny;
+          points.push([x - rx, y - ry], [x + rx, y + ry], [endX - rx, endY - ry], [endX + rx, endY + ry], [endX, endY]);
+          x = endX;
+          y = endY;
+        }
+        break;
+      }
+      case "Z": {
+        x = startX;
+        y = startY;
+        points.push([x, y]);
+        break;
+      }
+      default: {
+        while (i < tokens.length && !isCommand(tokens[i])) i += 1;
+      }
+    }
+  }
+  if (!points.length) return null;
+  return boundsFromPoints(points, pad);
+}
+
+function boundsFromMarkup(markup) {
+  if (typeof markup !== "string") return null;
+  const aggregate = { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity };
+  const push = (bounds) => mergeBounds(aggregate, bounds);
+  const textRegex = /<text\b([^>]*)>([\s\S]*?)<\/text>/g;
+  for (const match of markup.matchAll(textRegex)) {
+    const attrs = match[1];
+    const body = match[2];
+    const xMatch = attrs.match(/text-anchor="([^"]+)"/);
+    const sizeMatch = attrs.match(/font-size="([^"]+)"/);
+    const lineMatches = [...body.matchAll(/<tspan\b[^>]*x="([^"]+)"[^>]*y="([^"]+)"[^>]*>([\s\S]*?)<\/tspan>/g)];
+    if (lineMatches.length) {
+      const anchor = xMatch?.[1] || "middle";
+      const size = Number(sizeMatch?.[1] || 28);
+      const lines = lineMatches.map((line) => line[3].replace(/<[^>]+>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"'));
+      const x = Number(lineMatches[0][1]);
+      const ys = lineMatches.map((line) => Number(line[2]));
+      const lineHeight = ys.length > 1 ? ys[1] - ys[0] : size * 1.25;
+      const centerY = (ys[0] + ys[ys.length - 1]) / 2;
+      push(getTextBounds(x, centerY, lines, { size, anchor, lineHeight }));
+    }
+  }
+  const rectRegex = /<rect\b([^>]*)\/?>/g;
+  for (const match of markup.matchAll(rectRegex)) {
+    const attrs = match[1];
+    const x = Number((attrs.match(/\bx="([^"]+)"/) || [])[1]);
+    const y = Number((attrs.match(/\by="([^"]+)"/) || [])[1]);
+    const w = Number((attrs.match(/\bwidth="([^"]+)"/) || [])[1]);
+    const h = Number((attrs.match(/\bheight="([^"]+)"/) || [])[1]);
+    if ([x, y, w, h].every(Number.isFinite)) push(boundsFromRect(x, y, w, h, 8));
+  }
+  const ellipseRegex = /<ellipse\b([^>]*)\/?>/g;
+  for (const match of markup.matchAll(ellipseRegex)) {
+    const attrs = match[1];
+    const cx = Number((attrs.match(/\bcx="([^"]+)"/) || [])[1]);
+    const cy = Number((attrs.match(/\bcy="([^"]+)"/) || [])[1]);
+    const rx = Number((attrs.match(/\brx="([^"]+)"/) || [])[1]);
+    const ry = Number((attrs.match(/\bry="([^"]+)"/) || [])[1]);
+    if ([cx, cy, rx, ry].every(Number.isFinite)) push(boundsFromEllipse(cx, cy, rx * 2, ry * 2, 8));
+  }
+  const pathRegex = /<path\b([^>]*)\/?>/g;
+  for (const match of markup.matchAll(pathRegex)) {
+    const attrs = match[1];
+    const d = (attrs.match(/\bd="([^"]+)"/) || [])[1];
+    if (d) push(pathBoundsFromD(d, 16));
+  }
+  return Number.isFinite(aggregate.minX) ? aggregate : null;
+}
+
 function createCanvas() {
   return {
     chunks: [],
+    bounds: { minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity },
     add(value) {
       this.chunks.push(value);
+      mergeBounds(this.bounds, boundsFromMarkup(value));
     },
   };
 }
@@ -220,27 +494,65 @@ function curve(canvas, rc, x1, y1, x2, y2, bend = 0, opts = {}) {
   if (opts.arrow) arrowHead(canvas, x1, y1, x2, y2, stroke, strokeWidth);
 }
 
+function resolveCropBox(bounds) {
+  const fallback = { x: 80, y: 120, w: 1440, h: 700 };
+  if (!bounds || !Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) return fallback;
+  const textPad = 26;
+  const shapePad = 16;
+  const x = clamp(Math.floor(bounds.minX - textPad), 0, DIAGRAM_STYLE.width - 40);
+  const y = clamp(Math.floor(bounds.minY - textPad), 0, DIAGRAM_STYLE.height - 40);
+  const maxX = clamp(Math.ceil(bounds.maxX + shapePad), x + 40, DIAGRAM_STYLE.width);
+  const maxY = clamp(Math.ceil(bounds.maxY + shapePad), y + 40, DIAGRAM_STYLE.height);
+  return {
+    x,
+    y,
+    w: maxX - x,
+    h: maxY - y,
+  };
+}
+
+function resolveOutputSize(exportOptions, cropBox) {
+  if (exportOptions.requestedWidth && exportOptions.requestedHeight) {
+    return { width: exportOptions.requestedWidth, height: exportOptions.requestedHeight };
+  }
+  if (exportOptions.requestedWidth) {
+    return {
+      width: exportOptions.requestedWidth,
+      height: Math.round((exportOptions.requestedWidth * cropBox.h) / cropBox.w),
+    };
+  }
+  if (exportOptions.requestedHeight) {
+    return {
+      width: Math.round((exportOptions.requestedHeight * cropBox.w) / cropBox.h),
+      height: exportOptions.requestedHeight,
+    };
+  }
+  return { width: Math.round(cropBox.w), height: Math.round(cropBox.h) };
+}
+
 function baseSvg(title, claim, body, options = {}) {
-  const { width, height } = resolveCanvasOptions(options);
+  const exportOptions = options._exportOptions || normalizeExportOptions(options._spec, options);
+  const cropBox = resolveCropBox(options._contentBounds);
+  const { width, height } = resolveOutputSize(exportOptions, cropBox);
   const colors = DIAGRAM_STYLE.color;
-  const sx = width / DIAGRAM_STYLE.width;
-  const sy = height / DIAGRAM_STYLE.height;
-  const scale = `transform="scale(${sx} ${sy})"`;
   const header = options.renderHeader
     ? `${svgText(90, 66, safeText(title), { size: 36, weight: 800, anchor: "start", fill: colors.red })}
 ${svgText(90, 112, safeText(claim), { size: 24, weight: 500, anchor: "start", fill: colors.muted })}`
     : "";
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-<rect width="${width}" height="${height}" fill="${colors.paper}"/>
-<g ${scale}>
+  return {
+    width,
+    height,
+    cropBox,
+    svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${cropBox.x} ${cropBox.y} ${cropBox.w} ${cropBox.h}">
+<rect width="${DIAGRAM_STYLE.width}" height="${DIAGRAM_STYLE.height}" fill="${colors.paper}"/>
 <g opacity="0.48">
-  <path d="M80 120 C310 86 518 111 742 89 S1205 116 1510 82" fill="none" stroke="#e8dcc9" stroke-width="2"/>
-  <path d="M88 812 C358 790 606 830 894 802 S1266 788 1514 816" fill="none" stroke="#e8dcc9" stroke-width="2"/>
+  <path d="M80 120 C310 86 518 111 742 89 S1205 116 1510 82" fill="none" stroke="${colors.line}" stroke-width="2"/>
+  <path d="M88 812 C358 790 606 830 894 802 S1266 788 1514 816" fill="none" stroke="${colors.line}" stroke-width="2"/>
 </g>
 ${header}
 ${body}
-</g>
-</svg>`;
+</svg>`,
+  };
 }
 
 function drawLayeredArchitecture(spec) {
@@ -251,19 +563,19 @@ function drawLayeredArchitecture(spec) {
   const layers = visual.layers || [];
   const centers = new Map();
   const left = 145;
-  const top = 190;
-  const stackW = 890;
-  const stackH = 590;
+  const top = 170;
+  const stackW = 930;
+  const stackH = 540;
   const rowGap = 18;
   const layerH = Math.max(78, (stackH - rowGap * Math.max(0, layers.length - 1)) / Math.max(1, layers.length));
-  const palette = [colors.blue, colors.warm, colors.green, colors.pink, colors.yellow, colors.gray];
+  const palette = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale];
 
   layers.forEach((layer, layerIdx) => {
     const y = top + layerIdx * (layerH + rowGap);
     rect(canvas, rc, left, y, stackW, layerH, {
       fill: palette[layerIdx % palette.length],
       hachureGap: 14,
-      stroke: "#364149",
+      stroke: colors.lineDark,
       roughness: 2.1,
       seed: 20 + layerIdx,
     });
@@ -299,31 +611,29 @@ function drawLayeredArchitecture(spec) {
 
   const sideModules = visual.side_modules || [];
   if (sideModules.length) {
-    const sideX = 1120;
-    const sideY = 210;
-    const sideW = 340;
-    const sideH = 540;
-    rect(canvas, rc, sideX - 30, sideY - 30, sideW + 60, sideH + 60, {
-      fill: "#f8f8f8",
+    const sideX = 1145;
+    const sideY = 205;
+    const sideW = 275;
+    const sideH = 555;
+    rect(canvas, rc, sideX - 24, sideY - 22, sideW + 48, sideH + 44, {
+      fill: colors.gray,
       fillStyle: "cross-hatch",
       hachureGap: 18,
-      stroke: "#444",
+      stroke: colors.lineDark,
       roughness: 2.2,
       seed: 130,
     });
-    canvas.add(svgText(sideX + sideW / 2, sideY - 58, visual.side_label || "侧向能力", { size: 27, weight: 800, fill: colors.red }));
-    const gap = Math.max(18, (sideH - sideModules.length * 72) / Math.max(1, sideModules.length - 1));
+    canvas.add(svgText(sideX + sideW / 2, sideY - 48, visual.side_label || "侧向能力", { size: 27, weight: 800, fill: colors.red }));
+    const gap = Math.max(16, (sideH - sideModules.length * 68) / Math.max(1, sideModules.length - 1));
     sideModules.forEach((label, i) => {
-      const y = sideY + 36 + i * (72 + gap);
+      const y = sideY + 30 + i * (68 + gap);
       centers.set(label, [sideX + sideW / 2, y]);
-      ellipse(canvas, rc, sideX + sideW / 2, y, 230, 70, {
+      ellipse(canvas, rc, sideX + sideW / 2, y, 210, 66, {
         fill: palette[(i + 1) % palette.length],
         hachureAngle: -45 + i * 15,
         seed: 140 + i,
       });
-      canvas.add(svgText(sideX + sideW / 2, y + 8, wrapCjk(label, 10).slice(0, 2), { size: 22, weight: 700, lineHeight: 25 }));
-      const target = [...centers.values()][Math.min(i, Math.max(0, centers.size - 1))];
-      if (target) line(canvas, rc, target[0] + 86, target[1], sideX + 36, y, { arrow: true, stroke: colors.muted, strokeWidth: 1.8, seed: 160 + i });
+      canvas.add(svgText(sideX + sideW / 2, y + 8, wrapCjk(label, 10).slice(0, 2), { size: 20, weight: 700, lineHeight: 24 }));
     });
   }
 
@@ -342,9 +652,9 @@ function drawLayeredArchitecture(spec) {
     });
   });
 
-  canvas.add(`<path d="M1060 180 C1035 320 1040 594 1072 770" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 12" opacity="0.55"/>`);
-  canvas.add(svgText(1088, 792, visual.summary || "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start" }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  canvas.add(`<path d="M1084 180 C1058 320 1062 594 1096 770" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 12" opacity="0.55"/>`);
+  canvas.add(svgText(1112, 790, visual.summary || "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start" }));
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawGroupedBarChart(spec) {
@@ -356,7 +666,7 @@ function drawGroupedBarChart(spec) {
   const series = visual.series || [];
   const values = series.flatMap((item) => item.values || []).map(Number).filter(Number.isFinite);
   const maxValue = Math.max(10, Math.ceil(Math.max(...values, 1) / 10) * 10);
-  const chart = { x: 170, y: 220, w: series.length > 3 ? 880 : 950, h: 520 };
+  const chart = { x: 170, y: 220, w: series.length > 3 ? 980 : 1030, h: 470 };
   const baseline = chart.y + chart.h;
   const groupW = chart.w / Math.max(categories.length, 1);
   const barGap = Math.max(5, Math.min(12, 42 / Math.max(1, series.length)));
@@ -366,7 +676,7 @@ function drawGroupedBarChart(spec) {
     fill: "#ffffff",
     fillStyle: "hachure",
     hachureGap: 32,
-    stroke: "#d7d2c8",
+    stroke: colors.line,
     strokeWidth: 1.6,
     roughness: 1.5,
     seed: 710,
@@ -375,16 +685,16 @@ function drawGroupedBarChart(spec) {
   line(canvas, rc, chart.x, baseline, chart.x + chart.w, baseline, { stroke: colors.ink, strokeWidth: 2.5, seed: 712 });
   for (let tick = 0; tick <= maxValue; tick += Math.max(10, maxValue / 6)) {
     const y = baseline - (tick / maxValue) * chart.h;
-    line(canvas, rc, chart.x - 8, y, chart.x + chart.w, y, { stroke: tick === 0 ? colors.ink : "#d7dde3", strokeWidth: tick === 0 ? 2 : 1.2, roughness: 0.8, seed: 720 + tick });
+    line(canvas, rc, chart.x - 8, y, chart.x + chart.w, y, { stroke: tick === 0 ? colors.ink : colors.line, strokeWidth: tick === 0 ? 2 : 1.2, roughness: 0.8, seed: 720 + tick });
     canvas.add(svgText(chart.x - 22, y + 7, String(Math.round(tick)), { size: 18, weight: 500, anchor: "end", fill: colors.muted }));
   }
   canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label || "Value", { size: 22, weight: 800, anchor: "start", fill: colors.red }));
 
   const seriesColor = (entry, idx, highlighted) => {
     if (highlighted) return colors.red;
-    if (entry.color === "red") return "#4e7ac7";
-    if (entry.color === "gray") return "#cbd3df";
-    return [colors.blue, colors.green, colors.warm][idx % 3];
+    if (entry.color === "red") return colors.red2;
+    if (entry.color === "gray") return colors.gray3;
+    return [colors.blue2, colors.green2, colors.yellow2][idx % 3];
   };
 
   categories.forEach((category, categoryIdx) => {
@@ -399,7 +709,7 @@ function drawGroupedBarChart(spec) {
       const fill = seriesColor(entry, seriesIdx, highlighted);
       rect(canvas, rc, x, y, barW, h, {
         fill,
-        stroke: highlighted ? colors.red : "#39434d",
+        stroke: highlighted ? colors.red : colors.lineDark,
         strokeWidth: highlighted ? 3.4 : 2,
         fillStyle: highlighted ? "cross-hatch" : "hachure",
         hachureGap: highlighted ? 7 : 10,
@@ -411,13 +721,13 @@ function drawGroupedBarChart(spec) {
   });
 
   series.forEach((entry, idx) => {
-    const x = series.length > 3 ? 1130 : 1220;
+    const x = series.length > 3 ? 1210 : 1280;
     const y = 252 + idx * Math.max(40, Math.min(54, 260 / Math.max(1, series.length)));
-    rect(canvas, rc, x, y - 18, 46, 28, { fill: seriesColor(entry, idx, false), stroke: "#39434d", seed: 820 + idx });
+    rect(canvas, rc, x, y - 18, 46, 28, { fill: seriesColor(entry, idx, false), stroke: colors.lineDark, seed: 820 + idx });
     canvas.add(svgText(x + 62, y + 4, wrapCjk(entry.name, 10).slice(0, 2), { size: series.length > 4 ? 18 : 22, weight: 700, anchor: "start", fill: colors.ink, lineHeight: 22 }));
   });
   pathRough(canvas, rc, "M 1188 470 C 1320 420 1435 462 1450 566 C 1462 666 1328 724 1205 666 C 1098 614 1100 514 1188 470 Z", {
-    fill: "#fff8df",
+    fill: colors.yellowPale,
     stroke: colors.red,
     strokeWidth: 2.5,
     fillStyle: "zigzag",
@@ -426,7 +736,7 @@ function drawGroupedBarChart(spec) {
   });
   canvas.add(svgText(1320, 532, "跨模型收益", { size: 29, weight: 900, fill: colors.red }));
   canvas.add(svgText(1320, 594, wrapCjk(visual.annotation || "", 10), { size: 21, weight: 600, fill: colors.ink, lineHeight: 26 }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawLineChart(spec) {
@@ -438,9 +748,9 @@ function drawLineChart(spec) {
   const series = visual.series || [];
   const values = series.flatMap((item) => item.values || []).map(Number).filter(Number.isFinite);
   const maxValue = Math.max(10, Math.ceil(Math.max(...values, 1) / 10) * 10);
-  const chart = { x: 190, y: 220, w: 980, h: 510 };
+  const chart = { x: 190, y: 220, w: 1040, h: 490 };
   const baseline = chart.y + chart.h;
-  rect(canvas, rc, chart.x - 18, chart.y - 12, chart.w + 44, chart.h + 48, { fill: "#ffffff", fillStyle: "hachure", hachureGap: 32, stroke: "#d7d2c8", strokeWidth: 1.6, seed: 910 });
+  rect(canvas, rc, chart.x - 18, chart.y - 12, chart.w + 44, chart.h + 48, { fill: "#ffffff", fillStyle: "hachure", hachureGap: 32, stroke: colors.line, strokeWidth: 1.6, seed: 910 });
   line(canvas, rc, chart.x, chart.y, chart.x, baseline, { stroke: colors.ink, strokeWidth: 2.5, seed: 911 });
   line(canvas, rc, chart.x, baseline, chart.x + chart.w, baseline, { stroke: colors.ink, strokeWidth: 2.5, seed: 912 });
   const xFor = (idx) => chart.x + (idx / Math.max(1, categories.length - 1)) * chart.w;
@@ -470,12 +780,12 @@ function drawLineChart(spec) {
       });
       canvas.add(svgText(x, y - 24, String(entry.values[idx]), { size: 16, weight: 700, fill: highlighted ? colors.red : colors.muted }));
     });
-    const legendX = 1230;
+    const legendX = 1270;
     const legendY = 282 + seriesIdx * 52;
     line(canvas, rc, legendX, legendY, legendX + 46, legendY, { stroke: seriesIdx === 0 ? colors.red : colors.ink, strokeWidth: 3, seed: 1020 + seriesIdx });
     canvas.add(svgText(legendX + 62, legendY + 6, entry.name, { size: 22, weight: 700, anchor: "start", fill: colors.ink }));
   });
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawDonutProportionChart(spec) {
@@ -497,7 +807,7 @@ function drawDonutProportionChart(spec) {
     const p2 = [center[0] + Math.cos(end) * rOuter, center[1] + Math.sin(end) * rOuter];
     const p3 = [center[0] + Math.cos(end) * rInner, center[1] + Math.sin(end) * rInner];
     const p4 = [center[0] + Math.cos(start) * rInner, center[1] + Math.sin(start) * rInner];
-    const fill = [colors.blue, colors.green, colors.warm, colors.pink, colors.yellow, colors.gray][idx % 6];
+    const fill = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.redPale, colors.gray, colors.gray2][idx % 6];
     pathRough(canvas, rc, `M ${p1[0]} ${p1[1]} A ${rOuter} ${rOuter} 0 ${large} 1 ${p2[0]} ${p2[1]} L ${p3[0]} ${p3[1]} A ${rInner} ${rInner} 0 ${large} 0 ${p4[0]} ${p4[1]} Z`, {
       fill: segment.label === visual.highlight ? colors.pink : fill,
       stroke: segment.label === visual.highlight ? colors.red : colors.ink,
@@ -511,12 +821,12 @@ function drawDonutProportionChart(spec) {
     canvas.add(svgText(lx, ly, [`${segment.label}`, `${segment.value}`], { size: 23, weight: segment.label === visual.highlight ? 900 : 700, fill: segment.label === visual.highlight ? colors.red : colors.ink, lineHeight: 28 }));
     start = end;
   });
-  ellipse(canvas, rc, center[0], center[1], 180, 120, { fill: "#fffdf7", stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
+  ellipse(canvas, rc, center[0], center[1], 180, 120, { fill: colors.paper, stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
   canvas.add(svgText(center[0], center[1] + 8, wrapCjk(visual.total_label || "合计", 8).slice(0, 2), { size: 28, weight: 900, fill: colors.red, lineHeight: 32 }));
-  pathRough(canvas, rc, "M 1005 308 C 1188 246 1376 312 1412 458 C 1448 607 1305 704 1116 672 C 974 648 908 426 1005 308 Z", { fill: "#fff8df", stroke: colors.red, strokeWidth: 2.4, fillStyle: "zigzag", seed: 1090 });
+  pathRough(canvas, rc, "M 1005 308 C 1188 246 1376 312 1412 458 C 1448 607 1305 704 1116 672 C 974 648 908 426 1005 308 Z", { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 2.4, fillStyle: "zigzag", seed: 1090 });
   canvas.add(svgText(1190, 438, "比例关系", { size: 31, weight: 900, fill: colors.red }));
   canvas.add(svgText(1190, 504, "用面积/角度强调\n份额结构", { size: 26, weight: 700, lineHeight: 34 }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawHeatmap(spec) {
@@ -540,7 +850,7 @@ function drawHeatmap(spec) {
       const value = Number(values[rowIdx]?.[colIdx]) || 0;
       const t = max === min ? 0.5 : (value - min) / (max - min);
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
-      const fill = t > 0.66 ? colors.pink : t > 0.33 ? colors.warm : colors.blue;
+      const fill = t > 0.66 ? colors.red4 : t > 0.33 ? colors.redPale : colors.gray;
       rect(canvas, rc, grid.x + colIdx * cellW, grid.y + rowIdx * cellH, cellW - 10, cellH - 10, {
         fill: highlighted ? colors.pink : fill,
         stroke: highlighted ? colors.red : colors.ink,
@@ -551,7 +861,7 @@ function drawHeatmap(spec) {
       canvas.add(svgText(grid.x + colIdx * cellW + cellW / 2 - 5, grid.y + rowIdx * cellH + cellH / 2 + 8, String(value), { size: 24, weight: 850, fill: highlighted ? colors.red : colors.ink }));
     });
   });
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawArchiveEvolutionTree(spec) {
@@ -567,7 +877,7 @@ function drawArchiveEvolutionTree(spec) {
     if (!a || !b) return;
     curve(canvas, rc, a[0], a[1] + 42, b[0], b[1] - 46, (i % 2 ? 20 : -16), {
       arrow: true,
-      stroke: to === visual.highlight ? colors.red : "#39434d",
+      stroke: to === visual.highlight ? colors.red : colors.lineDark,
       strokeWidth: to === visual.highlight ? 3.2 : 2.4,
       seed: 210 + i,
     });
@@ -576,7 +886,7 @@ function drawArchiveEvolutionTree(spec) {
     const [x, y] = pos.get(id);
     const isHighlight = id === visual.highlight;
     ellipse(canvas, rc, x, y, isHighlight ? 132 : 104, isHighlight ? 86 : 70, {
-      fill: isHighlight ? colors.pink : (i % 2 ? colors.blue : colors.gray),
+      fill: isHighlight ? colors.pink : (i % 2 ? colors.bluePale : colors.gray),
       stroke: isHighlight ? colors.red : colors.ink,
       strokeWidth: isHighlight ? 3.5 : 2.3,
       fillStyle: isHighlight ? "cross-hatch" : "hachure",
@@ -586,8 +896,12 @@ function drawArchiveEvolutionTree(spec) {
     canvas.add(svgText(x, y - 4, `#${id}`, { size: isHighlight ? 26 : 22, weight: 800 }));
     canvas.add(svgText(x, y + 25, visual.labels?.[id] || "", { size: isHighlight ? 28 : 23, weight: 800, fill: isHighlight ? colors.red : colors.muted }));
   });
+  const scorePath = mainPath.length
+    ? mainPath.map((id) => visual.labels?.[id]).filter(Boolean).join(" → ")
+    : Object.values(visual.labels || {}).join(" → ");
+  const highlightPos = pos.get(visual.highlight);
   pathRough(canvas, rc, "M 920 282 C 1070 230 1255 264 1370 348 C 1470 426 1452 568 1325 654 C 1188 750 978 724 872 640 C 760 552 785 332 920 282 Z", {
-    fill: "#fff8df",
+    fill: colors.yellowPale,
     stroke: colors.red,
     strokeWidth: 2.6,
     fillStyle: "zigzag",
@@ -597,15 +911,11 @@ function drawArchiveEvolutionTree(spec) {
   });
   canvas.add(svgText(1130, 365, visual.callout_title || "分支保留策略", { size: 32, weight: 900, fill: colors.red }));
   canvas.add(svgText(1130, 420, wrapCjk(visual.callout || "弱分支仍可能成为高分路径", 12).slice(0, 2), { size: 29, weight: 700, lineHeight: 36 }));
-  const scorePath = mainPath.length
-    ? mainPath.map((id) => visual.labels?.[id]).filter(Boolean).join(" → ")
-    : Object.values(visual.labels || {}).join(" → ");
   canvas.add(svgText(1130, 510, wrapCjk(scorePath, 18).slice(0, 3), { size: 25, weight: 800, lineHeight: 31 }));
   canvas.add(svgText(960, 622, wrapCjk(visual.annotation || "", 22).slice(0, 3), { size: 23, fill: colors.muted, weight: 500, anchor: "start", lineHeight: 28 }));
-  const highlightPos = pos.get(visual.highlight);
   if (highlightPos) line(canvas, rc, 900, 655, highlightPos[0] + 52, highlightPos[1] - 16, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 330 });
   if (highlightPos) canvas.add(`<path d="M${highlightPos[0] - 56} ${highlightPos[1] + 42} C${highlightPos[0] - 5} ${highlightPos[1] + 20} ${highlightPos[0] + 45} ${highlightPos[1] + 24} ${highlightPos[0] + 84} ${highlightPos[1] + 55}" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function layoutTree(nodes, edges) {
@@ -636,9 +946,9 @@ function layoutTree(nodes, edges) {
     }
   });
   const positions = new Map();
-  const xMin = 150;
+  const xMin = 140;
   const xMax = 780;
-  const yMin = 220;
+  const yMin = 160;
   const yMax = 770;
   levels.forEach((levelNodes, levelIdx) => {
     const y = yMin + (levelIdx / Math.max(1, levels.length - 1)) * (yMax - yMin);
@@ -684,13 +994,15 @@ function drawSelfImprovementLoop(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const center = [800, 480];
+  const radiusX = 440;
+  const radiusY = 250;
   const sourceSteps = visual.steps || [];
   const steps = sourceSteps.map((step, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(sourceSteps.length, 1);
     return {
     ...step,
-    x: center[0] + Math.cos(angle) * 440,
-    y: center[1] + Math.sin(angle) * 250,
+    x: center[0] + Math.cos(angle) * radiusX,
+    y: center[1] + Math.sin(angle) * radiusY,
   };
   });
   for (let i = 0; i < steps.length; i += 1) {
@@ -698,17 +1010,17 @@ function drawSelfImprovementLoop(spec) {
     const b = steps[(i + 1) % steps.length];
     curve(canvas, rc, a.x, a.y, b.x, b.y, i === steps.length - 1 ? -70 : 18, {
       arrow: true,
-      stroke: b.id === visual.highlight ? colors.red : "#333d47",
+      stroke: b.id === visual.highlight ? colors.red : colors.lineDark,
       strokeWidth: b.id === visual.highlight ? 3.1 : 2.4,
       seed: 350 + i,
     });
   }
-  ellipse(canvas, rc, center[0], center[1], 300, 150, { fill: colors.yellow, stroke: colors.red, strokeWidth: 3.4, fillStyle: "cross-hatch", hachureGap: 12, seed: 370 });
+  ellipse(canvas, rc, center[0], center[1], 300, 150, { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.4, fillStyle: "cross-hatch", hachureGap: 12, seed: 370 });
   canvas.add(svgText(center[0], center[1] + 8, wrapCjk(visual.center, 12).slice(0, 2), { size: 31, weight: 900, fill: colors.red, lineHeight: 36 }));
   steps.forEach((step, i) => {
     const highlighted = step.id === visual.highlight;
     rect(canvas, rc, step.x - 132, step.y - 52, 264, 104, {
-      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray, colors.pink, colors.yellow][i % 6],
+      fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.3 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -721,7 +1033,7 @@ function drawSelfImprovementLoop(spec) {
   });
   canvas.add(`<path d="M438 729 C612 835 938 842 1158 710" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.78"/>`);
   canvas.add(svgText(800, 825, "评测结果回到 Archive，再选择下一代 parent", { size: 26, weight: 800, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawDualLoop(spec) {
@@ -729,25 +1041,37 @@ function drawDualLoop(spec) {
   const { rc } = roughSvg(304);
   const canvas = createCanvas();
   const loops = spec.visual_spec?.loops || [];
-  const centers = [[565, 480], [1015, 480]];
+  const centerY = 480;
+  const startX = 350;
+  const span = 980;
+  const centers = loops.map((_, idx) => {
+    const x = loops.length === 1 ? 800 : startX + (idx / Math.max(1, loops.length - 1)) * span;
+    return [x, centerY];
+  });
   loops.forEach((loopSpec, loopIdx) => {
     const center = centers[loopIdx] || [565 + loopIdx * 450, 480];
     const steps = loopSpec.steps || [];
     const highlighted = loopSpec.id === spec.visual_spec?.highlight;
-    ellipse(canvas, rc, center[0], center[1], 330, 210, { fill: highlighted ? colors.pink : [colors.blue, colors.warm][loopIdx % 2], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.4 : 2.4, seed: 1360 + loopIdx });
+    const loopW = clamp(420 - loops.length * 22, 220, 330);
+    const loopH = clamp(240 - loops.length * 8, 160, 210);
+    ellipse(canvas, rc, center[0], center[1], loopW, loopH, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][loopIdx % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.4 : 2.4, seed: 1360 + loopIdx });
     canvas.add(svgText(center[0], center[1] - 10, loopSpec.label, { size: 30, weight: 900, fill: highlighted ? colors.red : colors.ink }));
     steps.forEach((step, i) => {
       const angle = -Math.PI / 2 + i * 2 * Math.PI / Math.max(1, steps.length);
-      const x = center[0] + Math.cos(angle) * 180;
-      const y = center[1] + Math.sin(angle) * 125;
+      const x = center[0] + Math.cos(angle) * (loopW / 2 + 18);
+      const y = center[1] + Math.sin(angle) * (loopH / 2 + 14);
       ellipse(canvas, rc, x, y, 96, 50, { fill: "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 1380 + loopIdx * 20 + i });
       canvas.add(svgText(x, y + 7, wrapCjk(step.label, 6).slice(0, 2), { size: 18, weight: 800, lineHeight: 20 }));
     });
   });
-  line(canvas, rc, 742, 480, 838, 480, { arrow: true, stroke: colors.red, strokeWidth: 3.2, seed: 1400 });
-  line(canvas, rc, 838, 535, 742, 535, { arrow: true, stroke: colors.muted, strokeWidth: 2.2, seed: 1401 });
-  canvas.add(svgText(790, 448, "互相校准", { size: 23, weight: 900, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  for (let i = 0; i < centers.length - 1; i += 1) {
+    line(canvas, rc, centers[i][0] + 90, centers[i][1], centers[i + 1][0] - 90, centers[i + 1][1], { arrow: true, stroke: colors.red, strokeWidth: 3.2, seed: 1400 + i * 2 });
+    line(canvas, rc, centers[i + 1][0] - 90, centers[i][1] + 55, centers[i][0] + 90, centers[i][1] + 55, { arrow: true, stroke: colors.muted, strokeWidth: 2.2, seed: 1401 + i * 2 });
+  }
+  if (centers.length > 1) {
+    canvas.add(svgText((centers[0][0] + centers[centers.length - 1][0]) / 2, centerY - 32, "互相校准", { size: 23, weight: 900, fill: colors.red }));
+  }
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawSpiralIterationLadder(spec) {
@@ -763,13 +1087,13 @@ function drawSpiralIterationLadder(spec) {
     const y = 700 - t * 420 + Math.sin(i * 1.2) * 70;
     const highlighted = step.id === visual.highlight;
     if (last) curve(canvas, rc, last[0], last[1], x, y, i % 2 ? -42 : 42, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3 : 2.1, seed: 1420 + i });
-    ellipse(canvas, rc, x, y, highlighted ? 146 : 124, highlighted ? 84 : 70, { fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.3 : 2.2, seed: 1440 + i });
+    ellipse(canvas, rc, x, y, highlighted ? 146 : 124, highlighted ? 84 : 70, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.3 : 2.2, seed: 1440 + i });
     canvas.add(svgText(x, y - 4, wrapCjk(step.label, 7).slice(0, 2), { size: 23, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 25 }));
     canvas.add(svgText(x, y + 25, wrapCjk(step.note || "", 8).slice(0, 1), { size: 16, fill: colors.muted }));
     last = [x, y];
   });
   canvas.add(svgText(760, 216, visual.center || "迭代爬升", { size: 35, weight: 900, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawHorizontalSequence(spec) {
@@ -782,8 +1106,7 @@ function drawHorizontalSequence(spec) {
   const y = 455;
   const gap = Math.max(14, Math.min(32, 170 / Math.max(1, steps.length)));
   const stepW = Math.max(110, Math.min(220, (1360 - gap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1)));
-  const palette = [colors.blue, colors.warm, colors.green, colors.yellow, colors.pink, colors.gray];
-
+  const palette = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale];
   canvas.add(`<path d="M120 454 C390 421 665 487 913 445 S1280 428 1460 470" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.35"/>`);
   steps.forEach((step, i) => {
     const x = startX + i * (stepW + gap);
@@ -810,7 +1133,7 @@ function drawHorizontalSequence(spec) {
     }
   });
   canvas.add(svgText(800, 725, "每一步都留下可检查证据，质量门槛前置到交付之前", { size: 25, weight: 800, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawVerticalProcess(spec) {
@@ -823,7 +1146,7 @@ function drawVerticalProcess(spec) {
   const top = 205;
   const stepH = Math.max(78, Math.min(130, 520 / Math.max(1, steps.length)));
   const gap = Math.max(12, Math.min(28, 130 / Math.max(1, steps.length)));
-  const palette = [colors.blue, colors.warm, colors.green, colors.yellow, colors.pink, colors.gray];
+  const palette = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale];
   steps.forEach((step, i) => {
     const y = top + i * (stepH + gap);
     const highlighted = step.id === visual.highlight;
@@ -840,10 +1163,10 @@ function drawVerticalProcess(spec) {
     canvas.add(svgText(x, y + stepH / 2 + 28, wrapCjk(step.note || step.time || "", 14).slice(0, 2), { size: 19, fill: colors.muted, lineHeight: 22 }));
     if (i < steps.length - 1) line(canvas, rc, x, y + stepH + 8, x, y + stepH + gap - 8, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: 2.2, seed: 1200 + i });
   });
-  pathRough(canvas, rc, "M 970 260 C 1140 216 1342 285 1370 446 C 1398 610 1220 724 1018 650 C 902 608 868 314 970 260 Z", { fill: "#fff8df", stroke: colors.red, strokeWidth: 2.3, fillStyle: "zigzag", seed: 1220 });
+  pathRough(canvas, rc, "M 970 260 C 1140 216 1342 285 1370 446 C 1398 610 1220 724 1018 650 C 902 608 868 314 970 260 Z", { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 2.3, fillStyle: "zigzag", seed: 1220 });
   canvas.add(svgText(1170, 430, "自上而下推进", { size: 31, weight: 900, fill: colors.red }));
   canvas.add(svgText(1170, 492, "适合阶段门\n和审批链路", { size: 25, weight: 700, lineHeight: 32 }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawTimeline(spec) {
@@ -861,11 +1184,11 @@ function drawTimeline(spec) {
     const highlighted = step.id === visual.highlight;
     ellipse(canvas, rc, x, y, highlighted ? 76 : 58, highlighted ? 58 : 46, { fill: highlighted ? colors.pink : "#ffffff", stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.2 : 2.1, seed: 1260 + i });
     canvas.add(svgText(x, y - 70, step.time || `T${i + 1}`, { size: 23, weight: 900, fill: highlighted ? colors.red : colors.ink }));
-    rect(canvas, rc, x - 95, y + 52, 190, 118, { fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, seed: 1280 + i });
+    rect(canvas, rc, x - 95, y + 52, 190, 118, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, seed: 1280 + i });
     canvas.add(svgText(x, y + 96, wrapCjk(step.label, 7).slice(0, 2), { size: 24, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 26 }));
     canvas.add(svgText(x, y + 132, wrapCjk(step.note || "", 8).slice(0, 2), { size: 17, fill: colors.muted, lineHeight: 20 }));
   });
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawSwimlane(spec) {
@@ -880,7 +1203,7 @@ function drawSwimlane(spec) {
   const laneH = Math.max(120, Math.min(170, 530 / Math.max(1, lanes.length)));
   lanes.forEach((lane, laneIdx) => {
     const y = y0 + laneIdx * laneH;
-    rect(canvas, rc, x0, y, w, laneH - 12, { fill: [colors.blue, colors.green, colors.warm, colors.gray][laneIdx % 4], stroke: "#d7d2c8", strokeWidth: 1.6, hachureGap: 26, seed: 1300 + laneIdx });
+    rect(canvas, rc, x0, y, w, laneH - 12, { fill: [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][laneIdx % 4], stroke: colors.line, strokeWidth: 1.6, hachureGap: 26, seed: 1300 + laneIdx });
     canvas.add(svgText(x0 + 70, y + laneH / 2, lane.label, { size: 25, weight: 900, fill: colors.red }));
     const laneSteps = lane.steps || [];
     const slotW = (w - 190) / Math.max(1, laneSteps.length);
@@ -893,7 +1216,7 @@ function drawSwimlane(spec) {
       if (stepIdx < laneSteps.length - 1) line(canvas, rc, cx + 100, cy, cx + slotW - 100, cy, { arrow: true, stroke: colors.ink, strokeWidth: 2, seed: 1340 + laneIdx * 20 + stepIdx });
     });
   });
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawQuadrantMatrix(spec) {
@@ -908,8 +1231,8 @@ function drawQuadrantMatrix(spec) {
   const midX = x0 + w / 2;
   const midY = y0 + h / 2;
   rect(canvas, rc, x0, y0, w, h, { fill: "#ffffff", fillStyle: "hachure", hachureGap: 28, stroke: colors.ink, strokeWidth: 2.5, seed: 510 });
-  line(canvas, rc, midX, y0 + 12, midX, y0 + h - 12, { stroke: "#9aa4ad", strokeWidth: 2, seed: 511 });
-  line(canvas, rc, x0 + 12, midY, x0 + w - 12, midY, { stroke: "#9aa4ad", strokeWidth: 2, seed: 512 });
+  line(canvas, rc, midX, y0 + 12, midX, y0 + h - 12, { stroke: colors.lineDark, strokeWidth: 2, seed: 511 });
+  line(canvas, rc, x0 + 12, midY, x0 + w - 12, midY, { stroke: colors.lineDark, strokeWidth: 2, seed: 512 });
   line(canvas, rc, x0, y0 + h + 36, x0 + w, y0 + h + 36, { arrow: true, stroke: colors.red, strokeWidth: 2.4, seed: 513 });
   line(canvas, rc, x0 - 42, y0 + h, x0 - 42, y0, { arrow: true, stroke: colors.red, strokeWidth: 2.4, seed: 514 });
 
@@ -926,7 +1249,7 @@ function drawQuadrantMatrix(spec) {
     const highlighted = item.label === visual.highlight || item.id === visual.highlight;
     const itemW = visual.items.length > 8 ? 140 : 170;
     ellipse(canvas, rc, px, py, highlighted ? itemW + 24 : itemW, highlighted ? 86 : 74, {
-      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][i % 4],
+      fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.5 : 2.3,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -936,7 +1259,7 @@ function drawQuadrantMatrix(spec) {
     canvas.add(svgText(px, py + 25, wrapCjk(item.note || "", 8).slice(0, 2), { size: 17, fill: colors.muted, lineHeight: 20 }));
   });
   canvas.add(svgText(1130, 170, "先定位关系，再选渲染器", { size: 24, weight: 800, fill: colors.red, anchor: "end" }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawMatrixGrid(spec) {
@@ -957,7 +1280,7 @@ function drawMatrixGrid(spec) {
       const value = values[rowIdx]?.[colIdx] ?? "";
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
       rect(canvas, rc, grid.x + colIdx * cellW, grid.y + rowIdx * cellH, cellW - 10, cellH - 10, {
-        fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray][(rowIdx + colIdx) % 4],
+        fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][(rowIdx + colIdx) % 4],
         stroke: highlighted ? colors.red : colors.ink,
         strokeWidth: highlighted ? 3.2 : 1.8,
         fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -966,7 +1289,7 @@ function drawMatrixGrid(spec) {
       canvas.add(svgText(grid.x + colIdx * cellW + cellW / 2 - 5, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(value, 8).slice(0, 2), { size: 22, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
     });
   });
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawPyramidCapabilityStack(spec) {
@@ -987,7 +1310,7 @@ function drawPyramidCapabilityStack(spec) {
     const y = top + idx * levelH;
     const highlighted = level.label === spec.visual_spec?.highlight || level.id === spec.visual_spec?.highlight;
     pathRough(canvas, rc, `M ${centerX - wTop / 2} ${y} L ${centerX + wTop / 2} ${y} L ${centerX + wBottom / 2} ${y + levelH - 10} L ${centerX - wBottom / 2} ${y + levelH - 10} Z`, {
-      fill: highlighted ? colors.pink : [colors.yellow, colors.warm, colors.green, colors.blue, colors.gray][idx % 5],
+      fill: highlighted ? colors.pink : [colors.yellowPale, colors.greenPale, colors.bluePale, colors.gray, colors.redPale][idx % 5],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.4 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -997,7 +1320,7 @@ function drawPyramidCapabilityStack(spec) {
     canvas.add(svgText(centerX, y + levelH / 2 + 32, wrapCjk(level.note || "", 12).slice(0, 1), { size: 18, fill: colors.muted }));
   });
   canvas.add(svgText(1240, 445, "越往上越接近\n业务判断", { size: 26, weight: 800, fill: colors.red, lineHeight: 34 }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawGenericNetworkGraph(spec) {
@@ -1029,7 +1352,7 @@ function drawGenericNetworkGraph(spec) {
     const [x, y] = positions.get(node.id);
     const highlighted = node.id === visual.highlight || node.label === visual.highlight;
     rect(canvas, rc, x - 116, y - 52, 232, 104, {
-      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray, colors.yellow][i % 5],
+      fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.3 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -1038,7 +1361,7 @@ function drawGenericNetworkGraph(spec) {
     canvas.add(svgText(x, y - 9, wrapCjk(node.label, 8).slice(0, 2), { size: 23, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 25 }));
     canvas.add(svgText(x, y + 25, wrapCjk(node.note || "", 8).slice(0, 1), { size: 16, fill: colors.muted }));
   });
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
 function drawHubSpokeNetwork(spec) {
@@ -1070,14 +1393,14 @@ function drawHubSpokeNetwork(spec) {
     });
   });
 
-  ellipse(canvas, rc, center[0], center[1], 250, 142, { fill: colors.yellow, stroke: colors.red, strokeWidth: 3.5, fillStyle: "cross-hatch", seed: 650 });
+  ellipse(canvas, rc, center[0], center[1], 250, 142, { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.5, fillStyle: "cross-hatch", seed: 650 });
   canvas.add(svgText(center[0], center[1] + 8, hub.label, { size: 36, weight: 900, fill: colors.red }));
 
   nodes.forEach((node, i) => {
     const [x, y] = positions.get(node.id);
     const highlighted = node.id === visual.highlight || node.label === visual.highlight;
     rect(canvas, rc, x - 115, y - 55, 230, 110, {
-      fill: highlighted ? colors.pink : [colors.blue, colors.green, colors.warm, colors.gray, colors.yellow][i % 5],
+      fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.3 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
@@ -1088,12 +1411,14 @@ function drawHubSpokeNetwork(spec) {
   });
   canvas.add(`<path d="M250 720 C505 795 1040 800 1345 708" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.45"/>`);
   canvas.add(svgText(800, 785, "网络图只用于真正的多实体协同，不替代层级或流程", { size: 24, weight: 800, fill: colors.red }));
-  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), spec._canvasOptions);
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
-function createHandDrawnDiagramSvg(spec, options = {}) {
+function renderHandDrawnDiagram(spec, options = {}) {
   validateHandDrawnDiagramSpec(spec);
-  const renderSpec = { ...spec, _canvasOptions: resolveCanvasOptions(options) };
+  const layout = spec.layout || chooseTemplateLayout(spec);
+  const exportOptions = normalizeExportOptions(spec, options);
+  const renderSpec = { ...spec, layout, _canvasOptions: { _exportOptions: exportOptions, _spec: spec } };
   const template = spec.template || spec.intent;
   if (template === "grouped_bar_chart") return drawGroupedBarChart(renderSpec);
   if (template === "line_chart") return drawLineChart(renderSpec);
@@ -1116,14 +1441,18 @@ function createHandDrawnDiagramSvg(spec, options = {}) {
   throw new Error(`Unsupported hand-drawn diagram template: ${template}`);
 }
 
+function createHandDrawnDiagramSvg(spec, options = {}) {
+  return renderHandDrawnDiagram(spec, options).svg;
+}
+
 function createHandDrawnDiagramImage(spec, options = {}) {
-  const canvas = resolveCanvasOptions(options);
+  const rendered = renderHandDrawnDiagram(spec, options);
   return {
     format: "svg",
     mimeType: "image/svg+xml",
-    width: canvas.width,
-    height: canvas.height,
-    svg: createHandDrawnDiagramSvg(spec, options),
+    width: rendered.width,
+    height: rendered.height,
+    svg: rendered.svg,
   };
 }
 
@@ -1364,6 +1693,8 @@ function writeHandDrawnDiagramImage(spec, outDir, options = {}) {
 
 module.exports = {
   DIAGRAM_STYLE,
+  TEMPLATE_LAYOUTS,
+  chooseTemplateLayout,
   createHandDrawnDiagramImage,
   createHandDrawnDiagramSvg,
   validateHandDrawnDiagramSpec,

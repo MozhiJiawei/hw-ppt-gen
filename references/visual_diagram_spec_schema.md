@@ -38,12 +38,19 @@ Supported Rough SVG base templates. Each listed template should have a clear vis
 
 Semantic variants that do not change the visual form should not be added as base templates. Copy and customize the closest renderer in the deck script when a slide needs a one-off variant.
 
-Canvas options are passed to the helper, not embedded in `visual_spec`:
+Canvas options are passed to the helper, but the maintained path is now template-selected layout rather than arbitrary ratio expansion:
 
 ```js
-createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1600 })
-writeHandDrawnDiagramImage(spec, ".tmp/diagram_component_smoke", { aspectRatio: "4:3", width: 1200 })
+createHandDrawnDiagramImage(spec, { width: 1600 })
+writeHandDrawnDiagramImage(spec, ".tmp/diagram_component_smoke", { width: 1600 })
 ```
+
+Maintained layout presets:
+
+- `16:9`
+- `1:1`
+
+`9:16` is no longer maintained. The default regression matrix currently pins every reusable diagram template to its chosen default layout instead of stretching the same scene across multiple aspect ratios.
 
 Keep generated visible text mostly Chinese. Technical acronyms such as `Agent Gateway`, `API`, `Archive`, `workflow`, and model names may stay in English when they are clearer.
 
@@ -264,3 +271,5 @@ node scripts\verify_diagram_components.js
 ```
 
 The smoke script validates required fields before rendering and writes generated SVG image anchors plus a manifest under `.tmp/diagram_component_smoke`. Full PPT export happens only after a deck generator embeds the image into a standard content slide.
+
+Default regression coverage now comes from [visual_diagram_test_cases.js](</D:/Agent Repo/Mozhi-s-AgentSkills/ppt_skills/hw-ppt-gen/references/visual_diagram_test_cases.js>), which programmatically expands each base template into 10 variants across element-count changes and differentiated business scenes while keeping each template on its chosen default layout.

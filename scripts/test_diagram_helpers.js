@@ -4,11 +4,13 @@ const os = require("os");
 const path = require("path");
 
 const {
+  chooseTemplateLayout,
   createHandDrawnDiagramImage,
   createHandDrawnDiagramSvg,
   validateHandDrawnDiagramSpec,
   writeHandDrawnDiagramImage,
 } = require("./hw_diagram_helpers");
+const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("../references/visual_diagram_test_cases");
 
 function baseSpec(overrides) {
   return {
@@ -34,6 +36,14 @@ function assertNotIncludes(svg, values, context) {
   }
 }
 
+function parseViewBox(svg) {
+  const match = svg.match(/viewBox="([^"]+)"/);
+  assert(match, "SVG should include a viewBox");
+  const [x, y, w, h] = match[1].split(/\s+/).map(Number);
+  assert([x, y, w, h].every(Number.isFinite), "viewBox should contain numeric bounds");
+  return { x, y, w, h };
+}
+
 function testImageContractAndAspectRatio() {
   const spec = baseSpec({
     id: "image_contract",
@@ -45,19 +55,21 @@ function testImageContractAndAspectRatio() {
     },
   });
 
-  const image = createHandDrawnDiagramImage(spec, { aspectRatio: "4:3", width: 1200 });
+  const image = createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1200 });
   assert.equal(image.format, "svg");
   assert.equal(image.width, 1200);
-  assert.equal(image.height, 900);
+  assert(image.height > 0);
   assert(image.svg.startsWith("<svg"), "image export should return SVG markup, not a PPT slide");
-  assert(image.svg.includes('viewBox="0 0 1200 900"'), "SVG should honor the requested canvas ratio");
+  const crop = parseViewBox(image.svg);
+  assert(crop.w < 1600 && crop.h < 900, "SVG should crop to the content-focused export box");
+  assert(crop.x >= 0 && crop.y >= 0, "cropped viewBox should stay inside the source canvas");
   assert(!image.svg.includes("Test Diagram"), "diagram image should not render PPT-level title text by default");
   assert(!image.svg.includes("测试图像契约"), "diagram image should not render PPT-level claim text by default");
 
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "diagram-image-"));
-  const outPath = writeHandDrawnDiagramImage(spec, outDir, { aspectRatio: "1:1", width: 800 });
+  const outPath = writeHandDrawnDiagramImage(spec, outDir, { aspectRatio: "16:9", width: 800 });
   assert.equal(path.extname(outPath), ".svg");
-  assert(fs.readFileSync(outPath, "utf8").includes('viewBox="0 0 800 800"'));
+  assert(parseViewBox(fs.readFileSync(outPath, "utf8")).w > 0);
 }
 
 function testLayeredArchitectureIsDataDriven() {
@@ -322,9 +334,62 @@ function testAllVisualBaseTemplatesExportImages() {
     const image = createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1280 });
     assert.equal(image.format, "svg", `${spec.template} should export an SVG image`);
     assert.equal(image.width, 1280, `${spec.template} should honor requested width`);
-    assert.equal(image.height, 720, `${spec.template} should honor 16:9 ratio`);
+    assert(image.height > 0, `${spec.template} should export a positive cropped height`);
+    assert(image.height < image.width, `${spec.template} should crop to a landscape image element`);
     assertIncludes(image.svg, spec.expected, spec.template);
   }
+}
+
+function testTemplateLayoutDefaults() {
+  const spec = baseSpec({
+    id: "layout_defaults",
+    visual_spec: {
+      nodes: ["A", "B"],
+      edges: [["A", "B"]],
+      labels: { A: "起点", B: "终点" },
+      highlight: "B",
+    },
+  });
+  assert.equal(chooseTemplateLayout(spec), "16:9");
+  const image = createHandDrawnDiagramImage(spec, { width: 1600 });
+  assert.equal(image.width, 1600);
+  assert(image.height > 0);
+  const crop = parseViewBox(image.svg);
+  assert(crop.w > 0 && crop.h > 0);
+  assert(crop.w < 1600 && crop.h < 900);
+  assert.throws(() => createHandDrawnDiagramImage(spec, { aspectRatio: "9:16", width: 900 }), /Unsupported diagram aspectRatio: 9:16/);
+}
+
+function testGeneratedCaseMatrixCoverage() {
+  assert(generatedCaseMatrix.length >= 200, "generated case matrix should provide at least 10 variants per template");
+  const byTemplate = new Map();
+  generatedCaseMatrix.forEach((spec) => {
+    validateHandDrawnDiagramSpec(spec);
+    const list = byTemplate.get(spec.template) || [];
+    list.push(spec);
+    byTemplate.set(spec.template, list);
+  });
+
+  assert.equal(byTemplate.size, 20, "generated matrix should cover every base template");
+  byTemplate.forEach((specs, template) => {
+    assert(specs.length >= 10, `${template} should have at least 10 variants`);
+    specs.forEach((spec) => assert.equal(spec.render_options?.aspectRatio, DEFAULT_LAYOUT, `${template} should use the chosen default layout`));
+  });
+
+  const spotChecks = [
+    "horizontal_process_10",
+    "dual_loop_10",
+    "layered_architecture_10",
+    "hub_spoke_network_10",
+    "grouped_bar_chart_10",
+  ];
+  spotChecks.forEach((id) => {
+    const spec = generatedCaseMatrix.find((entry) => entry.id === id);
+    assert(spec, `matrix should include ${id}`);
+    const image = createHandDrawnDiagramImage(spec, spec.render_options);
+    assert.equal(image.format, "svg");
+    assert(image.svg.startsWith("<svg"), `${id} should render svg markup`);
+  });
 }
 
 testImageContractAndAspectRatio();
@@ -333,5 +398,7 @@ testTreeIsDataDriven();
 testInputsAreNotSilentlyTruncated();
 testValidatorRejectsDroppedRelationships();
 testAllVisualBaseTemplatesExportImages();
+testTemplateLayoutDefaults();
+testGeneratedCaseMatrixCoverage();
 
 console.log("diagram helper contract tests passed");

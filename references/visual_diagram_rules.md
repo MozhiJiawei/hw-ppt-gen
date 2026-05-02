@@ -1,93 +1,139 @@
-# Visual Diagram Rules
+# Visual Anchor Rules
 
-Use this reference only when a deck needs a real diagram and no source figure can carry the slide by itself. Do not load it for ordinary text, table, card, or simple list slides.
+Use this reference when planning or implementing the primary visual anchor for a Huawei content slide. Do not load it for cover, contents, chapter divider, or text-only appendix pages.
 
-## Evidence Priority
+## Contents
 
-1. Use the original source figure, table, screenshot, or chart when it is available and directly supports the slide claim.
-2. If the source figure is too dense, crop or simplify it, but keep the source visual as the evidence anchor.
-3. If the source provides numbers but no usable visual, create a data chart from the source values.
-4. If no source visual exists and the slide needs a relationship diagram, draw a generated diagram.
-5. If the content is just parallel items, use normal text boxes or cards instead of a diagram.
+- [Contract](#contract)
+- [Top-Level Kinds](#top-level-kinds)
+- [Templates](#templates)
+- [Runtime Rendering Policy](#runtime-rendering-policy)
+- [Evidence](#evidence)
+- [Layout Rule](#layout-rule)
+- [Quality Gates](#quality-gates)
 
-Original figures outrank generated hand-drawn diagrams. Generated diagrams are for explaining relationships, mechanisms, search spaces, loops, hierarchies, and architecture when the source does not provide a usable visual.
+## Contract
 
-Every content slide must record a `visual_anchor` decision before rendering. If the slide uses a generated diagram, `visual_anchor.source_visual_search.performed` must be `true`, and the candidates or rejection reason must be explicit. This makes "source visual first" checkable in deck planning and smoke reviews.
+Every正文内容页 has exactly one primary `visual_anchor`. Text cards, captions, legends, side explanations, and micro-cards may support it, but they must not become competing anchors.
 
-## Atomic Diagram Intents
+The model-facing visual anchor spec has no renderer field:
 
-Choose one primary intent before writing the diagram spec:
+```json
+{
+  "id": "stable_file_safe_id",
+  "title": "Short review title",
+  "claim": "一句中文核心观点。",
+  "kind": "Quantity",
+  "template": "bar_chart",
+  "visual_spec": {}
+}
+```
 
-- `Quantity`: values, comparisons, distributions, rankings, deltas. Use charts first.
-- `Sequence`: process, timeline, pipeline, stage progression.
-- `Loop`: feedback cycle, iterative improvement, control loop, flywheel.
-- `Hierarchy`: tree, layered architecture, decomposition, taxonomy, parent-child relations.
-- `Matrix`: two-axis positioning, quadrants, trade-off maps.
-- `Network`: many-to-many links, dependency graph, topology.
-
-Decision priority when multiple intents appear:
-
-1. If numeric comparison is the point, use `Quantity`.
-2. If a closed feedback relation is the point, use `Loop`.
-3. If order over time is the point, use `Sequence`.
-4. If containment or parent-child structure is the point, use `Hierarchy`.
-5. If two dimensions classify items, use `Matrix`.
-6. Use `Network` only when many-to-many connectivity is the message.
-
-Do not expose all intents as equal choices in the prompt. Ask the model to identify the slide's single dominant relationship, then use the priority list to break ties.
-
-## Rendering Path
-
-The hand-drawn rendering path is fixed:
-
-1. `source_visual`: use original figure/table/screenshot whenever available.
-2. `rough_svg`: when no usable source visual exists and the slide needs a real visual anchor, render an SVG image with `scripts/hw_diagram_helpers.js`.
-3. Standard PPT helpers: use normal tables, cards, native bar charts, and evidence modules for non-hand-drawn pages.
-
-Do not use other hand-drawn renderers. Native PPT shapes remain part of the general deck system, but they are not the selected hand-drawn diagram implementation.
-
-The diagram helper exports an image anchor only. Do not call it to create a full PPT slide. Deck code should embed the generated SVG inside a standard Huawei content page so analysis summaries, section indicators, footers, evidence notes, and layout rules remain under the normal PPT page system.
-
-## Rough SVG Supported Templates
-
-The helper in `scripts/hw_diagram_helpers.js` currently supports 20 visually distinct base templates:
-
-- Quantity: `grouped_bar_chart`, `line_chart`, `donut_proportion_chart`, `heatmap`.
-- Sequence: `horizontal_process`, `vertical_process`, `timeline`, `swimlane`.
-- Loop: `closed_loop`, `dual_loop`, `spiral_iteration_ladder`.
-- Hierarchy: `tree`, `layered_architecture`, `pyramid_capability_stack`.
-- Matrix: `quadrant_matrix`, `capability_matrix`.
-- Network: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`.
-
-Do not add a new template name unless it creates a clear visual difference. If a deck needs a semantic variant such as a decision tree, risk matrix, or goal-centered cycle, copy the closest base renderer in the deck-specific script and customize the visual treatment there.
-
-Each diagram spec should include:
+Required fields:
 
 - `id`: stable file-safe id.
-- `title`: short metadata title for filenames/review context; do not render it into the image.
-- `claim`: one concise sentence for PPT/page-level context; do not render it into the image.
-- `intent`: one of the atomic intents.
-- `template`: one supported template.
-- `visual_spec`: structured nodes, edges, labels, steps, highlights, and annotations.
+- `title`: short metadata title; not rendered inside generated images.
+- `claim`: page-level claim; not rendered inside generated images.
+- `kind`: one of `Evidence`, `Quantity`, `Sequence`, `Loop`, `Hierarchy`, `Matrix`, `Network`.
+- `template`: a kind-specific visual template.
+- `visual_spec`: structured data for conceptual anchors. `Evidence` uses `source` instead.
 
-Load `references/visual_diagram_spec_schema.md` before writing a Rough SVG spec. The schema file contains template-specific required fields and examples.
+Never include `renderer`, `visual_strategy`, or the old `intent` field. Rendering is a runtime policy controlled by code.
 
-Pass the required canvas ratio at render time, for example `{ aspectRatio: "16:9", width: 1600 }`. The SVG may be scaled by the PPT layout tool, but the source image ratio should match the intended content slot.
+Do not put slide-level wording inside SVG data. `title` and `claim` are planning/manifest metadata, not image text. Do not include `visual_spec.annotation`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards.
 
-The exported image should contain only diagram content: nodes, edges, axes, legends, values, and other visual encodings. Page titles, diagram captions, explanatory claims, and interpretation text belong in the PPT layout layer.
+## Top-Level Kinds
+
+- `Evidence`: original source figure, source table, source screenshot, or source chart. Use when source material itself is the most trustworthy visual anchor.
+- `Quantity`: KPI cards, bar charts, line charts, proportions, heatmaps, numeric deltas.
+- `Sequence`: processes, stages, timelines, swimlanes, delivery flows.
+- `Loop`: feedback cycles, dual loops, iteration ladders, flywheels.
+- `Hierarchy`: trees, layered architectures, capability stacks, taxonomies.
+- `Matrix`: native tables, quadrant maps, capability matrices, two-dimensional comparisons.
+- `Network`: hub-spoke maps, dependency graphs, module interaction maps, causal influence graphs.
+
+Decision priority:
+
+1. If a source figure/table/screenshot directly proves the slide claim, choose `Evidence`.
+2. If numeric evidence is central, choose `Quantity`.
+3. If a closed feedback relation is central, choose `Loop`.
+4. If order over time or stages is central, choose `Sequence`.
+5. If containment, branching, decomposition, or layers are central, choose `Hierarchy`.
+6. If two dimensions classify or compare items, choose `Matrix`.
+7. Use `Network` only for genuinely many-to-many interaction or dependency.
+
+## Templates
+
+Supported model-facing templates:
+
+- Evidence: `source_figure`, `source_table`, `source_screenshot`, `source_chart`.
+- Quantity: `data_cards`, `bar_chart`, `line_chart`, `proportion_chart`, `heatmap`.
+- Sequence: `process`, `timeline`, `swimlane`.
+- Loop: `closed_loop`, `dual_loop`, `spiral_iteration_ladder`.
+- Hierarchy: `tree`, `layered_architecture`, `capability_stack`.
+- Matrix: `table`, `quadrant_matrix`, `capability_matrix`, `heatmap`.
+- Network: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`.
+
+These names are semantic templates, not renderer names. For example, `bar_chart` may render through rough SVG or PPT native code depending on the global runtime mode.
+
+## Runtime Rendering Policy
+
+The model does not choose rendering. Code reads:
+
+```text
+HW_VISUAL_ANCHOR_RENDERER=rough_svg
+HW_VISUAL_ANCHOR_RENDERER=ppt_native
+```
+
+Default is `rough_svg`.
+
+Rough SVG output is an image of the visual relationship only. It may contain node labels, axis labels, values, and brief in-shape notes needed to understand the diagram, but it must not render page titles, slide claims, figure legends, source notes, or standalone interpretation callouts.
+
+Fixed overrides:
+
+- `Evidence` ignores the global renderer and is handled as an evidence module.
+- `Matrix` + `template: "table"` ignores the global renderer and is always a native PPT table.
+- All other conceptual anchors use the configured global renderer.
+
+## Evidence
+
+Use `Evidence` when the source visual is the anchor:
+
+```json
+{
+  "id": "source_table_latency",
+  "title": "Latency Source Table",
+  "claim": "原始实验表格直接支撑延迟对比结论。",
+  "kind": "Evidence",
+  "template": "source_table",
+  "source": {
+    "path": ".tmp/source/table_2.png",
+    "caption": "Table 2: Latency comparison",
+    "relevance": "high",
+    "treatment": "crop_zoom_annotate"
+  }
+}
+```
+
+Evidence modules must include a nearby Chinese figure/table legend, source note, and short interpretation text when space permits.
+
+## Layout Rule
+
+A visual anchor lives inside the normal Huawei content page structure: title, top-right section tabs, `分析总结`, red first-level bars, thin gray frames, interpretation text, and footer. Use the 图文并茂 references:
+
+- `assets/slides_ref/09 内容 图文并茂1.png`: balanced mixed modules.
+- `assets/slides_ref/10 内容 图文并茂2.png`: large visual region plus side interpretation.
+
+Do not make a visual anchor a full-slide poster.
 
 ## Quality Gates
 
-Before accepting a generated diagram:
-
-- Run `npm run test:diagram` after changing the helper.
-- Run `npm run diagram-smoke` and inspect the generated SVG anchors.
-- For deck composition, embed the SVG into a standard content slide, export the final PPTX to PNG using `scripts/export_pptx_images.js`, and inspect the PNG at original size.
-- Confirm the diagram is the main visual anchor, not a disguised card list.
-- Confirm all generated visible labels are readable.
-- Confirm no labels are clipped, overlapping, or detached from the relevant node.
-- Confirm the diagram makes the intended relationship obvious within five seconds.
-- Confirm hand-drawn styling improves comprehension rather than becoming decoration.
-- Confirm the rendered SVG includes every validated node, edge endpoint, step, matrix item, category, and series instead of silently truncating input.
-
-If the source figure exists and is readable, use it even if a hand-drawn version would look nicer.
+- Confirm each正文内容页 declares exactly one primary `visual_anchor`.
+- Confirm source evidence was considered before choosing a conceptual anchor.
+- Confirm the selected `kind` matches the slide's central question.
+- Confirm the anchor is more informative than plain cards.
+- Confirm generated labels are readable and not clipped.
+- Confirm rough SVG images contain only diagram-native labels/values/short node notes. Page-level explanations must remain editable PPT text.
+- Confirm rough SVG images are placed with proportional contain scaling; leave whitespace or redesign the layout rather than stretching the image to fill a region.
+- Run `npm run test:diagram` after changing visual-anchor helpers.
+- Run `npm run diagram-smoke` for rough SVG template changes and inspect the generated review deck.

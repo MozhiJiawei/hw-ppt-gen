@@ -4,7 +4,7 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 
 function usage() {
-  console.error("Usage: node scripts/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice]");
+  console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice]");
 }
 
 function parseArgs(argv) {
@@ -115,7 +115,7 @@ function exportWithLibreOffice(inputPath, outDir, dpi) {
     refreshWindowsPathFromRegistry();
     for (const command of ["soffice", "pdfinfo", "pdftoppm"]) {
       if (!commandExists(command)) {
-        throw new Error(`${command} is not on PATH. Run: powershell -ExecutionPolicy Bypass -File scripts/setup_render_tools_path.ps1`);
+        throw new Error(`${command} is not on PATH. Run: powershell -ExecutionPolicy Bypass -File scripts/pptx/setup_render_tools_path.ps1`);
       }
     }
 

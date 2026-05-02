@@ -38,6 +38,7 @@ Use only 6, 12, 14, 18, and 24 pt. Use no more than five font sizes on one slide
 - Bar chart: restrained gray bars with red highlight for the current, risk, or target category.
 - Flow: numbered red nodes or red headers connected by 0.5 pt gray arrows.
 - Footer: thin gray rule, note/source on left, page number on right.
+- Visual anchor: one primary figure, table, chart, screenshot, or diagram per content page. Keep it inside the same Huawei structure as other content modules, with nearby red title bars, thin gray framing, source/caption notes, and interpretation text.
 
 ## Content Density
 
@@ -46,6 +47,7 @@ Use only 6, 12, 14, 18, and 24 pt. Use no more than five font sizes on one slide
 - Keep the main argument to three messages or fewer.
 - Use red only for section heads, key figures, or decisive conclusions.
 - Use gray regions as content structure, not as decorative panels.
+- For 图文并茂 pages, follow the reference pattern: either balanced mixed modules or a large visual anchor with side interpretation. Do not make the visual full-bleed, poster-like, or detached from explanatory text.
 
 ## Required Mechanical Constraints
 

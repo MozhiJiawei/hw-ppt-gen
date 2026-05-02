@@ -5,14 +5,16 @@
   "description": "Codex skill resources for generating Huawei-style PPTX decks with pptxgenjs.",
   "type": "commonjs",
   "scripts": {
-    "setup-render-path": "powershell -ExecutionPolicy Bypass -File scripts/setup_render_tools_path.ps1",
-    "sample": "node scripts/generate_sample_deck.js",
-    "check-sample": "node scripts/check_huawei_pptx.js .tmp/sample_huawei_deck.pptx",
-    "export-sample": "node scripts/export_pptx_images.js .tmp/sample_huawei_deck.pptx --out .tmp/sample_huawei_deck_slides",
-    "test:diagram": "node scripts/test_diagram_helpers.js",
-    "diagram-smoke": "node scripts/verify_diagram_components.js",
-    "reference-review-template": "node scripts/prepare_reference_review.js --out .tmp/reference_review.json",
-    "smoke": "npm run sample && npm run check-sample"
+    "setup-render-path": "powershell -ExecutionPolicy Bypass -File scripts/pptx/setup_render_tools_path.ps1",
+    "sample": "node scripts/smoke/generate_sample_deck.js",
+    "check-sample": "node scripts/qa/check_huawei_pptx.js .tmp/sample_huawei_deck.pptx --require-visual-anchor-manifest .tmp/sample_huawei_deck_visual_anchor_manifest.json",
+    "export-sample": "node scripts/pptx/export_pptx_images.js .tmp/sample_huawei_deck.pptx --out .tmp/sample_huawei_deck_slides",
+    "test:diagram": "node scripts/smoke/test_diagram_helpers.js",
+    "test:visual-anchor-contract": "node scripts/smoke/test_visual_anchor_content_contract.js",
+    "test:powerpoint-com": "node scripts/smoke/test_powerpoint_com_export.js",
+    "diagram-smoke": "node scripts/smoke/verify_diagram_components.js",
+    "reference-review-template": "node scripts/pptx/prepare_reference_review.js --out .tmp/reference_review.json",
+    "smoke": "npm run test:visual-anchor-contract && npm run sample && npm run check-sample && npm run diagram-smoke && npm run test:powerpoint-com"
   },
   "dependencies": {
     "jszip": "^3.10.1",

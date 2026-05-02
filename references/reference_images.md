@@ -14,11 +14,11 @@ Reference set:
 
 - `01 目录.png`: contents layout.
 - `02 配色示例.png`: color palette and neutral/red balance.
-- `03 饼图.png`: pie-chart treatment.
-- `04 柱状图.png`: bar-chart treatment.
+- `03 手绘图 饼图.png`: rough SVG proportion-chart treatment for `Quantity/proportion_chart`.
+- `04 手绘图 柱状图.png`: rough SVG bar-chart treatment for `Quantity/bar_chart`.
 - `05 内容 二分栏.png`: equal two-column content page.
 - `06 内容 偏分栏.png`: biased column layout with top analysis summary.
 - `07 内容 三分栏.png`: three-column content page with top analysis summary.
 - `08 内容 四分栏.png`: four-column content page with top analysis summary.
-- `09 内容 图文并茂1.png`: image plus text mixed layout with top analysis summary.
-- `10 内容 图文并茂2.png`: dense image/text presentation page with top analysis summary.
+- `09 内容 图文并茂1.png`: balanced mixed modules where text and an embedded visual share the detail band under the top analysis summary.
+- `10 内容 图文并茂2.png`: large visual-anchor region plus side interpretation cards under the top analysis summary.

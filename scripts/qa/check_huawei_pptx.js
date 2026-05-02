@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
+const { validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
 
 const ALLOWED_FONTS = new Set([
   "Microsoft YaHei",
@@ -63,11 +64,11 @@ const LANGUAGE_ALLOWLIST = new Set([
 ]);
 
 function usage() {
-  console.error("Usage: node scripts/check_huawei_pptx.js <deck.pptx> [--out .tmp/report.json]");
+  console.error("Usage: node scripts/qa/check_huawei_pptx.js <deck.pptx> [--out .tmp/report.json] [--require-visual-anchor-manifest .tmp/deck_visual_anchor_manifest.json]");
 }
 
 function parseArgs(argv) {
-  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null };
+  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null, requireVisualAnchorManifest: null };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--out") {
       args.out = argv[i + 1];
@@ -77,6 +78,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (argv[i] === "--require-reference-review") {
       args.requireReferenceReview = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--require-visual-anchor-manifest") {
+      args.requireVisualAnchorManifest = argv[i + 1];
       i += 1;
     }
   }
@@ -618,6 +622,128 @@ function checkReferenceReviewEvidence(fileName) {
   return [];
 }
 
+function contentSlideNumbers(slideEntries) {
+  return slideEntries
+    .map((entry) => {
+      const slide = slideNumber(entry.name);
+      const shapes = extractShapes(entry.xml);
+      return isContentSlide(slide, shapes) ? slide : null;
+    })
+    .filter((slide) => slide !== null);
+}
+
+function checkVisualAnchorManifest(fileName, slideEntries) {
+  const contentSlides = contentSlideNumbers(slideEntries);
+  if (!fileName) return [];
+  if (!fs.existsSync(fileName)) {
+    return [issue(null, "content_visual_anchor_manifest_missing", "error", `Required visual-anchor manifest not found: ${fileName}`)];
+  }
+
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(fileName, "utf8"));
+  } catch (error) {
+    return [issue(null, "content_visual_anchor_manifest_invalid", "error", `Could not parse visual-anchor manifest JSON: ${error.message}`)];
+  }
+
+  const entries = Array.isArray(manifest.slides) ? manifest.slides : null;
+  if (!entries) {
+    return [issue(null, "content_visual_anchor_manifest_invalid", "error", "Visual-anchor manifest must contain a slides array.")];
+  }
+
+  const issues = [];
+  const byPage = new Map();
+  for (const entry of entries) {
+    const page = Number(entry.page);
+    if (!Number.isFinite(page)) {
+      issues.push(issue(null, "content_visual_anchor_manifest_invalid", "error", "Visual-anchor manifest entry is missing a numeric page.", { entry }));
+      continue;
+    }
+    if (!byPage.has(page)) byPage.set(page, []);
+    byPage.get(page).push(entry);
+  }
+
+  for (const slide of contentSlides) {
+    const slideEntries = byPage.get(slide) || [];
+    if (slideEntries.length !== 1) {
+      issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have exactly one manifest-backed visual anchor.", {
+        manifest_entries: slideEntries.length,
+      }));
+      continue;
+    }
+
+    const entry = slideEntries[0];
+    if (entry.rendered !== true) {
+      issues.push(issue(slide, "content_visual_anchor_unrendered", "error", "Content slide visual anchor exists in the manifest but is not marked rendered."));
+    }
+    if (!entry.visual_anchor || typeof entry.visual_anchor !== "object") {
+      issues.push(issue(slide, "content_visual_anchor_manifest_invalid", "error", "Visual-anchor manifest entry must include the validated visual_anchor spec."));
+      continue;
+    }
+    try {
+      validateVisualAnchorSpec(entry.visual_anchor);
+    } catch (error) {
+      issues.push(issue(slide, "content_visual_anchor_template_invalid", "error", `Visual-anchor spec failed schema validation: ${error.message}`, {
+        visual_anchor_id: entry.visual_anchor_id || entry.visual_anchor.id || "",
+      }));
+    }
+    if (entry.kind !== entry.visual_anchor.kind || entry.template !== entry.visual_anchor.template) {
+      issues.push(issue(slide, "content_visual_anchor_manifest_invalid", "error", "Visual-anchor manifest kind/template must match the stored spec.", {
+        entry_kind: entry.kind,
+        spec_kind: entry.visual_anchor.kind,
+        entry_template: entry.template,
+        spec_template: entry.visual_anchor.template,
+      }));
+    }
+    if (entry.renderer === "rough_svg") {
+      const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
+        && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
+      const areaValid = isRectLike(entry.anchor_area) && isRectLike(entry.image_area);
+      if (!dimValid || !areaValid) {
+        issues.push(issue(slide, "content_visual_anchor_image_missing", "error", "rough_svg visual anchors must record positive image dimensions and actual image placement.", {
+          image_width: entry.image_width,
+          image_height: entry.image_height,
+          image_area: entry.image_area,
+          anchor_area: entry.anchor_area,
+        }));
+      } else if (!isContained(entry.image_area, entry.anchor_area) || !hasMatchingAspectRatio(entry.image_area, entry.image_width, entry.image_height)) {
+        issues.push(issue(slide, "content_visual_anchor_image_invalid", "error", "rough_svg visual anchor image must stay inside the anchor area and preserve aspect ratio.", {
+          image_width: entry.image_width,
+          image_height: entry.image_height,
+          image_area: entry.image_area,
+          anchor_area: entry.anchor_area,
+        }));
+      }
+    }
+  }
+
+  return issues;
+}
+
+function isRectLike(value) {
+  return value
+    && Number.isFinite(Number(value.x))
+    && Number.isFinite(Number(value.y))
+    && Number.isFinite(Number(value.w))
+    && Number(value.w) > 0
+    && Number.isFinite(Number(value.h))
+    && Number(value.h) > 0;
+}
+
+function isContained(inner, outer) {
+  const epsilon = 0.02;
+  return Number(inner.x) >= Number(outer.x) - epsilon
+    && Number(inner.y) >= Number(outer.y) - epsilon
+    && Number(inner.x) + Number(inner.w) <= Number(outer.x) + Number(outer.w) + epsilon
+    && Number(inner.y) + Number(inner.h) <= Number(outer.y) + Number(outer.h) + epsilon;
+}
+
+function hasMatchingAspectRatio(area, imageWidth, imageHeight) {
+  const areaRatio = Number(area.w) / Number(area.h);
+  const imageRatio = Number(imageWidth) / Number(imageHeight);
+  return Math.abs(areaRatio - imageRatio) < 0.02;
+}
+
 function summarize(issues, slideCount) {
   const summary = {
     slide_count: slideCount,
@@ -659,6 +785,7 @@ async function main() {
   issues.push(...checkSectionOrder(slides));
   issues.push(...checkRenderEvidence(args.requireRenderDir, slides.length));
   issues.push(...checkReferenceReviewEvidence(args.requireReferenceReview));
+  issues.push(...checkVisualAnchorManifest(args.requireVisualAnchorManifest, slides));
 
   const presentationXml = presentationFiles.find((file) => file.name === "ppt/presentation.xml");
   if (presentationXml && /<p:transition\b|<p:timing\b/.test(presentationXml.xml)) {

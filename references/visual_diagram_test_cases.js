@@ -1,4 +1,4 @@
-const DEFAULT_LAYOUT = "16:9";
+﻿const DEFAULT_LAYOUT = "16:9";
 
 function makeSteps(prefix, count, labelBase, noteBase) {
   return Array.from({ length: count }, (_, idx) => ({
@@ -15,7 +15,7 @@ function makeTree(count) {
     edges.push([nodes[Math.floor((idx - 1) / 2)], nodes[idx]]);
   }
   const labels = Object.fromEntries(nodes.map((node, idx) => [node, `${20 + idx * 3}%`]));
-  return { nodes, edges, labels, highlight: nodes[nodes.length - 1], annotation: "保留早期分支，才能给后续高分路径留下踏脚石。" };
+  return { nodes, edges, labels, highlight: nodes[nodes.length - 1] };
 }
 
 function makeLayeredArchitecture(layerCount, itemsPerLayer, sideCount) {
@@ -54,11 +54,11 @@ function makeNetworkNodes(count, prefix = "节点") {
   }));
 }
 
-function withMeta(id, intent, template, claim, visual_spec, layout = DEFAULT_LAYOUT) {
+function withMeta(id, kind, template, claim, visual_spec, layout = DEFAULT_LAYOUT) {
   return {
     id,
     title: id,
-    intent,
+    kind,
     template,
     claim,
     layout,
@@ -75,7 +75,21 @@ function buildTemplateCases() {
     }
   };
 
-  add("grouped_bar_chart", (idx, aspectRatio) => {
+  add("data_cards", (idx, aspectRatio) => {
+    const cards = Array.from({ length: 2 + (idx % 3) }, (_, cardIdx) => ({
+      id: `k${cardIdx + 1}`,
+      label: `指标${cardIdx + 1}`,
+      value: `${20 + idx * 3 + cardIdx * 7}`,
+      unit: cardIdx % 2 ? "%" : "分",
+      note: `变化${cardIdx + 1}`,
+    }));
+    return withMeta(`data_cards_${idx + 1}`, "Quantity", "data_cards", "KPI 卡片属于数量型视觉锚点，同一语义可走 rough_svg 或 PPT 原生。", {
+      cards,
+      highlight: cards[cards.length - 1].id,
+    }, aspectRatio);
+  });
+
+  add("bar_chart", (idx, aspectRatio) => {
     const categoryCount = 3 + (idx % 6);
     const seriesCount = 2 + (idx % 3);
     const categories = Array.from({ length: categoryCount }, (_, i) => `Q${i + 1}`);
@@ -83,12 +97,11 @@ function buildTemplateCases() {
       name: `系列${seriesIdx + 1}`,
       values: categories.map((_, i) => 10 + seriesIdx * 4 + i * (2 + ((idx + seriesIdx) % 3))),
     }));
-    return withMeta(`grouped_bar_chart_${idx + 1}`, "Quantity", "grouped_bar_chart", "多系列柱状图需要同时适配不同栏目数和系列数。", {
+    return withMeta(`bar_chart_${idx + 1}`, "Quantity", "bar_chart", "多系列柱状图需要同时适配不同栏目数和系列数。", {
       y_label: "Score",
       categories,
       series,
       highlight: { category: categories[categories.length - 1], series: series[series.length - 1].name },
-      annotation: `覆盖 ${categoryCount} 栏 x ${seriesCount} 系列`,
     }, aspectRatio);
   });
 
@@ -108,10 +121,10 @@ function buildTemplateCases() {
     }, aspectRatio);
   });
 
-  add("donut_proportion_chart", (idx, aspectRatio) => {
+  add("proportion_chart", (idx, aspectRatio) => {
     const segmentCount = 3 + (idx % 4);
     const segments = Array.from({ length: segmentCount }, (_, i) => ({ label: `来源${i + 1}`, value: 10 + i * 7 + idx }));
-    return withMeta(`donut_proportion_chart_${idx + 1}`, "Quantity", "donut_proportion_chart", "环形图需要在不同分段数量下保持可读。", {
+    return withMeta(`proportion_chart_${idx + 1}`, "Quantity", "proportion_chart", "环形图需要在不同分段数量下保持可读。", {
       total_label: "结构占比",
       segments,
       highlight: segments[Math.floor(segmentCount / 2)].label,
@@ -132,13 +145,14 @@ function buildTemplateCases() {
     }, aspectRatio);
   });
 
-  add("horizontal_process", (idx, aspectRatio) => withMeta(`horizontal_process_${idx + 1}`, "Sequence", "horizontal_process", "横向流程图需要在步骤变多时自动换行或收窄。", {
+  add("process", (idx, aspectRatio) => withMeta(`process_${idx + 1}`, "Sequence", "process", "横向流程图需要在步骤变多时自动换行或收窄。", {
     steps: makeSteps("hp", 3 + (idx % 6), "阶段", "说明"),
     highlight: `hp${3 + (idx % 6)}`,
   }, aspectRatio));
 
-  add("vertical_process", (idx, aspectRatio) => withMeta(`vertical_process_${idx + 1}`, "Sequence", "vertical_process", "纵向流程图需要覆盖不同层级长度。", {
+  add("process", (idx, aspectRatio) => withMeta(`process_vertical_${idx + 1}`, "Sequence", "process", "纵向流程图需要覆盖不同层级长度。", {
     steps: makeSteps("vp", 3 + (idx % 5), "关口", "动作"),
+    orientation: "vertical",
     highlight: `vp${2 + (idx % 5)}`,
   }, aspectRatio));
 
@@ -193,7 +207,7 @@ function buildTemplateCases() {
 
   add("layered_architecture", (idx, aspectRatio) => withMeta(`layered_architecture_${idx + 1}`, "Hierarchy", "layered_architecture", "分层架构图需要覆盖层数、层内元素数和侧向能力数量变化。", makeLayeredArchitecture(3 + (idx % 3), [2 + (idx % 3), 3 + (idx % 2), 2 + ((idx + 1) % 3), 2], 1 + (idx % 5)), aspectRatio));
 
-  add("pyramid_capability_stack", (idx, aspectRatio) => withMeta(`pyramid_capability_stack_${idx + 1}`, "Hierarchy", "pyramid_capability_stack", "金字塔需要覆盖 3 到 6 层的成熟度表达。", {
+  add("capability_stack", (idx, aspectRatio) => withMeta(`capability_stack_${idx + 1}`, "Hierarchy", "capability_stack", "金字塔需要覆盖 3 到 6 层的成熟度表达。", {
     levels: Array.from({ length: 3 + (idx % 4) }, (_, i) => ({ label: `能力层${i + 1}`, note: `说明${i + 1}` })),
     highlight: `能力层${2 + (idx % 3)}`,
   }, aspectRatio));
@@ -263,6 +277,30 @@ function buildTemplateCases() {
       highlight: nodes[nodes.length - 1].id,
     }, aspectRatio);
   });
+
+  cases.push({
+    id: "evidence_source_figure_1",
+    title: "evidence_source_figure_1",
+    kind: "Evidence",
+    template: "source_figure",
+    claim: "原始图像作为视觉锚点时不进入 renderer 分支，而由证据模块处理。",
+    layout: DEFAULT_LAYOUT,
+    source: {
+      path: "assets/slides_ref/10 内容 图文并茂2.png",
+      caption: "图文并茂参考：大视觉区域与侧边解读共同构成证据模块。",
+      relevance: "high",
+      treatment: "fit_with_legend",
+    },
+  });
+
+  cases.push(withMeta("matrix_table_1", "Matrix", "table", "生成或转写表格作为视觉锚点时固定使用 PPT 原生表格。", {
+    rows: [
+      ["能力", "当前状态", "统一后规则"],
+      ["原始表格", "散落在页面逻辑中", "Matrix/table 固定 native"],
+      ["概念图", "由模板分别处理", "统一 visual anchor"],
+      ["原图索引", "证据引用", "Evidence 固定证据模块"],
+    ],
+  }, DEFAULT_LAYOUT));
 
   return cases;
 }

@@ -1,22 +1,30 @@
-const assert = require("assert");
+﻿const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
 const {
   chooseTemplateLayout,
-  createHandDrawnDiagramImage,
-  createHandDrawnDiagramSvg,
-  validateHandDrawnDiagramSpec,
-  writeHandDrawnDiagramImage,
-} = require("./hw_diagram_helpers");
-const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("../references/visual_diagram_test_cases");
+  createVisualAnchorImage,
+  createVisualAnchorSvg,
+  getVisualAnchorRenderer,
+  renderVisualAnchorRoughSvg,
+  renderVisualAnchorPptNative,
+  resolveVisualAnchorRenderPath,
+  validateVisualAnchorSpec,
+  writeVisualAnchorImage,
+} = require("../pptx/hw_diagram_helpers");
+const JSZip = require("jszip");
+const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("../../references/visual_diagram_test_cases");
+
+process.env.HW_VISUAL_ANCHOR_RENDERER = "rough_svg";
 
 function baseSpec(overrides) {
   return {
     id: "test",
-    title: "Test Diagram",
-    intent: "Hierarchy",
+    title: "Test Visual Anchor",
+    kind: "Hierarchy",
     template: "tree",
     claim: "测试图像契约。",
     visual_spec: {},
@@ -47,6 +55,8 @@ function parseViewBox(svg) {
 function testImageContractAndAspectRatio() {
   const spec = baseSpec({
     id: "image_contract",
+    title: "PPT 页面标题不应进入 SVG",
+    claim: "页面级 claim 应留在 PPT 文本框。",
     visual_spec: {
       nodes: ["root", "child"],
       edges: [["root", "child"]],
@@ -55,7 +65,7 @@ function testImageContractAndAspectRatio() {
     },
   });
 
-  const image = createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1200 });
+  const image = createVisualAnchorImage(spec, { aspectRatio: "16:9", width: 1200 });
   assert.equal(image.format, "svg");
   assert.equal(image.width, 1200);
   assert(image.height > 0);
@@ -63,11 +73,11 @@ function testImageContractAndAspectRatio() {
   const crop = parseViewBox(image.svg);
   assert(crop.w < 1600 && crop.h < 900, "SVG should crop to the content-focused export box");
   assert(crop.x >= 0 && crop.y >= 0, "cropped viewBox should stay inside the source canvas");
-  assert(!image.svg.includes("Test Diagram"), "diagram image should not render PPT-level title text by default");
-  assert(!image.svg.includes("测试图像契约"), "diagram image should not render PPT-level claim text by default");
+  assert(!image.svg.includes("PPT 页面标题不应进入 SVG"), "diagram image should not render PPT-level title text");
+  assert(!image.svg.includes("页面级 claim 应留在 PPT 文本框"), "diagram image should not render PPT-level claim text");
 
   const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "diagram-image-"));
-  const outPath = writeHandDrawnDiagramImage(spec, outDir, { aspectRatio: "16:9", width: 800 });
+  const outPath = writeVisualAnchorImage(spec, outDir, { aspectRatio: "16:9", width: 800 });
   assert.equal(path.extname(outPath), ".svg");
   assert(parseViewBox(fs.readFileSync(outPath, "utf8")).w > 0);
 }
@@ -75,7 +85,7 @@ function testImageContractAndAspectRatio() {
 function testLayeredArchitectureIsDataDriven() {
   const spec = baseSpec({
     id: "custom_architecture",
-    intent: "Hierarchy",
+    kind: "Hierarchy",
     template: "layered_architecture",
     visual_spec: {
       layers: [
@@ -94,7 +104,7 @@ function testLayeredArchitectureIsDataDriven() {
     },
   });
 
-  const svg = createHandDrawnDiagramSvg(spec);
+  const svg = createVisualAnchorSvg(spec);
   assertIncludes(
     svg,
     ["Partner Portal", "Admin Console", "Risk Policy", "Quota Guard", "Routing Brain", "Batch Runner", "Realtime Worker", "Audit Lake", "SLO Board", "Cost Watch", "Incident Desk"],
@@ -108,38 +118,37 @@ function testTreeIsDataDriven() {
   const labels = Object.fromEntries(nodes.map((node, idx) => [node, `${idx + 1}x`]));
   const spec = baseSpec({
     id: "custom_tree",
-    intent: "Hierarchy",
+    kind: "Hierarchy",
     template: "tree",
-    visual_spec: {
-      nodes,
-      edges: [["A", "B"], ["A", "C"], ["B", "D"], ["B", "E"], ["C", "F"], ["F", "G"], ["G", "H"], ["G", "I"]],
-      labels,
-      highlight: "I",
-      annotation: "自定义节点必须全部绘制。",
-    },
+      visual_spec: {
+        nodes,
+        edges: [["A", "B"], ["A", "C"], ["B", "D"], ["B", "E"], ["C", "F"], ["F", "G"], ["G", "H"], ["G", "I"]],
+        labels,
+        highlight: "I",
+      },
   });
 
-  const svg = createHandDrawnDiagramSvg(spec);
+  const svg = createVisualAnchorSvg(spec);
   assertIncludes(svg, nodes.map((node) => `#${node}`), "tree");
   assertIncludes(svg, Object.values(labels), "tree");
   assertNotIncludes(svg, ["#0", "#79", "Archive 不是 cache"], "tree");
 }
 
 function testInputsAreNotSilentlyTruncated() {
-  const sequence = createHandDrawnDiagramSvg(baseSpec({
+  const sequence = createVisualAnchorSvg(baseSpec({
     id: "long_sequence",
-    intent: "Sequence",
-    template: "horizontal_sequence",
+    kind: "Sequence",
+    template: "process",
     visual_spec: {
       steps: Array.from({ length: 7 }, (_, idx) => ({ id: `s${idx}`, label: `步骤${idx + 1}`, note: `说明${idx + 1}` })),
       highlight: "s6",
     },
   }));
-  assertIncludes(sequence, ["步骤1", "步骤7", "说明7"], "horizontal_sequence");
+  assertIncludes(sequence, ["步骤1", "步骤7", "说明7"], "process");
 
-  const loop = createHandDrawnDiagramSvg(baseSpec({
+  const loop = createVisualAnchorSvg(baseSpec({
     id: "long_loop",
-    intent: "Loop",
+    kind: "Loop",
     template: "closed_loop",
     visual_spec: {
       center: "循环中心",
@@ -149,9 +158,9 @@ function testInputsAreNotSilentlyTruncated() {
   }));
   assertIncludes(loop, ["环节1", "环节6", "反馈6"], "closed_loop");
 
-  const matrix = createHandDrawnDiagramSvg(baseSpec({
+  const matrix = createVisualAnchorSvg(baseSpec({
     id: "dense_matrix",
-    intent: "Matrix",
+    kind: "Matrix",
     template: "quadrant_matrix",
     visual_spec: {
       x_axis: { left: "低", right: "高", label: "横轴" },
@@ -162,9 +171,9 @@ function testInputsAreNotSilentlyTruncated() {
   }));
   assertIncludes(matrix, ["对象1", "对象10", "注10"], "quadrant_matrix");
 
-  const network = createHandDrawnDiagramSvg(baseSpec({
+  const network = createVisualAnchorSvg(baseSpec({
     id: "dense_network",
-    intent: "Network",
+    kind: "Network",
     template: "hub_spoke_network",
     visual_spec: {
       hub: { id: "hub", label: "中心" },
@@ -175,10 +184,10 @@ function testInputsAreNotSilentlyTruncated() {
   }));
   assertIncludes(network, ["节点1", "节点9", "连接9"], "hub_spoke_network");
 
-  const bars = createHandDrawnDiagramSvg(baseSpec({
+  const bars = createVisualAnchorSvg(baseSpec({
     id: "wide_bars",
-    intent: "Quantity",
-    template: "grouped_bar_chart",
+    kind: "Quantity",
+    template: "bar_chart",
     visual_spec: {
       y_label: "得分",
       categories: ["A", "B", "C", "D", "E", "F", "G"],
@@ -189,15 +198,28 @@ function testInputsAreNotSilentlyTruncated() {
         { name: "S4", values: [4, 5, 6, 7, 8, 9, 10] },
       ],
       highlight: { category: "G", series: "S4" },
-      annotation: "宽表不能吞列。",
     },
   }));
-  assertIncludes(bars, ["A", "G", "S1", "S4", "10"], "grouped_bar_chart");
+  assertIncludes(bars, ["A", "G", "S1", "S4", "10"], "bar_chart");
 }
 
 function testValidatorRejectsDroppedRelationships() {
   assert.throws(
-    () => validateHandDrawnDiagramSpec(baseSpec({
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_slide_annotation",
+      visual_spec: {
+        nodes: ["A", "B"],
+        edges: [["A", "B"]],
+        labels: { A: "1", B: "2" },
+        highlight: "B",
+        annotation: "这类解释应放在 PPT 可编辑文本中",
+      },
+    })),
+    /visual_spec.annotation is not supported/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
       id: "bad_tree_edge",
       visual_spec: {
         nodes: ["A", "B"],
@@ -210,9 +232,9 @@ function testValidatorRejectsDroppedRelationships() {
   );
 
   assert.throws(
-    () => validateHandDrawnDiagramSpec(baseSpec({
+    () => validateVisualAnchorSpec(baseSpec({
       id: "bad_arch_edge",
-      intent: "Hierarchy",
+      kind: "Hierarchy",
       template: "layered_architecture",
       visual_spec: {
         layers: [
@@ -260,7 +282,15 @@ function allSubclassSpecs() {
   ];
 
   return [
-    ["Quantity", "grouped_bar_chart", {
+    ["Quantity", "data_cards", {
+      cards: [
+        { id: "roi", label: "ROI 提升", value: "42", unit: "%", note: "季度环比" },
+        { id: "cost", label: "成本下降", value: "18", unit: "%", note: "资源节省" },
+        { id: "speed", label: "交付速度", value: "2.3", unit: "x", note: "周期缩短" },
+      ],
+      highlight: "roi",
+    }, ["ROI 提升", "42", "交付速度"]],
+    ["Quantity", "bar_chart", {
       y_label: "得分",
       categories: quantityCategories,
       series: [{ name: "Base", values: [12, 18, 20, 22] }, { name: "Agent", values: [18, 24, 31, 35] }],
@@ -272,7 +302,7 @@ function allSubclassSpecs() {
       series: [{ name: "转化率", values: [10, 16, 21, 30] }, { name: "留存率", values: [44, 46, 53, 61] }],
       highlight: { category: "Q4", series: "留存率" },
     }, ["转化率", "留存率", "Q4", "61"]],
-    ["Quantity", "donut_proportion_chart", {
+    ["Quantity", "proportion_chart", {
       total_label: "流量占比",
       segments: [{ label: "搜索", value: 52 }, { label: "推荐", value: 33 }, { label: "直达", value: 15 }],
       highlight: "推荐",
@@ -283,8 +313,7 @@ function allSubclassSpecs() {
       values: [[0.2, 0.7, 0.4], [0.8, 0.5, 0.3], [0.3, 0.6, 0.9]],
       highlight: { row: "成本", column: "方案C" },
     }, ["安全", "方案C", "0.9"]],
-    ["Sequence", "horizontal_process", { steps: processSteps, highlight: "s3" }, ["发现", "验证", "交付"]],
-    ["Sequence", "vertical_process", { steps: processSteps, highlight: "s2" }, ["发现", "设计", "交付"]],
+    ["Sequence", "process", { steps: processSteps, highlight: "s3" }, ["发现", "验证", "交付"]],
     ["Sequence", "timeline", { steps: processSteps.map((step, i) => ({ ...step, time: `T${i + 1}` })), highlight: "s4" }, ["T1", "T4", "交付"]],
     ["Sequence", "swimlane", { lanes, highlight: "a2" }, ["业务", "Agent", "批准发布", "执行验证"]],
     ["Loop", "closed_loop", { center: "闭环系统", steps: loopSteps, highlight: "learn" }, ["闭环系统", "观察", "学习"]],
@@ -306,17 +335,17 @@ function allSubclassSpecs() {
       side_modules: ["审计"],
       edges: [["门户", "策略"], ["API", "编排"], ["编排", "模型"], ["审计", "策略"]],
     }, ["入口层", "编排", "审计"]],
-    ["Hierarchy", "pyramid_capability_stack", { levels: [{ label: "体验层", note: "用户价值" }, { label: "平台层", note: "通用能力" }, { label: "基础层", note: "数据模型" }], highlight: "平台层" }, ["体验层", "平台层", "基础层"]],
+    ["Hierarchy", "capability_stack", { levels: [{ label: "体验层", note: "用户价值" }, { label: "平台层", note: "通用能力" }, { label: "基础层", note: "数据模型" }], highlight: "平台层" }, ["体验层", "平台层", "基础层"]],
     ["Matrix", "quadrant_matrix", { x_axis: { left: "低", right: "高", label: "价值" }, y_axis: { bottom: "低", top: "高", label: "可行性" }, items: [{ label: "方案A", x: 0.2, y: 0.7 }, { label: "方案B", x: 0.8, y: 0.8 }], highlight: "方案B" }, ["价值", "可行性", "方案B"]],
     ["Matrix", "capability_matrix", { rows: ["产品", "工程"], columns: ["当前", "目标"], values: [["可用", "优秀"], ["手工", "自动"]], highlight: { row: "工程", column: "目标" } }, ["产品", "工程", "自动"]],
     ["Network", "hub_spoke_network", { hub: { id: "agent", label: "Agent" }, nodes: graphNodes.slice(1), edges: [["agent", "model"], ["agent", "memory"], ["agent", "tool"], ["agent", "eval"], ["memory", "eval"]], highlight: "eval" }, ["Agent", "模型", "评测"]],
     ["Network", "dependency_graph", { nodes: graphNodes, edges: [["agent", "model"], ["agent", "memory"], ["tool", "eval"], ["memory", "tool"]], highlight: "tool" }, ["Agent", "模型", "工具"]],
     ["Network", "module_interaction_map", { nodes: graphNodes, edges: [["agent", "model"], ["model", "memory"], ["memory", "tool"], ["tool", "eval"], ["eval", "agent"]], highlight: "eval" }, ["Agent", "记忆", "评测"]],
     ["Network", "causal_influence_graph", { nodes: graphNodes, edges: [["model", "agent"], ["memory", "agent"], ["agent", "tool"], ["tool", "eval"]], highlight: "agent" }, ["模型", "Agent", "评测"]],
-  ].map(([intent, template, visual_spec, expected]) => baseSpec({
+  ].map(([kind, template, visual_spec, expected]) => baseSpec({
     id: `subclass_${template}`,
     title: `${template} Test`,
-    intent,
+    kind,
     template,
     claim: `${template} 应导出图片。`,
     visual_spec,
@@ -326,12 +355,12 @@ function allSubclassSpecs() {
 
 function testAllVisualBaseTemplatesExportImages() {
   const specs = allSubclassSpecs();
-  assert.equal(specs.length, 20, "base template fixture count should cover visually distinct diagram capabilities");
+  assert.equal(specs.length, 20, "base template fixture count should cover visual-anchor capabilities");
   const uniqueTemplates = new Set(specs.map((spec) => spec.template));
   assert.equal(uniqueTemplates.size, specs.length, "each subclass fixture should use a distinct template key");
 
   for (const spec of specs) {
-    const image = createHandDrawnDiagramImage(spec, { aspectRatio: "16:9", width: 1280 });
+    const image = createVisualAnchorImage(spec, { aspectRatio: "16:9", width: 1280 });
     assert.equal(image.format, "svg", `${spec.template} should export an SVG image`);
     assert.equal(image.width, 1280, `${spec.template} should honor requested width`);
     assert(image.height > 0, `${spec.template} should export a positive cropped height`);
@@ -351,54 +380,119 @@ function testTemplateLayoutDefaults() {
     },
   });
   assert.equal(chooseTemplateLayout(spec), "16:9");
-  const image = createHandDrawnDiagramImage(spec, { width: 1600 });
+  const image = createVisualAnchorImage(spec, { width: 1600 });
   assert.equal(image.width, 1600);
   assert(image.height > 0);
   const crop = parseViewBox(image.svg);
   assert(crop.w > 0 && crop.h > 0);
   assert(crop.w < 1600 && crop.h < 900);
-  assert.throws(() => createHandDrawnDiagramImage(spec, { aspectRatio: "9:16", width: 900 }), /Unsupported diagram aspectRatio: 9:16/);
+  assert.throws(() => createVisualAnchorImage(spec, { aspectRatio: "9:16", width: 900 }), /Unsupported diagram aspectRatio: 9:16/);
 }
 
 function testGeneratedCaseMatrixCoverage() {
   assert(generatedCaseMatrix.length >= 200, "generated case matrix should provide at least 10 variants per template");
   const byTemplate = new Map();
+  const roughCases = [];
+  const fixedCases = [];
   generatedCaseMatrix.forEach((spec) => {
-    validateHandDrawnDiagramSpec(spec);
-    const list = byTemplate.get(spec.template) || [];
-    list.push(spec);
-    byTemplate.set(spec.template, list);
+    validateVisualAnchorSpec(spec);
+    const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" });
+    if (renderPath === "rough_svg") {
+      roughCases.push(spec);
+      const list = byTemplate.get(spec.template) || [];
+      list.push(spec);
+      byTemplate.set(spec.template, list);
+    } else {
+      fixedCases.push({ spec, renderPath });
+    }
   });
 
-  assert.equal(byTemplate.size, 20, "generated matrix should cover every base template");
+  assert.equal(byTemplate.size, 20, "generated matrix should cover every rough-svg base template");
   byTemplate.forEach((specs, template) => {
     assert(specs.length >= 10, `${template} should have at least 10 variants`);
     specs.forEach((spec) => assert.equal(spec.render_options?.aspectRatio, DEFAULT_LAYOUT, `${template} should use the chosen default layout`));
   });
+  assert(roughCases.length >= 200, "rough-svg case matrix should still provide at least 10 variants per rough template");
+  assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Evidence" && renderPath === "evidence"), "matrix should include a fixed-rule Evidence case");
+  assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Matrix" && spec.template === "table" && renderPath === "ppt_native"), "matrix should include a fixed-rule native table case");
 
   const spotChecks = [
-    "horizontal_process_10",
+    "process_10",
     "dual_loop_10",
     "layered_architecture_10",
     "hub_spoke_network_10",
-    "grouped_bar_chart_10",
+    "bar_chart_10",
   ];
   spotChecks.forEach((id) => {
     const spec = generatedCaseMatrix.find((entry) => entry.id === id);
     assert(spec, `matrix should include ${id}`);
-    const image = createHandDrawnDiagramImage(spec, spec.render_options);
+    const image = createVisualAnchorImage(spec, spec.render_options);
     assert.equal(image.format, "svg");
     assert(image.svg.startsWith("<svg"), `${id} should render svg markup`);
   });
 }
 
-testImageContractAndAspectRatio();
-testLayeredArchitectureIsDataDriven();
-testTreeIsDataDriven();
-testInputsAreNotSilentlyTruncated();
-testValidatorRejectsDroppedRelationships();
-testAllVisualBaseTemplatesExportImages();
-testTemplateLayoutDefaults();
-testGeneratedCaseMatrixCoverage();
+async function testNativeNetworkUsesPowerPointSafeExtents() {
+  const pptx = createHuaweiDeck({ title: "native network regression" });
+  const slide = pptx.addSlide();
+  renderVisualAnchorPptNative(slide, baseSpec({
+    id: "native_network_regression",
+    kind: "Network",
+    template: "hub_spoke_network",
+    claim: "PowerPoint 不能接受负数 ext。",
+    visual_spec: {
+      hub: { id: "hub", label: "中心" },
+      nodes: [
+        { id: "top", label: "上方" },
+        { id: "right", label: "右侧" },
+        { id: "bottom", label: "下方" },
+        { id: "left", label: "左侧" },
+      ],
+      edges: [["hub", "top"], ["hub", "right"], ["hub", "bottom"], ["hub", "left"]],
+      highlight: "left",
+    },
+  }), { x: 0.7, y: 1.1, w: 7.5, h: 4.7 });
+  const buffer = await pptx.write({ outputType: "nodebuffer" });
+  const zip = await JSZip.loadAsync(buffer);
+  const slideXml = await zip.files["ppt/slides/slide1.xml"].async("string");
+  const negativeExtents = [...slideXml.matchAll(/<a:ext cx="(-?\d+)" cy="(-?\d+)"/g)]
+    .filter((match) => Number(match[1]) < 0 || Number(match[2]) < 0);
+  assert.deepStrictEqual(negativeExtents, [], "ppt_native network connectors must not emit negative extents");
+}
 
-console.log("diagram helper contract tests passed");
+async function main() {
+  testImageContractAndAspectRatio();
+  testLayeredArchitectureIsDataDriven();
+  testTreeIsDataDriven();
+  testInputsAreNotSilentlyTruncated();
+  testValidatorRejectsDroppedRelationships();
+  testAllVisualBaseTemplatesExportImages();
+  testTemplateLayoutDefaults();
+  testGeneratedCaseMatrixCoverage();
+  await testNativeNetworkUsesPowerPointSafeExtents();
+  testRendererIsRuntimeOnly();
+
+  console.log("visual anchor helper contract tests passed");
+}
+
+function testRendererIsRuntimeOnly() {
+  assert.equal(getVisualAnchorRenderer({}), "rough_svg");
+  assert.equal(getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
+  assert.throws(() => getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "auto" }), /Unsupported HW_VISUAL_ANCHOR_RENDERER/);
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { categories: ["A"], series: [{ name: "S", values: [1] }] } }), { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png" }, visual_spec: undefined }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "evidence");
+  assert.throws(() => validateVisualAnchorSpec(baseSpec({ renderer: "rough_svg" })), /renderer is a runtime setting/);
+  assert.throws(() => validateVisualAnchorSpec({ id: "old", title: "Old", claim: "旧接口。", intent: "Quantity", template: "bar_chart", visual_spec: {} }), /Use kind instead/);
+  const svgPolicySpec = baseSpec({ visual_spec: { nodes: ["A", "B"], edges: [["A", "B"]], labels: { A: "起点", B: "终点" }, highlight: "B" } });
+  const previousRenderer = process.env.HW_VISUAL_ANCHOR_RENDERER;
+  process.env.HW_VISUAL_ANCHOR_RENDERER = "ppt_native";
+  assert.throws(() => createVisualAnchorSvg(svgPolicySpec), /not rough_svg SVG export/);
+  assert.throws(() => renderVisualAnchorRoughSvg(svgPolicySpec), /not rough_svg/);
+  process.env.HW_VISUAL_ANCHOR_RENDERER = previousRenderer;
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

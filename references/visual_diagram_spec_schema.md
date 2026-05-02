@@ -1,275 +1,249 @@
-# Visual Diagram Spec Schema
+# Visual Anchor Spec Schema
 
-Use this reference after `references/visual_diagram_rules.md` has selected `visual_strategy: "self_draw"` and renderer `rough_svg`.
+Use this reference after `references/visual_diagram_rules.md` has selected a `visual_anchor.kind` and `visual_anchor.template`.
 
-The renderer is deterministic and exports an SVG image anchor, not a PPT slide. It does not infer missing relationships from prose, so the diagram spec must contain explicit nodes, edges, labels, highlights, and annotations.
+The renderer is not part of the spec. Code chooses rough SVG or PPT native from `HW_VISUAL_ANCHOR_RENDERER`, with fixed overrides for `Evidence` and native tables.
 
-## Common Fields
+## Contents
+
+- [Common Shape](#common-shape)
+- [Quantity](#quantity)
+- [Sequence](#sequence)
+- [Loop](#loop)
+- [Hierarchy](#hierarchy)
+- [Matrix](#matrix)
+- [Network](#network)
+- [Evidence](#evidence)
+
+## Common Shape
 
 ```json
 {
   "id": "stable_file_safe_id",
-  "title": "Short diagram title",
-  "intent": "Hierarchy",
-  "template": "tree",
+  "title": "Short review title",
   "claim": "一句中文核心观点。",
-  "scenario": "Optional user-like request for review context.",
+  "kind": "Quantity",
+  "template": "bar_chart",
   "visual_spec": {}
 }
 ```
 
 Required common fields:
 
-- `id`: stable id used for filenames.
-- `title`: short metadata title for filenames/review context; it is not rendered inside the diagram image by default.
-- `intent`: one of `Quantity`, `Sequence`, `Loop`, `Hierarchy`, `Matrix`, `Network`.
-- `template`: one supported Rough SVG template.
-- `claim`: one concise Chinese sentence for PPT/page-level context; it is not rendered inside the diagram image by default.
-- `visual_spec`: template-specific structure.
+- `id`
+- `title`
+- `claim`
+- `kind`: `Evidence`, `Quantity`, `Sequence`, `Loop`, `Hierarchy`, `Matrix`, or `Network`
+- `template`
 
-Supported Rough SVG base templates. Each listed template should have a clear visual difference:
+For all conceptual anchors except `Evidence`, include `visual_spec`. For `Evidence`, include `source`.
 
-- Quantity: `grouped_bar_chart`, `line_chart`, `donut_proportion_chart`, `heatmap`.
-- Sequence: `horizontal_process`, `vertical_process`, `timeline`, `swimlane`.
-- Loop: `closed_loop`, `dual_loop`, `spiral_iteration_ladder`.
-- Hierarchy: `tree`, `layered_architecture`, `pyramid_capability_stack`.
-- Matrix: `quadrant_matrix`, `capability_matrix`.
-- Network: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`.
+Do not output `renderer`, `visual_strategy`, `intent`, or `visual_spec.annotation`.
 
-Semantic variants that do not change the visual form should not be added as base templates. Copy and customize the closest renderer in the deck script when a slide needs a one-off variant.
+`title` and `claim` are metadata for planning, manifest review, and PPT composition. They are not rendered inside generated SVG images. Standalone captions, figure legends, source notes, and explanatory paragraphs belong in editable PPT text boxes or supporting cards, not inside `visual_spec`.
 
-Canvas options are passed to the helper, but the maintained path is now template-selected layout rather than arbitrary ratio expansion:
+## Quantity
 
-```js
-createHandDrawnDiagramImage(spec, { width: 1600 })
-writeHandDrawnDiagramImage(spec, ".tmp/diagram_component_smoke", { width: 1600 })
-```
-
-Maintained layout presets:
-
-- `16:9`
-- `1:1`
-
-`9:16` is no longer maintained. The default regression matrix currently pins every reusable diagram template to its chosen default layout instead of stretching the same scene across multiple aspect ratios.
-
-Keep generated visible text mostly Chinese. Technical acronyms such as `Agent Gateway`, `API`, `Archive`, `workflow`, and model names may stay in English when they are clearer.
-
-## Template: layered_architecture
-
-Use for layered systems, architecture stacks, side modules, and cross-layer flows.
+### `data_cards`
 
 ```json
 {
-  "id": "layered_architecture",
-  "title": "Hand-Drawn Layered AI Agent Architecture",
-  "intent": "Hierarchy",
-  "template": "layered_architecture",
-  "claim": "Agent 系统的稳定性来自网关、工具编排、记忆检索、模型服务和观测链路的分层协同。",
+  "kind": "Quantity",
+  "template": "data_cards",
   "visual_spec": {
-    "layers": [
-      { "id": "entry", "label": "用户", "items": ["用户"] },
-      { "id": "clients", "label": "入口层", "items": ["Web", "App", "API"] },
-      { "id": "gateway", "label": "接入层", "items": ["Agent Gateway"] },
-      { "id": "orchestration", "label": "编排层", "items": ["工具编排", "记忆检索"] },
-      { "id": "runtime", "label": "运行层", "items": ["模型服务", "任务队列"] }
+    "cards": [
+      { "id": "roi", "label": "ROI 提升", "value": "42", "unit": "%", "note": "季度环比" },
+      { "id": "cost", "label": "成本下降", "value": "18", "unit": "%", "note": "资源节省" }
     ],
-    "side_modules": ["服务发现", "链路追踪", "权限审计"],
-    "edges": [["用户", "Web"], ["Web", "Agent Gateway"]]
+    "highlight": "roi"
   }
 }
 ```
 
-The implementation is data-driven: all layer items and edges must come from `visual_spec`. Unknown edge endpoints are rejected by validation instead of being silently dropped.
-
-## Template: grouped_bar_chart
-
-Use for small benchmark comparisons, before/after comparisons, and category comparisons where numeric evidence is the main message.
+### `bar_chart` / `line_chart`
 
 ```json
 {
-  "id": "benchmark_grouped_bars",
-  "title": "Benchmark Improvement Bars",
-  "intent": "Quantity",
-  "template": "grouped_bar_chart",
-  "claim": "DGM agent 在不同基座模型上都显著高于 Base agent，收益不是单模型偶然现象。",
+  "kind": "Quantity",
+  "template": "bar_chart",
   "visual_spec": {
     "y_label": "SWE-bench (%)",
     "categories": ["o3-mini", "Claude 3.5", "Claude 3.7"],
     "series": [
-      { "name": "Base agent", "values": [23.0, 20.0, 19.0], "color": "gray" },
-      { "name": "DGM agent", "values": [33.0, 50.0, 59.5], "color": "red" }
+      { "name": "Base agent", "values": [23.0, 20.0, 19.0] },
+      { "name": "DGM agent", "values": [33.0, 50.0, 59.5] }
     ],
-    "highlight": { "category": "Claude 3.7", "series": "DGM agent" },
-    "annotation": "跨模型迁移仍保留收益，说明改进落在工作流层。"
+    "highlight": { "category": "Claude 3.7", "series": "DGM agent" }
   }
 }
 ```
 
 Rules:
 
-- Use as many categories and series as the claim requires, while keeping labels short enough to remain readable.
-- All series must have the same number of values as categories.
-- Use `highlight` for the most important bar, not for every improved value.
-- For dense or exact business charts, prefer source charts or deck-level native charts; use this template when a numeric comparison also needs hand-drawn visual character.
+- All series must match category count.
+- Use `highlight` for the main value, not every improved value.
 
-## Template: tree
-
-Use for archive/search/evolution trees with highlighted terminal nodes.
+### `proportion_chart`
 
 ```json
 {
-  "id": "archive_evolution_tree",
-  "title": "Archive Evolution Tree",
-  "intent": "Hierarchy",
-  "template": "tree",
-  "claim": "Archive 通过保留分支，让暂时低分节点也可能成为未来高分节点的踏脚石。",
+  "kind": "Quantity",
+  "template": "proportion_chart",
   "visual_spec": {
-    "nodes": ["0", "6", "12", "24", "31", "44", "56", "79"],
-    "edges": [["0", "6"], ["0", "12"], ["6", "24"], ["24", "44"], ["44", "79"]],
-    "labels": { "0": "20%", "6": "26%", "12": "23%", "24": "31%", "44": "38%", "79": "50%" },
-    "highlight": "79",
-    "annotation": "所有节点保留非零选择概率，旧分支不会被过早丢弃。"
+    "total_label": "流量占比",
+    "segments": [
+      { "label": "搜索", "value": 52 },
+      { "label": "推荐", "value": 33 },
+      { "label": "直达", "value": 15 }
+    ],
+    "highlight": "推荐"
   }
 }
 ```
 
-Rules:
+### `heatmap`
 
-- Every node must have a label.
-- `highlight` must be one of the nodes.
-- Edges should form a readable shallow tree. Larger trees are supported, but the slide author should decide whether a dense tree should be split or simplified.
-- Use short labels. Put explanation in `annotation`, not inside nodes.
-
-## Template: closed_loop
-
-Use for feedback cycles, self-improvement loops, operating flywheels, and iterative workflows.
+Use for numeric values across two dimensions. It can be `Quantity` when cell values are the message, or `Matrix` when coverage/classification is the message.
 
 ```json
 {
-  "id": "self_improvement_loop",
-  "title": "Self-Improvement Loop",
-  "intent": "Loop",
+  "kind": "Quantity",
+  "template": "heatmap",
+  "visual_spec": {
+    "rows": ["安全", "效率", "成本"],
+    "columns": ["方案A", "方案B", "方案C"],
+    "values": [[0.2, 0.7, 0.4], [0.8, 0.5, 0.3], [0.3, 0.6, 0.9]],
+    "highlight": { "row": "成本", "column": "方案C" }
+  }
+}
+```
+
+## Sequence
+
+### `process`
+
+```json
+{
+  "kind": "Sequence",
+  "template": "process",
+  "visual_spec": {
+    "steps": [
+      { "id": "request", "label": "需求输入", "note": "澄清目标" },
+      { "id": "plan", "label": "任务规划", "note": "拆分步骤" },
+      { "id": "review", "label": "规则校验", "note": "验证质量" }
+    ],
+    "highlight": "review",
+    "orientation": "horizontal"
+  }
+}
+```
+
+`orientation` may be `horizontal` or `vertical`; omit it for horizontal.
+
+### `timeline`
+
+Same as `process`, with `time` on each step.
+
+### `swimlane`
+
+```json
+{
+  "kind": "Sequence",
+  "template": "swimlane",
+  "visual_spec": {
+    "lanes": [
+      { "id": "biz", "label": "业务", "steps": [{ "id": "b1", "label": "提出目标" }] },
+      { "id": "agent", "label": "Agent", "steps": [{ "id": "a1", "label": "执行验证" }] }
+    ],
+    "highlight": "a1"
+  }
+}
+```
+
+## Loop
+
+### `closed_loop`
+
+```json
+{
+  "kind": "Loop",
   "template": "closed_loop",
-  "claim": "自我改进不是单次 prompt 优化，而是可评测、可归档、可继续选择的闭环。",
   "visual_spec": {
-    "steps": [
-      { "id": "inspect", "label": "分析失败", "note": "读取日志与错误模式" },
-      { "id": "propose", "label": "提出改进", "note": "生成工具或流程改动" },
-      { "id": "edit", "label": "修改自身", "note": "改 workflow / tools / prompt" },
-      { "id": "eval", "label": "基准评测", "note": "验证收益与回归" },
-      { "id": "archive", "label": "归档选择", "note": "保留可继续演化版本" }
-    ],
     "center": "Self-improving Agent",
-    "highlight": "archive"
-  }
-}
-```
-
-Rules:
-
-- Use 3 or more steps; 5 is the visual sweet spot, but extra steps are rendered rather than truncated.
-- Step labels should be 2 to 6 Chinese characters when possible.
-- Step notes should be short. Long prose belongs in nearby interpretation text, not inside the loop.
-- `highlight` should be a step id, usually the step that closes the mechanism.
-
-## Template: horizontal_sequence
-
-Use for ordered workflows, pipelines, delivery phases, and quality gates.
-
-```json
-{
-  "id": "agent_workflow_sequence",
-  "title": "Agent Workflow Sequence",
-  "intent": "Sequence",
-  "template": "horizontal_sequence",
-  "claim": "稳定的 Agent 交付链路来自可观察、可评审、可回滚的阶段化流程。",
-  "visual_spec": {
     "steps": [
-      { "id": "request", "label": "需求输入", "note": "澄清目标与约束" },
-      { "id": "plan", "label": "任务规划", "note": "拆分步骤与证据" },
-      { "id": "execute", "label": "工具执行", "note": "生成代码或文档" },
-      { "id": "review", "label": "规则校验", "note": "导出与视觉检查" },
-      { "id": "deliver", "label": "交付归档", "note": "保留产物与结论" }
+      { "id": "inspect", "label": "分析失败", "note": "读取日志" },
+      { "id": "edit", "label": "修改自身", "note": "改工具" },
+      { "id": "eval", "label": "基准评测", "note": "验证收益" }
     ],
-    "highlight": "review"
+    "highlight": "eval"
   }
 }
 ```
 
-Rules:
+`dual_loop` uses `loops`; `spiral_iteration_ladder` uses `center` and `steps`.
 
-- Use 2 or more steps. Long sequences are rendered with narrower cards rather than silently truncating steps.
-- Keep each `label` short; put one compact detail in `note`.
-- Use `highlight` for the quality gate, decision point, or bottleneck.
+## Hierarchy
 
-## Template: quadrant_matrix
+Supported templates:
 
-Use for two-axis positioning, strategy choices, risk/priority maps, and trade-off comparisons.
+- `tree`: nodes, edges, labels, highlight.
+- `layered_architecture`: layers, side_modules, edges.
+- `capability_stack`: levels, highlight.
+
+Edges must reference known node/item ids. Unknown endpoints are validation errors.
+
+## Matrix
+
+### `table`
+
+Tables are always native PPT tables. Use for generated or transcribed structured comparisons.
 
 ```json
 {
-  "id": "strategy_choice_matrix",
-  "title": "Strategy Choice Matrix",
-  "intent": "Matrix",
-  "template": "quadrant_matrix",
-  "claim": "渲染路径选择取决于手绘表现力与工程可控性的平衡。",
+  "kind": "Matrix",
+  "template": "table",
   "visual_spec": {
-    "x_axis": { "left": "低可控", "right": "高可控", "label": "工程可控性" },
-    "y_axis": { "bottom": "弱手绘", "top": "强手绘", "label": "视觉灵魂" },
-    "items": [
-      { "label": "原图", "x": 0.34, "y": 0.84, "note": "证据最强" },
-      { "label": "Rough SVG", "x": 0.76, "y": 0.78, "note": "自绘主路径" },
-      { "label": "文本卡片", "x": 0.42, "y": 0.30, "note": "仅作辅助" }
-    ],
-    "highlight": "Rough.js"
+    "rows": [
+      ["能力", "当前", "目标"],
+      ["检索", "人工", "自动"]
+    ]
   }
 }
 ```
 
-Rules:
+### `quadrant_matrix` / `capability_matrix`
 
-- `x` and `y` are normalized numbers from `0` to `1`.
-- Use 2 or more items. Dense matrices are supported, but short labels are mandatory for readability.
-- Keep quadrant labels short. The matrix should communicate position, not prose.
+Use the same fields as the existing rough SVG implementations:
 
-## Template: hub_spoke_network
+- `quadrant_matrix`: `x_axis`, `y_axis`, `items`, optional `highlight`.
+- `capability_matrix`: `rows`, `columns`, `values`, optional `highlight`.
 
-Use only when the relationship is genuinely many-to-many or collaborative. Prefer hierarchy or sequence if those simpler intents fit.
+## Network
+
+Supported templates:
+
+- `hub_spoke_network`: `hub`, `nodes`, `edges`.
+- `dependency_graph`
+- `module_interaction_map`
+- `causal_influence_graph`
+
+Graph templates require explicit `nodes` and `edges`. Unknown endpoints are validation errors.
+
+## Evidence
+
+Evidence has no `visual_spec` requirement:
 
 ```json
 {
-  "id": "agent_tool_network",
-  "title": "Agent Tool Network",
-  "intent": "Network",
-  "template": "hub_spoke_network",
-  "claim": "Agent 能力不是单点工具，而是模型、记忆、代码、浏览器和评审环节的协同网络。",
-  "visual_spec": {
-    "hub": { "id": "agent", "label": "Agent" },
-    "nodes": [
-      { "id": "model", "label": "模型推理", "note": "生成与判断" },
-      { "id": "memory", "label": "记忆检索", "note": "上下文复用" }
-    ],
-    "edges": [["agent", "model"], ["agent", "memory"], ["memory", "model"]],
-    "highlight": "memory"
+  "id": "source_figure_arch",
+  "title": "Source Architecture Figure",
+  "claim": "原始架构图是本页的核心证据。",
+  "kind": "Evidence",
+  "template": "source_figure",
+  "source": {
+    "path": ".tmp/source_figures/figure_3.png",
+    "caption": "Figure 3: System architecture",
+    "treatment": "crop_zoom_annotate"
   }
 }
 ```
-
-Rules:
-
-- Use 2 or more outer nodes. Dense networks are supported, but cross-links should stay sparse.
-- Keep cross-links sparse. More than two non-hub links usually becomes messy.
-- The hub should remain the dominant visual anchor.
-
-## Validation
-
-Run:
-
-```powershell
-node scripts\test_diagram_helpers.js
-node scripts\verify_diagram_components.js
-```
-
-The smoke script validates required fields before rendering and writes generated SVG image anchors plus a manifest under `.tmp/diagram_component_smoke`. Full PPT export happens only after a deck generator embeds the image into a standard content slide.
-
-Default regression coverage now comes from [visual_diagram_test_cases.js](</D:/Agent Repo/Mozhi-s-AgentSkills/ppt_skills/hw-ppt-gen/references/visual_diagram_test_cases.js>), which programmatically expands each base template into 10 variants across element-count changes and differentiated business scenes while keeping each template on its chosen default layout.

@@ -3,7 +3,7 @@ const path = require("path");
 const crypto = require("crypto");
 
 function usage() {
-  console.error("Usage: node scripts/prepare_reference_review.js --out .tmp/<deck>_reference_review.json");
+  console.error("Usage: node scripts/pptx/prepare_reference_review.js --out .tmp/<deck>_reference_review.json");
 }
 
 function parseArgs(argv) {

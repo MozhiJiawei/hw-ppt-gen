@@ -1,6 +1,9 @@
 const fs = require("fs");
 const path = require("path");
+const pptxgen = require("pptxgenjs");
 const rough = require("roughjs");
+
+const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 
 const DIAGRAM_STYLE = Object.freeze({
   width: 1600,
@@ -38,25 +41,21 @@ const DIAGRAM_STYLE = Object.freeze({
 });
 
 const TEMPLATE_LAYOUTS = Object.freeze({
-  grouped_bar_chart: "16:9",
+  bar_chart: "16:9",
   line_chart: "16:9",
-  donut_proportion_chart: "16:9",
-  donut_chart: "16:9",
   proportion_chart: "16:9",
+  data_cards: "16:9",
   heatmap: "16:9",
   layered_architecture: "16:9",
   tree: "16:9",
-  pyramid_capability_stack: "16:9",
-  pyramid: "16:9",
   capability_stack: "16:9",
   closed_loop: "16:9",
   dual_loop: "16:9",
   spiral_iteration_ladder: "16:9",
-  horizontal_sequence: "16:9",
-  horizontal_process: "16:9",
-  vertical_process: "16:9",
+  process: "16:9",
   timeline: "16:9",
   swimlane: "16:9",
+  table: "16:9",
   quadrant_matrix: "16:9",
   capability_matrix: "16:9",
   hub_spoke_network: "16:9",
@@ -66,7 +65,7 @@ const TEMPLATE_LAYOUTS = Object.freeze({
 });
 
 function chooseTemplateLayout(spec) {
-  const template = spec?.template || spec?.intent;
+  const template = spec?.template || spec?.kind;
   return TEMPLATE_LAYOUTS[template] || "16:9";
 }
 
@@ -74,7 +73,7 @@ function normalizeExportOptions(spec, options = {}) {
   if (options.aspectRatio && options.aspectRatio !== "16:9") {
     throw new Error(`Unsupported diagram aspectRatio: ${options.aspectRatio}. Reusable diagram exports use fixed template layouts.`);
   }
-  const template = spec?.template || spec?.intent;
+  const template = spec?.template || spec?.kind;
   const width = options.width ?? options.canvas?.width ?? null;
   const height = options.height ?? options.canvas?.height ?? null;
   if (width != null && (!Number.isFinite(Number(width)) || Number(width) <= 0)) {
@@ -735,7 +734,6 @@ function drawGroupedBarChart(spec) {
     seed: 840,
   });
   canvas.add(svgText(1320, 532, "跨模型收益", { size: 29, weight: 900, fill: colors.red }));
-  canvas.add(svgText(1320, 594, wrapCjk(visual.annotation || "", 10), { size: 21, weight: 600, fill: colors.ink, lineHeight: 26 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -864,6 +862,36 @@ function drawHeatmap(spec) {
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
+function drawDataCards(spec) {
+  const colors = DIAGRAM_STYLE.color;
+  const { rc } = roughSvg(730);
+  const canvas = createCanvas();
+  const visual = spec.visual_spec || {};
+  const cards = visual.cards || [];
+  const cols = Math.min(4, Math.max(1, cards.length || 1));
+  const gap = 36;
+  const cardW = (1280 - gap * (cols - 1)) / cols;
+  const cardH = 300;
+  const x0 = 160;
+  const y = 270;
+  cards.forEach((card, idx) => {
+    const x = x0 + idx * (cardW + gap);
+    const highlighted = card.id === visual.highlight || card.label === visual.highlight;
+    rect(canvas, rc, x, y, cardW, cardH, {
+      fill: highlighted ? colors.redPale : colors.gray,
+      stroke: highlighted ? colors.red : colors.lineDark,
+      strokeWidth: highlighted ? 3 : 2,
+      fillStyle: highlighted ? "cross-hatch" : "hachure",
+      seed: 740 + idx,
+    });
+    canvas.add(svgText(x + cardW / 2, y + 78, card.value, { size: 58, weight: 850, fill: highlighted ? colors.red : colors.ink }));
+    canvas.add(svgText(x + cardW / 2, y + 138, card.unit || "", { size: 22, weight: 700, fill: colors.muted }));
+    canvas.add(svgText(x + cardW / 2, y + 194, wrapCjk(card.label || "", 8), { size: 27, weight: 850, fill: colors.ink, lineHeight: 31 }));
+    canvas.add(svgText(x + cardW / 2, y + 250, wrapCjk(card.note || "", 11), { size: 19, fill: colors.muted, lineHeight: 23 }));
+  });
+  return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+}
+
 function drawArchiveEvolutionTree(spec) {
   const colors = DIAGRAM_STYLE.color;
   const { rc } = roughSvg(202);
@@ -912,7 +940,6 @@ function drawArchiveEvolutionTree(spec) {
   canvas.add(svgText(1130, 365, visual.callout_title || "分支保留策略", { size: 32, weight: 900, fill: colors.red }));
   canvas.add(svgText(1130, 420, wrapCjk(visual.callout || "弱分支仍可能成为高分路径", 12).slice(0, 2), { size: 29, weight: 700, lineHeight: 36 }));
   canvas.add(svgText(1130, 510, wrapCjk(scorePath, 18).slice(0, 3), { size: 25, weight: 800, lineHeight: 31 }));
-  canvas.add(svgText(960, 622, wrapCjk(visual.annotation || "", 22).slice(0, 3), { size: 23, fill: colors.muted, weight: 500, anchor: "start", lineHeight: 28 }));
   if (highlightPos) line(canvas, rc, 900, 655, highlightPos[0] + 52, highlightPos[1] - 16, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 330 });
   if (highlightPos) canvas.add(`<path d="M${highlightPos[0] - 56} ${highlightPos[1] + 42} C${highlightPos[0] - 5} ${highlightPos[1] + 20} ${highlightPos[0] + 45} ${highlightPos[1] + 24} ${highlightPos[0] + 84} ${highlightPos[1] + 55}" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
@@ -1414,39 +1441,67 @@ function drawHubSpokeNetwork(spec) {
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
-function renderHandDrawnDiagram(spec, options = {}) {
-  validateHandDrawnDiagramSpec(spec);
+function getVisualAnchorRenderer(env = process.env) {
+  const renderer = env.HW_VISUAL_ANCHOR_RENDERER || "rough_svg";
+  if (!["rough_svg", "ppt_native"].includes(renderer)) {
+    throw new Error(`Unsupported HW_VISUAL_ANCHOR_RENDERER: ${renderer}. Use rough_svg or ppt_native.`);
+  }
+  return renderer;
+}
+
+function resolveVisualAnchorRenderPath(spec, env = process.env) {
+  validateVisualAnchorSpec(spec);
+  if (spec.kind === "Evidence") return "evidence";
+  if (spec.kind === "Matrix" && spec.template === "table") return "ppt_native";
+  return getVisualAnchorRenderer(env);
+}
+
+function renderVisualAnchorRoughSvg(spec, options = {}) {
+  validateVisualAnchorSpec(spec);
+  const renderPath = resolveVisualAnchorRenderPath(spec);
+  if (renderPath !== "rough_svg") {
+    throw new Error(`Visual anchor ${spec.kind}/${spec.template} is configured for ${renderPath}, not rough_svg.`);
+  }
   const layout = spec.layout || chooseTemplateLayout(spec);
   const exportOptions = normalizeExportOptions(spec, options);
   const renderSpec = { ...spec, layout, _canvasOptions: { _exportOptions: exportOptions, _spec: spec } };
-  const template = spec.template || spec.intent;
-  if (template === "grouped_bar_chart") return drawGroupedBarChart(renderSpec);
+  const template = spec.template || spec.kind;
+  if (template === "data_cards") return drawDataCards(renderSpec);
+  if (template === "bar_chart") return drawGroupedBarChart(renderSpec);
   if (template === "line_chart") return drawLineChart(renderSpec);
-  if (template === "donut_proportion_chart" || template === "donut_chart" || template === "proportion_chart") return drawDonutProportionChart(renderSpec);
+  if (template === "proportion_chart") return drawDonutProportionChart(renderSpec);
   if (template === "heatmap") return drawHeatmap(renderSpec);
   if (template === "layered_architecture") return drawLayeredArchitecture(renderSpec);
   if (template === "tree") return drawArchiveEvolutionTree(renderSpec);
-  if (template === "pyramid_capability_stack" || template === "pyramid" || template === "capability_stack") return drawPyramidCapabilityStack(renderSpec);
+  if (template === "capability_stack") return drawPyramidCapabilityStack(renderSpec);
   if (template === "closed_loop") return drawSelfImprovementLoop(renderSpec);
   if (template === "dual_loop") return drawDualLoop(renderSpec);
   if (template === "spiral_iteration_ladder") return drawSpiralIterationLadder(renderSpec);
-  if (template === "horizontal_sequence" || template === "horizontal_process") return drawHorizontalSequence(renderSpec);
-  if (template === "vertical_process") return drawVerticalProcess(renderSpec);
+  if (template === "process" && renderSpec.visual_spec?.orientation === "vertical") return drawVerticalProcess(renderSpec);
+  if (template === "process") return drawHorizontalSequence(renderSpec);
   if (template === "timeline") return drawTimeline(renderSpec);
   if (template === "swimlane") return drawSwimlane(renderSpec);
   if (template === "quadrant_matrix") return drawQuadrantMatrix(renderSpec);
   if (template === "capability_matrix") return drawMatrixGrid(renderSpec);
   if (template === "hub_spoke_network") return drawHubSpokeNetwork(renderSpec);
   if (template === "dependency_graph" || template === "module_interaction_map" || template === "causal_influence_graph") return drawGenericNetworkGraph(renderSpec);
-  throw new Error(`Unsupported hand-drawn diagram template: ${template}`);
+  throw new Error(`Unsupported rough_svg visual anchor template: ${template}`);
 }
 
-function createHandDrawnDiagramSvg(spec, options = {}) {
-  return renderHandDrawnDiagram(spec, options).svg;
+function createVisualAnchorSvg(spec, options = {}) {
+  const renderPath = resolveVisualAnchorRenderPath(spec);
+  if (renderPath !== "rough_svg") {
+    throw new Error(`Visual anchor ${spec.kind}/${spec.template} is configured for ${renderPath}, not rough_svg SVG export.`);
+  }
+  return renderVisualAnchorRoughSvg(spec, options).svg;
 }
 
-function createHandDrawnDiagramImage(spec, options = {}) {
-  const rendered = renderHandDrawnDiagram(spec, options);
+function createVisualAnchorImage(spec, options = {}) {
+  const renderPath = resolveVisualAnchorRenderPath(spec);
+  if (renderPath !== "rough_svg") {
+    throw new Error(`Visual anchor ${spec.kind}/${spec.template} is configured for ${renderPath}, not rough_svg image export.`);
+  }
+  const rendered = renderVisualAnchorRoughSvg(spec, options);
   return {
     format: "svg",
     mimeType: "image/svg+xml",
@@ -1456,19 +1511,350 @@ function createHandDrawnDiagramImage(spec, options = {}) {
   };
 }
 
-function validateHandDrawnDiagramSpec(spec) {
+function valueAt(values, row, col) {
+  return Array.isArray(values?.[row]) ? values[row][col] : "";
+}
+
+function nativeText(slide, text, options = {}) {
+  slide.addText(String(text ?? ""), {
+    fontFace: "Microsoft YaHei",
+    fontSize: 11,
+    color: "333333",
+    margin: 0.04,
+    breakLine: false,
+    fit: "shrink",
+    ...options,
+  });
+}
+
+function nativeRect(slide, x, y, w, h, options = {}) {
+  slide.addShape(ShapeType.rect, {
+    x,
+    y,
+    w,
+    h,
+    fill: { color: options.fill || "F7F7F7" },
+    line: { color: options.stroke || "BFBFBF", width: options.strokeWidth || 0.5 },
+  });
+}
+
+function nativeLine(slide, x1, y1, x2, y2, options = {}) {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  slide.addShape(ShapeType.line, {
+    x: Math.min(x1, x2),
+    y: Math.min(y1, y2),
+    w: Math.abs(dx),
+    h: Math.abs(dy),
+    flipH: dx < 0,
+    flipV: dy < 0,
+    line: {
+      color: options.color || "BFBFBF",
+      width: options.width || 0.5,
+      ...(options.endArrowType ? { endArrowType: options.endArrowType } : {}),
+    },
+  });
+}
+
+function drawNativeTable(slide, visual, area) {
+  const rows = visual.rows || [];
+  if (!rows.length) throw new Error("Matrix/table native render requires visual_spec.rows.");
+  const colCount = Math.max(...rows.map((row) => row.length), 1);
+  const rowH = Math.min(0.42, area.h / Math.max(rows.length, 1));
+  const colW = area.w / colCount;
+  rows.forEach((row, rowIdx) => {
+    row.forEach((cell, colIdx) => {
+      const x = area.x + colIdx * colW;
+      const y = area.y + rowIdx * rowH;
+      nativeRect(slide, x, y, colW, rowH, {
+        fill: rowIdx === 0 ? "C00000" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"),
+        stroke: "D9D9D9",
+      });
+      nativeText(slide, cell, {
+        x: x + 0.04,
+        y: y + 0.1,
+        w: colW - 0.08,
+        h: rowH - 0.12,
+        fontSize: rowIdx === 0 ? 9 : 8,
+        bold: rowIdx === 0 || colIdx === 0,
+        color: rowIdx === 0 ? "FFFFFF" : "333333",
+        align: "center",
+      });
+    });
+  });
+}
+
+function drawNativeEvidence(slide, spec, area) {
+  const source = spec.source || {};
+  nativeRect(slide, area.x, area.y, area.w, area.h, { fill: "FFFFFF", stroke: "C00000", strokeWidth: 0.8 });
+  const imagePath = source.path ? path.resolve(source.path) : "";
+  const imageBox = { x: area.x + 0.18, y: area.y + 0.18, w: area.w - 0.36, h: area.h - 0.92 };
+  if (imagePath && fs.existsSync(imagePath)) {
+    const dimensions = readImageDimensions(imagePath);
+    const fitted = dimensions ? fitAreaContain(imageBox, dimensions.width, dimensions.height) : imageBox;
+    slide.addImage({ path: imagePath, ...fitted });
+  } else {
+    nativeRect(slide, area.x + 0.25, area.y + 0.25, area.w - 0.5, area.h - 1.1, { fill: "F7F7F7", stroke: "D9D9D9" });
+    nativeText(slide, source.path || source.id || "原始证据", { x: area.x + 0.45, y: area.y + 0.72, w: area.w - 0.9, h: 0.32, fontSize: 12, bold: true, color: "595959", align: "center" });
+  }
+  nativeText(slide, source.caption || spec.claim, { x: area.x + 0.22, y: area.y + area.h - 0.56, w: area.w - 0.44, h: 0.2, fontSize: 10, bold: true, italic: true, color: "333333", align: "center" });
+  nativeText(slide, source.relevance ? `来源相关性：${source.relevance}` : "证据模块按来源图/表规则处理", { x: area.x + 0.22, y: area.y + area.h - 0.28, w: area.w - 0.44, h: 0.14, fontSize: 6, color: "595959", align: "center" });
+}
+
+function fitAreaContain(area, imageWidth, imageHeight) {
+  if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) return area;
+  const areaRatio = area.w / area.h;
+  const imageRatio = imageWidth / imageHeight;
+  if (imageRatio >= areaRatio) {
+    const h = area.w / imageRatio;
+    return { x: area.x, y: area.y + (area.h - h) / 2, w: area.w, h };
+  }
+  const w = area.h * imageRatio;
+  return { x: area.x + (area.w - w) / 2, y: area.y, w, h: area.h };
+}
+
+function readImageDimensions(filePath) {
+  const buffer = fs.readFileSync(filePath);
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === ".png" && buffer.length >= 24 && buffer.toString("ascii", 1, 4) === "PNG") {
+    return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+  }
+  if (ext === ".svg") {
+    const text = buffer.toString("utf8");
+    const width = Number((text.match(/\bwidth="([0-9.]+)"/) || [])[1]);
+    const height = Number((text.match(/\bheight="([0-9.]+)"/) || [])[1]);
+    if (Number.isFinite(width) && Number.isFinite(height)) return { width, height };
+    const viewBox = (text.match(/\bviewBox="([^"]+)"/) || [])[1];
+    if (viewBox) {
+      const [, , w, h] = viewBox.split(/\s+/).map(Number);
+      if (Number.isFinite(w) && Number.isFinite(h)) return { width: w, height: h };
+    }
+  }
+  return null;
+}
+
+function drawNativeDataCards(slide, visual, area) {
+  const cards = visual.cards || [];
+  const gap = 0.14;
+  const cardW = (area.w - gap * Math.max(0, cards.length - 1)) / Math.max(1, cards.length);
+  cards.forEach((card, idx) => {
+    const x = area.x + idx * (cardW + gap);
+    const highlighted = card.id === visual.highlight || card.label === visual.highlight;
+    nativeRect(slide, x, area.y, cardW, area.h, { fill: highlighted ? "FFF1EF" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF", strokeWidth: highlighted ? 1 : 0.5 });
+    nativeText(slide, card.value, { x: x + 0.08, y: area.y + 0.34, w: cardW - 0.16, h: 0.42, fontFace: "Impact", fontSize: 26, color: highlighted ? "C00000" : "333333", align: "center" });
+    nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + 0.8, w: cardW - 0.16, h: 0.18, fontSize: 9, color: "595959", align: "center" });
+    nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + 1.15, w: cardW - 0.16, h: 0.22, fontSize: 12, bold: true, align: "center" });
+    nativeText(slide, card.note || "", { x: x + 0.08, y: area.y + 1.48, w: cardW - 0.16, h: 0.22, fontSize: 9, color: "595959", align: "center" });
+  });
+}
+
+function drawNativeBarChart(slide, visual, area) {
+  const categories = visual.categories || [];
+  const series = visual.series || [];
+  const values = series.flatMap((entry) => entry.values || []).map(Number).filter(Number.isFinite);
+  const max = Math.max(...values, 1);
+  const chart = { x: area.x + 0.35, y: area.y + 0.35, w: area.w - 0.7, h: area.h - 0.85 };
+  slide.addShape(ShapeType.line, { x: chart.x, y: chart.y + chart.h, w: chart.w, h: 0, line: { color: "8C8C8C", width: 0.5 } });
+  const groupW = chart.w / Math.max(1, categories.length);
+  const barW = Math.min(0.22, groupW / Math.max(1, series.length + 1));
+  categories.forEach((category, catIdx) => {
+    series.forEach((entry, seriesIdx) => {
+      const value = Number(entry.values?.[catIdx]) || 0;
+      const h = chart.h * value / max;
+      const x = chart.x + catIdx * groupW + 0.12 + seriesIdx * (barW + 0.05);
+      const y = chart.y + chart.h - h;
+      const highlighted = visual.highlight?.category === category && visual.highlight?.series === entry.name;
+      nativeRect(slide, x, y, barW, h, { fill: highlighted ? "C00000" : "D9D9D9", stroke: highlighted ? "C00000" : "BFBFBF" });
+    });
+    nativeText(slide, category, { x: chart.x + catIdx * groupW, y: chart.y + chart.h + 0.08, w: groupW, h: 0.16, fontSize: 7, align: "center" });
+  });
+}
+
+function drawNativeLineChart(slide, visual, area) {
+  const categories = visual.categories || [];
+  const series = visual.series || [];
+  const values = series.flatMap((entry) => entry.values || []).map(Number).filter(Number.isFinite);
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const chart = { x: area.x + 0.45, y: area.y + 0.38, w: area.w - 0.9, h: area.h - 0.9 };
+  nativeRect(slide, chart.x, chart.y, chart.w, chart.h, { fill: "FFFFFF", stroke: "D9D9D9" });
+  series.forEach((entry, seriesIdx) => {
+    const points = (entry.values || []).map((value, idx) => {
+      const x = chart.x + (categories.length === 1 ? chart.w / 2 : (idx / (categories.length - 1)) * chart.w);
+      const ratio = max === min ? 0.5 : (Number(value) - min) / (max - min);
+      const y = chart.y + chart.h - ratio * chart.h;
+      return { x, y };
+    });
+    for (let i = 0; i < points.length - 1; i += 1) {
+      nativeLine(slide, points[i].x, points[i].y, points[i + 1].x, points[i + 1].y, { color: seriesIdx ? "8C8C8C" : "C00000", width: 1.2 });
+    }
+    points.forEach((point) => slide.addShape("ellipse", { x: point.x - 0.035, y: point.y - 0.035, w: 0.07, h: 0.07, fill: { color: seriesIdx ? "8C8C8C" : "C00000" }, line: { color: "FFFFFF", width: 0.2 } }));
+  });
+  categories.forEach((category, idx) => nativeText(slide, category, { x: chart.x + idx * (chart.w / Math.max(1, categories.length - 1)) - 0.25, y: chart.y + chart.h + 0.08, w: 0.5, h: 0.16, fontSize: 7, align: "center" }));
+}
+
+function drawNativeGrid(slide, visual, area) {
+  const rows = visual.rows || [];
+  const columns = visual.columns || [];
+  const cellW = area.w / Math.max(1, columns.length);
+  const cellH = area.h / Math.max(1, rows.length);
+  rows.forEach((row, rowIdx) => {
+    columns.forEach((column, colIdx) => {
+      const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
+      nativeRect(slide, area.x + colIdx * cellW, area.y + rowIdx * cellH, cellW - 0.03, cellH - 0.03, { fill: highlighted ? "FFF1EF" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"), stroke: highlighted ? "C00000" : "D9D9D9" });
+      nativeText(slide, String(valueAt(visual.values, rowIdx, colIdx)), { x: area.x + colIdx * cellW + 0.04, y: area.y + rowIdx * cellH + 0.08, w: cellW - 0.08, h: 0.18, fontSize: 9, align: "center" });
+    });
+    nativeText(slide, row, { x: area.x - 0.62, y: area.y + rowIdx * cellH + 0.08, w: 0.55, h: 0.18, fontSize: 8, align: "right" });
+  });
+  columns.forEach((column, colIdx) => nativeText(slide, column, { x: area.x + colIdx * cellW, y: area.y - 0.22, w: cellW, h: 0.16, fontSize: 8, bold: true, align: "center", color: "C00000" }));
+}
+
+function drawNativeProcess(slide, visual, area) {
+  const steps = visual.steps || [];
+  const gap = 0.16;
+  const stepW = (area.w - gap * Math.max(0, steps.length - 1)) / Math.max(1, steps.length);
+  steps.forEach((step, idx) => {
+    const x = area.x + idx * (stepW + gap);
+    const highlighted = step.id === visual.highlight;
+    nativeRect(slide, x, area.y + 0.85, stepW, 0.85, { fill: highlighted ? "C00000" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF" });
+    nativeText(slide, step.label, { x: x + 0.04, y: area.y + 1.02, w: stepW - 0.08, h: 0.2, fontSize: 11, bold: true, align: "center", color: highlighted ? "FFFFFF" : "333333" });
+    nativeText(slide, step.note || step.time || "", { x: x + 0.04, y: area.y + 1.32, w: stepW - 0.08, h: 0.16, fontSize: 7, align: "center", color: highlighted ? "FFFFFF" : "595959" });
+    if (idx < steps.length - 1) slide.addShape(ShapeType.line, { x: x + stepW, y: area.y + 1.28, w: gap, h: 0, line: { color: "8C8C8C", width: 0.6, endArrowType: "triangle" } });
+  });
+}
+
+function drawNativeLoop(slide, visual, area) {
+  const steps = visual.steps || (visual.loops || []).flatMap((loop) => loop.steps || []).slice(0, 5);
+  const cx = area.x + area.w / 2;
+  const cy = area.y + area.h / 2;
+  const radius = Math.min(area.w, area.h) * 0.34;
+  nativeText(slide, visual.center || visual.loops?.[0]?.label || "闭环", { x: cx - 0.8, y: cy - 0.16, w: 1.6, h: 0.28, fontSize: 13, bold: true, align: "center", color: "C00000" });
+  steps.forEach((step, idx) => {
+    const angle = -Math.PI / 2 + idx * (Math.PI * 2 / Math.max(1, steps.length));
+    const x = cx + Math.cos(angle) * radius - 0.55;
+    const y = cy + Math.sin(angle) * radius - 0.25;
+    nativeRect(slide, x, y, 1.1, 0.5, { fill: step.id === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: step.id === visual.highlight ? "C00000" : "BFBFBF" });
+    nativeText(slide, step.label || step, { x: x + 0.05, y: y + 0.14, w: 1, h: 0.16, fontSize: 8, bold: true, align: "center" });
+  });
+}
+
+function drawNativeHierarchy(slide, spec, area) {
+  const visual = spec.visual_spec || {};
+  if (spec.template === "capability_stack") {
+    const levels = visual.levels || [];
+    const levelH = area.h / Math.max(1, levels.length);
+    levels.forEach((level, idx) => {
+      const w = area.w - idx * 0.35;
+      const x = area.x + (area.w - w) / 2;
+      const y = area.y + area.h - (idx + 1) * levelH;
+      const highlighted = level.label === visual.highlight;
+      nativeRect(slide, x, y, w, levelH - 0.06, { fill: highlighted ? "C00000" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF" });
+      nativeText(slide, level.label, { x: x + 0.1, y: y + 0.12, w: w - 0.2, h: 0.2, fontSize: 11, bold: true, align: "center", color: highlighted ? "FFFFFF" : "333333" });
+    });
+    return;
+  }
+  const labels = spec.template === "layered_architecture" ? (visual.layers || []).map((layer) => layer.label) : (visual.nodes || []).slice(0, 8);
+  drawNativeProcess(slide, { steps: labels.map((label, idx) => ({ id: `h${idx}`, label, note: "" })), highlight: "h0" }, area);
+}
+
+function drawNativeNetwork(slide, visual, area) {
+  const nodes = visual.hub ? [visual.hub, ...(visual.nodes || [])] : (visual.nodes || []);
+  const cx = area.x + area.w / 2;
+  const cy = area.y + area.h / 2;
+  const radius = Math.min(area.w, area.h) * 0.36;
+  nodes.slice(0, 9).forEach((node, idx) => {
+    const angle = idx === 0 ? 0 : -Math.PI / 2 + (idx - 1) * (Math.PI * 2 / Math.max(1, nodes.length - 1));
+    const x = idx === 0 ? cx - 0.55 : cx + Math.cos(angle) * radius - 0.55;
+    const y = idx === 0 ? cy - 0.28 : cy + Math.sin(angle) * radius - 0.28;
+    if (idx > 0) nativeLine(slide, cx, cy, x + 0.55, y + 0.28);
+    nativeRect(slide, x, y, 1.1, 0.56, { fill: idx === 0 ? "FFF1EF" : "F7F7F7", stroke: idx === 0 ? "C00000" : "BFBFBF" });
+    nativeText(slide, node.label || node.id, { x: x + 0.05, y: y + 0.18, w: 1, h: 0.16, fontSize: 8, bold: true, align: "center" });
+  });
+}
+
+function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 11.65, h: 5.25 }) {
+  validateVisualAnchorSpec(spec);
+  const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" });
+  const visual = spec.visual_spec || {};
+  nativeRect(slide, area.x, area.y, area.w, area.h, { fill: "FFFFFF", stroke: "D9D9D9" });
+  const inner = { x: area.x + 0.55, y: area.y + 0.58, w: area.w - 1.1, h: area.h - 1.15 };
+
+  if (renderPath === "evidence") return drawNativeEvidence(slide, spec, inner);
+  if (spec.kind === "Matrix" && spec.template === "table") return drawNativeTable(slide, visual, inner);
+  if (renderPath !== "ppt_native") throw new Error(`Visual anchor ${spec.kind}/${spec.template} is configured for ${renderPath}, not ppt_native.`);
+
+  if (spec.template === "data_cards") return drawNativeDataCards(slide, visual, inner);
+  if (spec.template === "bar_chart") return drawNativeBarChart(slide, visual, inner);
+  if (spec.template === "line_chart") return drawNativeLineChart(slide, visual, inner);
+  if (spec.template === "proportion_chart") return drawNativeLoop(slide, { center: visual.total_label, steps: (visual.segments || []).map((segment, idx) => ({ id: `s${idx}`, label: segment.label })), highlight: visual.highlight }, inner);
+  if (spec.template === "heatmap" || spec.template === "capability_matrix") return drawNativeGrid(slide, visual, inner);
+  if (["process", "timeline", "swimlane"].includes(spec.template)) return drawNativeProcess(slide, visual.lanes ? { steps: visual.lanes.flatMap((lane) => lane.steps || []).slice(0, 6), highlight: visual.highlight } : visual, inner);
+  if (["closed_loop", "dual_loop", "spiral_iteration_ladder"].includes(spec.template)) return drawNativeLoop(slide, visual, inner);
+  if (["tree", "layered_architecture", "capability_stack"].includes(spec.template)) return drawNativeHierarchy(slide, spec, inner);
+  if (["hub_spoke_network", "dependency_graph", "module_interaction_map", "causal_influence_graph"].includes(spec.template)) return drawNativeNetwork(slide, visual, inner);
+  if (spec.template === "quadrant_matrix") {
+    nativeRect(slide, inner.x, inner.y, inner.w, inner.h, { fill: "FFFFFF", stroke: "8C8C8C" });
+    slide.addShape(ShapeType.line, { x: inner.x + inner.w / 2, y: inner.y, w: 0, h: inner.h, line: { color: "D9D9D9", width: 0.5 } });
+    slide.addShape(ShapeType.line, { x: inner.x, y: inner.y + inner.h / 2, w: inner.w, h: 0, line: { color: "D9D9D9", width: 0.5 } });
+    (visual.items || []).forEach((item) => {
+      const x = inner.x + item.x * inner.w - 0.32;
+      const y = inner.y + (1 - item.y) * inner.h - 0.16;
+      nativeRect(slide, x, y, 0.64, 0.32, { fill: item.label === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: item.label === visual.highlight ? "C00000" : "BFBFBF" });
+      nativeText(slide, item.label, { x: x + 0.04, y: y + 0.09, w: 0.56, h: 0.12, fontSize: 6, align: "center" });
+    });
+    return undefined;
+  }
+
+  throw new Error(`Unsupported ppt_native visual anchor template: ${spec.kind}/${spec.template}`);
+}
+
+function validateVisualAnchorSpec(spec) {
   const errors = [];
   if (!spec || typeof spec !== "object") {
-    throw new Error("Diagram spec must be an object.");
+    throw new Error("Visual anchor spec must be an object.");
   }
-  for (const field of ["id", "title", "claim", "intent", "template"]) {
+  for (const field of ["id", "title", "claim", "kind", "template"]) {
     if (!safeText(spec[field])) errors.push(`Missing required field: ${field}`);
   }
-  const validIntents = new Set(["Quantity", "Sequence", "Loop", "Hierarchy", "Matrix", "Network"]);
-  if (spec.intent && !validIntents.has(spec.intent)) errors.push(`Unsupported intent: ${spec.intent}`);
+  if ("renderer" in spec) errors.push("renderer is a runtime setting; do not include it in visual anchor specs.");
+  if ("intent" in spec) errors.push("Use kind instead of the old intent field.");
+  if ("visual_strategy" in spec) errors.push("visual_strategy has been removed; use kind and template only.");
+  const validKinds = new Set(["Evidence", "Quantity", "Sequence", "Loop", "Hierarchy", "Matrix", "Network"]);
+  if (spec.kind && !validKinds.has(spec.kind)) errors.push(`Unsupported kind: ${spec.kind}`);
+
+  if (spec.kind === "Evidence") {
+    if (!spec.source || typeof spec.source !== "object") errors.push("Evidence requires a source object.");
+    if (spec.source && !safeText(spec.source.path) && !safeText(spec.source.id)) errors.push("Evidence source requires path or id.");
+    if (!["source_figure", "source_table", "source_screenshot", "source_chart"].includes(spec.template)) {
+      errors.push("Evidence template must be source_figure, source_table, source_screenshot, or source_chart.");
+    }
+    if (errors.length) throw new Error(`Invalid visual anchor spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
+    return true;
+  }
+
   const visual = spec.visual_spec;
   if (!visual || typeof visual !== "object") errors.push("Missing required object: visual_spec");
+  if (visual && Object.prototype.hasOwnProperty.call(visual, "annotation")) {
+    errors.push("visual_spec.annotation is not supported; put slide-level explanations in editable PPT text boxes.");
+  }
   const template = spec.template;
+  const templatesByKind = {
+    Quantity: new Set(["data_cards", "bar_chart", "line_chart", "proportion_chart", "heatmap"]),
+    Sequence: new Set(["process", "timeline", "swimlane"]),
+    Loop: new Set(["closed_loop", "dual_loop", "spiral_iteration_ladder"]),
+    Hierarchy: new Set(["tree", "layered_architecture", "capability_stack"]),
+    Matrix: new Set(["table", "quadrant_matrix", "capability_matrix", "heatmap"]),
+    Network: new Set(["hub_spoke_network", "dependency_graph", "module_interaction_map", "causal_influence_graph"]),
+  };
+  if (spec.kind && templatesByKind[spec.kind] && !templatesByKind[spec.kind].has(template)) {
+    errors.push(`Unsupported template for ${spec.kind}: ${template}`);
+  }
+
+  if (spec.kind === "Matrix" && template === "table") {
+    if (!Array.isArray(visual?.rows) || visual.rows.length < 1) errors.push("table requires visual_spec.rows.");
+    if (errors.length) throw new Error(`Invalid visual anchor spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
+    return true;
+  }
 
   if (visual && spec.template === "layered_architecture") {
     if (!Array.isArray(visual.layers) || visual.layers.length < 3) errors.push("layered_architecture requires at least three visual_spec.layers.");
@@ -1480,13 +1866,23 @@ function validateHandDrawnDiagramSpec(spec) {
     }
   }
 
-  if (visual && ["grouped_bar_chart", "line_chart"].includes(template)) {
+  if (visual && ["bar_chart", "line_chart"].includes(template)) {
     if (!Array.isArray(visual.categories) || visual.categories.length < 1) errors.push(`${template} requires visual_spec.categories.`);
     if (!Array.isArray(visual.series) || visual.series.length < 1) errors.push(`${template} requires visual_spec.series.`);
     validateSeriesValues(visual, template).forEach((error) => errors.push(error));
   }
 
-  if (visual && ["donut_proportion_chart", "donut_chart", "proportion_chart"].includes(template)) {
+  if (visual && template === "data_cards") {
+    if (!Array.isArray(visual.cards) || visual.cards.length < 1) errors.push("data_cards requires visual_spec.cards.");
+    if (Array.isArray(visual.cards)) {
+      visual.cards.forEach((card, idx) => {
+        if (!safeText(card.label)) errors.push(`data_cards card ${idx + 1} missing label.`);
+        if (!safeText(card.value)) errors.push(`data_cards card ${idx + 1} missing value.`);
+      });
+    }
+  }
+
+  if (visual && template === "proportion_chart") {
     if (!Array.isArray(visual.segments) || visual.segments.length < 2) errors.push(`${template} requires at least two visual_spec.segments.`);
     if (Array.isArray(visual.segments)) {
       visual.segments.forEach((segment, idx) => {
@@ -1517,7 +1913,7 @@ function validateHandDrawnDiagramSpec(spec) {
     }
   }
 
-  if (visual && ["pyramid_capability_stack", "pyramid", "capability_stack"].includes(template)) {
+  if (visual && template === "capability_stack") {
     if (!Array.isArray(visual.levels) || visual.levels.length < 2) errors.push(`${template} requires at least two visual_spec.levels.`);
     if (Array.isArray(visual.levels)) {
       visual.levels.forEach((level, idx) => {
@@ -1540,15 +1936,15 @@ function validateHandDrawnDiagramSpec(spec) {
     }
   }
 
-  if (visual && ["horizontal_sequence", "horizontal_process", "vertical_process", "timeline"].includes(template)) {
-    if (!Array.isArray(visual.steps) || visual.steps.length < 2) errors.push("horizontal_sequence requires at least two visual_spec.steps.");
+  if (visual && ["process", "timeline"].includes(template)) {
+    if (!Array.isArray(visual.steps) || visual.steps.length < 2) errors.push(`${template} requires at least two visual_spec.steps.`);
     if (Array.isArray(visual.steps)) {
       visual.steps.forEach((step, idx) => {
-        if (!safeText(step.id)) errors.push(`horizontal_sequence step ${idx + 1} missing id.`);
-        if (!safeText(step.label)) errors.push(`horizontal_sequence step ${idx + 1} missing label.`);
+        if (!safeText(step.id)) errors.push(`${template} step ${idx + 1} missing id.`);
+        if (!safeText(step.label)) errors.push(`${template} step ${idx + 1} missing label.`);
       });
       if (safeText(visual.highlight) && !visual.steps.some((step) => step.id === visual.highlight)) {
-        errors.push("horizontal_sequence visual_spec.highlight must match a step id.");
+        errors.push(`${template} visual_spec.highlight must match a step id.`);
       }
     }
   }
@@ -1630,7 +2026,7 @@ function validateHandDrawnDiagramSpec(spec) {
   }
 
   if (errors.length) {
-    throw new Error(`Invalid hand-drawn diagram spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
+    throw new Error(`Invalid visual anchor spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
   }
   return true;
 }
@@ -1679,25 +2075,29 @@ function validateGridValues(visual, template) {
   return errors;
 }
 
-function writeHandDrawnDiagramSvg(spec, outDir, options = {}) {
+function writeVisualAnchorSvg(spec, outDir, options = {}) {
   fs.mkdirSync(outDir, { recursive: true });
-  const fileName = options.fileName || `${spec.id || spec.template || "diagram"}.svg`;
+  const fileName = options.fileName || `${spec.id || spec.template || "visual_anchor"}.svg`;
   const filePath = path.join(outDir, fileName);
-  fs.writeFileSync(filePath, createHandDrawnDiagramSvg(spec, options), "utf8");
+  fs.writeFileSync(filePath, createVisualAnchorSvg(spec, options), "utf8");
   return filePath;
 }
 
-function writeHandDrawnDiagramImage(spec, outDir, options = {}) {
-  return writeHandDrawnDiagramSvg(spec, outDir, options);
+function writeVisualAnchorImage(spec, outDir, options = {}) {
+  return writeVisualAnchorSvg(spec, outDir, options);
 }
 
 module.exports = {
   DIAGRAM_STYLE,
   TEMPLATE_LAYOUTS,
   chooseTemplateLayout,
-  createHandDrawnDiagramImage,
-  createHandDrawnDiagramSvg,
-  validateHandDrawnDiagramSpec,
-  writeHandDrawnDiagramImage,
-  writeHandDrawnDiagramSvg,
+  createVisualAnchorImage,
+  createVisualAnchorSvg,
+  getVisualAnchorRenderer,
+  renderVisualAnchorPptNative,
+  renderVisualAnchorRoughSvg,
+  resolveVisualAnchorRenderPath,
+  validateVisualAnchorSpec,
+  writeVisualAnchorImage,
+  writeVisualAnchorSvg,
 };

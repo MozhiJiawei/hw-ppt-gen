@@ -40,6 +40,11 @@ const DIAGRAM_STYLE = Object.freeze({
   },
 });
 
+const TEXT_LIMITS = Object.freeze({
+  minSvgFontSize: 14,
+  minNativeFontSize: 6,
+});
+
 const TEMPLATE_LAYOUTS = Object.freeze({
   bar_chart: "16:9",
   line_chart: "16:9",
@@ -113,14 +118,105 @@ function safeText(value) {
     .trim();
 }
 
+function splitTextForWrap(text) {
+  const value = safeText(text);
+  const tokens = [];
+  let ascii = "";
+  const flushAscii = () => {
+    if (!ascii) return;
+    const parts = ascii.match(/\s+|[A-Za-z0-9#%@&._:/+-]+|./g) || [];
+    tokens.push(...parts);
+    ascii = "";
+  };
+  for (const char of value) {
+    if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(char)) {
+      flushAscii();
+      tokens.push(char);
+    } else {
+      ascii += char;
+    }
+  }
+  flushAscii();
+  return tokens.filter((token) => token.length);
+}
+
+function trimLineEnd(line) {
+  return String(line || "").replace(/\s+$/g, "");
+}
+
+function wrapTextToWidth(text, opts = {}) {
+  const size = opts.size || 28;
+  const minSize = opts.minSize || TEXT_LIMITS.minSvgFontSize;
+  if (size < minSize) {
+    throw new Error(`Diagram text font size ${size} is below the ${minSize}px minimum${opts.context ? ` for ${opts.context}` : ""}.`);
+  }
+  const maxWidth = Number(opts.maxWidth);
+  const lineHeight = opts.lineHeight || size * 1.25;
+  const maxLinesFromHeight = opts.maxHeight ? Math.max(1, Math.floor(Number(opts.maxHeight) / lineHeight)) : Infinity;
+  const maxLines = Math.max(1, Math.min(opts.maxLines || Infinity, maxLinesFromHeight));
+  const rawLines = Array.isArray(text) ? text.flatMap((line) => String(line ?? "").split("\n")) : String(text ?? "").split("\n");
+  if (!Number.isFinite(maxWidth) || maxWidth <= 0) return rawLines.map(safeText);
+
+  const lines = [];
+  const pushLine = (line) => {
+    if (lines.length < maxLines) {
+      lines.push(trimLineEnd(line));
+    } else {
+      throw new Error(`Diagram text exceeds ${maxLines} line(s)${opts.context ? ` for ${opts.context}` : ""}: ${safeText(text)}`);
+    }
+  };
+  const splitOversizedToken = (token) => {
+    let current = token.trimStart();
+    while (current && estimateTextWidth(current, size) > maxWidth) {
+      let chunk = "";
+      for (const char of Array.from(current)) {
+        if (chunk && estimateTextWidth(`${chunk}${char}`, size) > maxWidth) break;
+        chunk += char;
+      }
+      pushLine(chunk);
+      current = Array.from(current).slice(Array.from(chunk).length).join("");
+    }
+    return current;
+  };
+
+  for (const rawLine of rawLines) {
+    const tokens = splitTextForWrap(rawLine);
+    if (!tokens.length) {
+      pushLine("");
+      continue;
+    }
+    let current = "";
+    for (const token of tokens) {
+      const candidate = current ? `${current}${token}` : token;
+      if (estimateTextWidth(candidate, size) <= maxWidth) {
+        current = candidate;
+        continue;
+      }
+      if (current) pushLine(current);
+      current = splitOversizedToken(token);
+    }
+    if (current) pushLine(current);
+  }
+
+  return lines.length ? lines : [""];
+}
+
+function measureTextLines(lines, size, lineHeight) {
+  const values = Array.isArray(lines) ? lines : [lines];
+  return {
+    width: Math.max(...values.map((line) => estimateTextWidth(line, size)), size * 0.8),
+    height: lineHeight * Math.max(1, values.length),
+  };
+}
+
 function svgText(x, y, text, opts = {}) {
   const size = opts.size || 28;
   const weight = opts.weight || 500;
   const anchor = opts.anchor || "middle";
   const fill = opts.fill || DIAGRAM_STYLE.color.ink;
   const family = opts.family || DIAGRAM_STYLE.font;
-  const lines = Array.isArray(text) ? text : String(text ?? "").split("\n");
   const lineHeight = opts.lineHeight || size * 1.25;
+  const lines = wrapTextToWidth(text, { ...opts, size, lineHeight });
   const startY = y - ((lines.length - 1) * lineHeight) / 2;
   const tspans = lines
     .map((line, i) => `<tspan x="${x}" y="${startY + i * lineHeight}">${escapeXml(line)}</tspan>`)
@@ -133,10 +229,11 @@ function estimateTextWidth(text, size) {
   let units = 0;
   for (const char of value) {
     if (char === " ") units += 0.35;
-    else if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(char)) units += 1;
-    else if (/[A-Z0-9#%@&]/.test(char)) units += 0.72;
-    else if (/[a-z]/.test(char)) units += 0.58;
-    else units += 0.6;
+    else if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(char)) units += 1.5;
+    else if (/[A-Z0-9#%@&]/.test(char)) units += 1.05;
+    else if (/[a-z]/.test(char)) units += 0.9;
+    else if (/[._:/+-]/.test(char)) units += 0.7;
+    else units += 0.78;
   }
   return Math.max(size * 0.8, units * size * 0.62);
 }
@@ -144,8 +241,8 @@ function estimateTextWidth(text, size) {
 function getTextBounds(x, y, text, opts = {}) {
   const size = opts.size || 28;
   const anchor = opts.anchor || "middle";
-  const lines = Array.isArray(text) ? text : String(text ?? "").split("\n");
   const lineHeight = opts.lineHeight || size * 1.25;
+  const lines = wrapTextToWidth(text, { ...opts, size, lineHeight });
   const maxWidth = Math.max(...lines.map((line) => estimateTextWidth(line, size)), size * 0.8);
   const totalHeight = lineHeight * Math.max(1, lines.length);
   const padX = Math.max(8, size * 0.22);
@@ -416,6 +513,9 @@ function addRough(canvas, node) {
 }
 
 function rect(canvas, rc, x, y, w, h, opts = {}) {
+  if (opts.opaqueFill) {
+    canvas.add(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${opts.opaqueFill}" stroke="none"/>`);
+  }
   addRough(canvas, rc.rectangle(x, y, w, h, {
     stroke: opts.stroke || DIAGRAM_STYLE.color.ink,
     strokeWidth: opts.strokeWidth || 2.2,
@@ -430,6 +530,9 @@ function rect(canvas, rc, x, y, w, h, opts = {}) {
 }
 
 function ellipse(canvas, rc, cx, cy, w, h, opts = {}) {
+  if (opts.opaqueFill) {
+    canvas.add(`<ellipse cx="${cx}" cy="${cy}" rx="${w / 2}" ry="${h / 2}" fill="${opts.opaqueFill}" stroke="none"/>`);
+  }
   addRough(canvas, rc.ellipse(cx, cy, w, h, {
     stroke: opts.stroke || DIAGRAM_STYLE.color.ink,
     strokeWidth: opts.strokeWidth || 2.4,
@@ -535,8 +638,8 @@ function baseSvg(title, claim, body, options = {}) {
   const { width, height } = resolveOutputSize(exportOptions, cropBox);
   const colors = DIAGRAM_STYLE.color;
   const header = options.renderHeader
-    ? `${svgText(90, 66, safeText(title), { size: 36, weight: 800, anchor: "start", fill: colors.red })}
-${svgText(90, 112, safeText(claim), { size: 24, weight: 500, anchor: "start", fill: colors.muted })}`
+    ? `${svgText(90, 66, safeText(title), { size: 36, weight: 800, anchor: "start", fill: colors.red, lineHeight: 40, maxWidth: 1340, maxLines: 2 })}
+${svgText(90, 126, safeText(claim), { size: 24, weight: 500, anchor: "start", fill: colors.muted, lineHeight: 29, maxWidth: 1340, maxLines: 2 })}`
     : "";
   return {
     width,
@@ -582,6 +685,8 @@ function drawLayeredArchitecture(spec) {
       size: 22,
       fill: colors.red,
       weight: 750,
+      maxWidth: 120,
+      maxLines: 2,
     }));
 
     const items = layer.items || [];
@@ -600,10 +705,12 @@ function drawLayeredArchitecture(spec) {
         fillStyle: itemIdx % 2 ? "hachure" : "zigzag",
         seed: 40 + layerIdx * 10 + itemIdx,
       });
-      canvas.add(svgText(cx, cy + 7, wrapCjk(label, Math.max(7, Math.floor(itemW / 18))).slice(0, 2), {
+      canvas.add(svgText(cx, cy + 7, label, {
         size: itemW < 140 ? 20 : 23,
         weight: 750,
         lineHeight: 24,
+        maxWidth: itemW - 18,
+        maxHeight: itemH - 12,
       }));
     });
   });
@@ -622,7 +729,7 @@ function drawLayeredArchitecture(spec) {
       roughness: 2.2,
       seed: 130,
     });
-    canvas.add(svgText(sideX + sideW / 2, sideY - 48, visual.side_label || "侧向能力", { size: 27, weight: 800, fill: colors.red }));
+    canvas.add(svgText(sideX + sideW / 2, sideY - 48, visual.side_label || "侧向能力", { size: 27, weight: 800, fill: colors.red, maxWidth: sideW }));
     const gap = Math.max(16, (sideH - sideModules.length * 68) / Math.max(1, sideModules.length - 1));
     sideModules.forEach((label, i) => {
       const y = sideY + 30 + i * (68 + gap);
@@ -632,7 +739,7 @@ function drawLayeredArchitecture(spec) {
         hachureAngle: -45 + i * 15,
         seed: 140 + i,
       });
-      canvas.add(svgText(sideX + sideW / 2, y + 8, wrapCjk(label, 10).slice(0, 2), { size: 20, weight: 700, lineHeight: 24 }));
+      canvas.add(svgText(sideX + sideW / 2, y + 8, label, { size: 20, weight: 700, lineHeight: 24, maxWidth: 182, maxLines: 2 }));
     });
   }
 
@@ -643,16 +750,18 @@ function drawLayeredArchitecture(spec) {
     const vertical = Math.abs(a[0] - b[0]) < 12;
     const fromSide = sideModules.includes(from);
     const toSide = sideModules.includes(to);
-    curve(canvas, rc, a[0], a[1] + (fromSide ? 0 : 32), b[0], b[1] - (toSide ? 0 : 32), vertical ? 0 : (i % 3 - 1) * 12, {
+    const sideEdge = fromSide || toSide;
+    const sideBend = sideEdge && sideModules.length > 3 ? (i % 2 ? 24 : -24) : (i % 3 - 1) * 12;
+    curve(canvas, rc, a[0], a[1] + (fromSide ? 0 : 32), b[0], b[1] - (toSide ? 0 : 32), vertical ? 0 : sideBend, {
       arrow: true,
-      stroke: i >= Math.floor((visual.edges || []).length * 0.55) ? colors.red : colors.ink,
-      strokeWidth: i >= Math.floor((visual.edges || []).length * 0.55) ? 2.7 : 2.1,
+      stroke: sideEdge ? colors.lineDark : (i >= Math.floor((visual.edges || []).length * 0.55) ? colors.red : colors.ink),
+      strokeWidth: sideEdge ? (sideModules.length > 3 ? 1.25 : 1.5) : (i >= Math.floor((visual.edges || []).length * 0.55) ? 2.7 : 2.1),
       seed: 90 + i,
     });
   });
 
   canvas.add(`<path d="M1084 180 C1058 320 1062 594 1096 770" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 12" opacity="0.55"/>`);
-  canvas.add(svgText(1112, 790, visual.summary || "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start" }));
+  canvas.add(svgText(1112, 790, visual.summary || "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start", maxWidth: 350, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -716,14 +825,14 @@ function drawGroupedBarChart(spec) {
       });
       canvas.add(svgText(x + barW / 2, y - 18, value.toFixed(value % 1 ? 1 : 0), { size: 18, weight: highlighted ? 900 : 700, fill: highlighted ? colors.red : colors.ink }));
     });
-    canvas.add(svgText(groupX, baseline + 42, wrapCjk(category, 6).slice(0, 2), { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21 }));
+    canvas.add(svgText(groupX, baseline + 42, category, { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21, maxWidth: groupW - 16, maxLines: 2 }));
   });
 
   series.forEach((entry, idx) => {
     const x = series.length > 3 ? 1210 : 1280;
     const y = 252 + idx * Math.max(40, Math.min(54, 260 / Math.max(1, series.length)));
     rect(canvas, rc, x, y - 18, 46, 28, { fill: seriesColor(entry, idx, false), stroke: colors.lineDark, seed: 820 + idx });
-    canvas.add(svgText(x + 62, y + 4, wrapCjk(entry.name, 10).slice(0, 2), { size: series.length > 4 ? 18 : 22, weight: 700, anchor: "start", fill: colors.ink, lineHeight: 22 }));
+    canvas.add(svgText(x + 62, y + 4, entry.name, { size: series.length > 4 ? 18 : 22, weight: 700, anchor: "start", fill: colors.ink, lineHeight: 22, maxWidth: 230, maxLines: 2 }));
   });
   pathRough(canvas, rc, "M 1188 470 C 1320 420 1435 462 1450 566 C 1462 666 1328 724 1205 666 C 1098 614 1100 514 1188 470 Z", {
     fill: colors.yellowPale,
@@ -756,7 +865,7 @@ function drawLineChart(spec) {
   categories.forEach((category, idx) => {
     const x = xFor(idx);
     line(canvas, rc, x, baseline, x, baseline + 8, { stroke: colors.ink, strokeWidth: 1.6, seed: 920 + idx });
-    canvas.add(svgText(x, baseline + 42, wrapCjk(category, 6).slice(0, 2), { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21 }));
+    canvas.add(svgText(x, baseline + 42, category, { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21, maxWidth: Math.max(86, chart.w / Math.max(1, categories.length) - 12), maxLines: 2 }));
   });
   canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label || "Value", { size: 22, weight: 800, anchor: "start", fill: colors.red }));
   series.forEach((entry, seriesIdx) => {
@@ -781,7 +890,7 @@ function drawLineChart(spec) {
     const legendX = 1270;
     const legendY = 282 + seriesIdx * 52;
     line(canvas, rc, legendX, legendY, legendX + 46, legendY, { stroke: seriesIdx === 0 ? colors.red : colors.ink, strokeWidth: 3, seed: 1020 + seriesIdx });
-    canvas.add(svgText(legendX + 62, legendY + 6, entry.name, { size: 22, weight: 700, anchor: "start", fill: colors.ink }));
+    canvas.add(svgText(legendX + 62, legendY + 6, entry.name, { size: 22, weight: 700, anchor: "start", fill: colors.ink, maxWidth: 230, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -816,11 +925,11 @@ function drawDonutProportionChart(spec) {
     const mid = (start + end) / 2;
     const lx = center[0] + Math.cos(mid) * 285;
     const ly = center[1] + Math.sin(mid) * 210;
-    canvas.add(svgText(lx, ly, [`${segment.label}`, `${segment.value}`], { size: 23, weight: segment.label === visual.highlight ? 900 : 700, fill: segment.label === visual.highlight ? colors.red : colors.ink, lineHeight: 28 }));
+    canvas.add(svgText(lx, ly, [`${segment.label}`, `${segment.value}`], { size: 23, weight: segment.label === visual.highlight ? 900 : 700, fill: segment.label === visual.highlight ? colors.red : colors.ink, lineHeight: 28, maxWidth: 180, maxLines: 3 }));
     start = end;
   });
   ellipse(canvas, rc, center[0], center[1], 180, 120, { fill: colors.paper, stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
-  canvas.add(svgText(center[0], center[1] + 8, wrapCjk(visual.total_label || "合计", 8).slice(0, 2), { size: 28, weight: 900, fill: colors.red, lineHeight: 32 }));
+  canvas.add(svgText(center[0], center[1] + 8, visual.total_label || "合计", { size: 28, weight: 900, fill: colors.red, lineHeight: 32, maxWidth: 150, maxLines: 2 }));
   pathRough(canvas, rc, "M 1005 308 C 1188 246 1376 312 1412 458 C 1448 607 1305 704 1116 672 C 974 648 908 426 1005 308 Z", { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 2.4, fillStyle: "zigzag", seed: 1090 });
   canvas.add(svgText(1190, 438, "比例关系", { size: 31, weight: 900, fill: colors.red }));
   canvas.add(svgText(1190, 504, "用面积/角度强调\n份额结构", { size: 26, weight: 700, lineHeight: 34 }));
@@ -841,9 +950,9 @@ function drawHeatmap(spec) {
   const grid = { x: 330, y: 220, w: 820, h: 500 };
   const cellW = grid.w / Math.max(1, columns.length);
   const cellH = grid.h / Math.max(1, rows.length);
-  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, wrapCjk(column, 8).slice(0, 2), { size: 22, weight: 800, fill: colors.red, lineHeight: 24 })));
+  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, column, { size: 22, weight: 800, fill: colors.red, lineHeight: 24, maxWidth: cellW - 14, maxLines: 2 })));
   rows.forEach((row, rowIdx) => {
-    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(row, 8).slice(0, 2), { size: 22, weight: 800, fill: colors.ink, anchor: "end", lineHeight: 24 }));
+    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, row, { size: 22, weight: 800, fill: colors.ink, anchor: "end", lineHeight: 24, maxWidth: 210, maxLines: 2 }));
     columns.forEach((column, colIdx) => {
       const value = Number(values[rowIdx]?.[colIdx]) || 0;
       const t = max === min ? 0.5 : (value - min) / (max - min);
@@ -886,8 +995,8 @@ function drawDataCards(spec) {
     });
     canvas.add(svgText(x + cardW / 2, y + 78, card.value, { size: 58, weight: 850, fill: highlighted ? colors.red : colors.ink }));
     canvas.add(svgText(x + cardW / 2, y + 138, card.unit || "", { size: 22, weight: 700, fill: colors.muted }));
-    canvas.add(svgText(x + cardW / 2, y + 194, wrapCjk(card.label || "", 8), { size: 27, weight: 850, fill: colors.ink, lineHeight: 31 }));
-    canvas.add(svgText(x + cardW / 2, y + 250, wrapCjk(card.note || "", 11), { size: 19, fill: colors.muted, lineHeight: 23 }));
+    canvas.add(svgText(x + cardW / 2, y + 194, card.label || "", { size: 27, weight: 850, fill: colors.ink, lineHeight: 31, maxWidth: cardW - 32, maxLines: 2 }));
+    canvas.add(svgText(x + cardW / 2, y + 250, card.note || "", { size: 19, fill: colors.muted, lineHeight: 23, maxWidth: cardW - 36, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -897,32 +1006,72 @@ function drawArchiveEvolutionTree(spec) {
   const { rc } = roughSvg(202);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
-  const pos = layoutTree(visual.nodes || [], visual.edges || []);
+  const nodes = visual.nodes || [];
+  const pos = layoutTree(nodes, visual.edges || []);
   const mainPath = findPathToHighlight(visual.edges || [], visual.highlight);
+  const nodeBoxes = new Map();
+  nodes.forEach((id) => {
+    const isHighlight = id === visual.highlight;
+    const idSize = isHighlight ? 25 : 21;
+    const labelSize = isHighlight ? 22 : 18;
+    const labelLineHeight = isHighlight ? 25 : 21;
+    const labelMaxWidth = isHighlight ? 180 : 118;
+    const labelLines = wrapTextToWidth(visual.labels?.[id] || "", {
+      size: labelSize,
+      lineHeight: labelLineHeight,
+      maxWidth: labelMaxWidth,
+      maxLines: 2,
+    });
+    const idMetrics = measureTextLines([`#${id}`], idSize, idSize * 1.1);
+    const labelMetrics = measureTextLines(labelLines, labelSize, labelLineHeight);
+    const w = clamp(Math.ceil(Math.max(idMetrics.width, labelMetrics.width) + 44), isHighlight ? 160 : 124, isHighlight ? 230 : 164);
+    const h = clamp(Math.ceil(idMetrics.height + labelMetrics.height + 38), isHighlight ? 106 : 88, isHighlight ? 154 : 132);
+    nodeBoxes.set(id, {
+      idSize,
+      labelSize,
+      labelLineHeight,
+      labelLines,
+      w,
+      h,
+      idY: -(labelMetrics.height + 4) / 2,
+      labelY: (idMetrics.height + 4) / 2,
+    });
+  });
   (visual.edges || []).forEach(([from, to], i) => {
     const a = pos.get(from);
     const b = pos.get(to);
     if (!a || !b) return;
-    curve(canvas, rc, a[0], a[1] + 42, b[0], b[1] - 46, (i % 2 ? 20 : -16), {
+    const fromBox = nodeBoxes.get(from) || { h: 86 };
+    const toBox = nodeBoxes.get(to) || { h: 86 };
+    curve(canvas, rc, a[0], a[1] + fromBox.h / 2 - 4, b[0], b[1] - toBox.h / 2 + 4, (i % 2 ? 20 : -16), {
       arrow: true,
       stroke: to === visual.highlight ? colors.red : colors.lineDark,
       strokeWidth: to === visual.highlight ? 3.2 : 2.4,
       seed: 210 + i,
     });
   });
-  (visual.nodes || []).forEach((id, i) => {
+  nodes.forEach((id, i) => {
     const [x, y] = pos.get(id);
     const isHighlight = id === visual.highlight;
-    ellipse(canvas, rc, x, y, isHighlight ? 132 : 104, isHighlight ? 86 : 70, {
+    const box = nodeBoxes.get(id);
+    ellipse(canvas, rc, x, y, box.w, box.h, {
       fill: isHighlight ? colors.pink : (i % 2 ? colors.bluePale : colors.gray),
+      opaqueFill: isHighlight ? colors.pink : (i % 2 ? colors.bluePale : colors.gray),
       stroke: isHighlight ? colors.red : colors.ink,
       strokeWidth: isHighlight ? 3.5 : 2.3,
       fillStyle: isHighlight ? "cross-hatch" : "hachure",
       hachureGap: isHighlight ? 7 : 9,
       seed: 240 + i,
     });
-    canvas.add(svgText(x, y - 4, `#${id}`, { size: isHighlight ? 26 : 22, weight: 800 }));
-    canvas.add(svgText(x, y + 25, visual.labels?.[id] || "", { size: isHighlight ? 28 : 23, weight: 800, fill: isHighlight ? colors.red : colors.muted }));
+    canvas.add(svgText(x, y + box.idY, `#${id}`, { size: box.idSize, weight: 800, maxWidth: box.w - 24, maxLines: 1 }));
+    canvas.add(svgText(x, y + box.labelY, box.labelLines, {
+      size: box.labelSize,
+      weight: 800,
+      fill: isHighlight ? colors.red : colors.muted,
+      lineHeight: box.labelLineHeight,
+      maxWidth: box.w - 24,
+      maxLines: 2,
+    }));
   });
   const scorePath = mainPath.length
     ? mainPath.map((id) => visual.labels?.[id]).filter(Boolean).join(" → ")
@@ -937,11 +1086,11 @@ function drawArchiveEvolutionTree(spec) {
     roughness: 2,
     seed: 301,
   });
-  canvas.add(svgText(1130, 365, visual.callout_title || "分支保留策略", { size: 32, weight: 900, fill: colors.red }));
-  canvas.add(svgText(1130, 420, wrapCjk(visual.callout || "弱分支仍可能成为高分路径", 12).slice(0, 2), { size: 29, weight: 700, lineHeight: 36 }));
-  canvas.add(svgText(1130, 510, wrapCjk(scorePath, 18).slice(0, 3), { size: 25, weight: 800, lineHeight: 31 }));
-  if (highlightPos) line(canvas, rc, 900, 655, highlightPos[0] + 52, highlightPos[1] - 16, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 330 });
-  if (highlightPos) canvas.add(`<path d="M${highlightPos[0] - 56} ${highlightPos[1] + 42} C${highlightPos[0] - 5} ${highlightPos[1] + 20} ${highlightPos[0] + 45} ${highlightPos[1] + 24} ${highlightPos[0] + 84} ${highlightPos[1] + 55}" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
+  canvas.add(svgText(1130, 365, visual.callout_title || "分支保留策略", { size: 32, weight: 900, fill: colors.red, maxWidth: 420, maxLines: 2 }));
+  canvas.add(svgText(1130, 420, visual.callout || "弱分支仍可能成为高分路径", { size: 29, weight: 700, lineHeight: 36, maxWidth: 420, maxLines: 2 }));
+  canvas.add(svgText(1130, 510, scorePath, { size: 25, weight: 800, lineHeight: 31, maxWidth: 500, maxLines: 3 }));
+  const highlightBox = visual.highlight ? nodeBoxes.get(visual.highlight) : null;
+  if (highlightPos && highlightBox) canvas.add(`<path d="M${highlightPos[0] - highlightBox.w / 2 + 6} ${highlightPos[1] + highlightBox.h / 2 - 8} C${highlightPos[0] - 8} ${highlightPos[1] + highlightBox.h / 2 - 28} ${highlightPos[0] + 44} ${highlightPos[1] + highlightBox.h / 2 - 18} ${highlightPos[0] + highlightBox.w / 2 + 22} ${highlightPos[1] + highlightBox.h / 2 + 14}" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -973,8 +1122,8 @@ function layoutTree(nodes, edges) {
     }
   });
   const positions = new Map();
-  const xMin = 140;
-  const xMax = 780;
+  const xMin = 105;
+  const xMax = 880;
   const yMin = 160;
   const yMax = 770;
   levels.forEach((levelNodes, levelIdx) => {
@@ -1043,7 +1192,7 @@ function drawSelfImprovementLoop(spec) {
     });
   }
   ellipse(canvas, rc, center[0], center[1], 300, 150, { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.4, fillStyle: "cross-hatch", hachureGap: 12, seed: 370 });
-  canvas.add(svgText(center[0], center[1] + 8, wrapCjk(visual.center, 12).slice(0, 2), { size: 31, weight: 900, fill: colors.red, lineHeight: 36 }));
+  canvas.add(svgText(center[0], center[1] + 8, visual.center, { size: 31, weight: 900, fill: colors.red, lineHeight: 36, maxWidth: 250, maxLines: 2 }));
   steps.forEach((step, i) => {
     const highlighted = step.id === visual.highlight;
     rect(canvas, rc, step.x - 132, step.y - 52, 264, 104, {
@@ -1055,8 +1204,8 @@ function drawSelfImprovementLoop(spec) {
       roughness: 2,
       seed: 380 + i,
     });
-    canvas.add(svgText(step.x, step.y - 10, step.label, { size: 27, weight: 850, fill: highlighted ? colors.red : colors.ink }));
-    canvas.add(svgText(step.x, step.y + 28, wrapCjk(step.note, 10), { size: 19, weight: 500, fill: colors.muted, lineHeight: 22 }));
+    canvas.add(svgText(step.x, step.y - 10, step.label, { size: 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 28, maxWidth: 230, maxLines: 2 }));
+    canvas.add(svgText(step.x, step.y + 30, step.note, { size: 18, weight: 500, fill: colors.muted, lineHeight: 21, maxWidth: 226, maxLines: 2 }));
   });
   canvas.add(`<path d="M438 729 C612 835 938 842 1158 710" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.78"/>`);
   canvas.add(svgText(800, 825, "评测结果回到 Archive，再选择下一代 parent", { size: 26, weight: 800, fill: colors.red }));
@@ -1082,13 +1231,13 @@ function drawDualLoop(spec) {
     const loopW = clamp(420 - loops.length * 22, 220, 330);
     const loopH = clamp(240 - loops.length * 8, 160, 210);
     ellipse(canvas, rc, center[0], center[1], loopW, loopH, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][loopIdx % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.4 : 2.4, seed: 1360 + loopIdx });
-    canvas.add(svgText(center[0], center[1] - 10, loopSpec.label, { size: 30, weight: 900, fill: highlighted ? colors.red : colors.ink }));
+    canvas.add(svgText(center[0], center[1] - 10, loopSpec.label, { size: 28, weight: 900, fill: highlighted ? colors.red : colors.ink, lineHeight: 31, maxWidth: loopW - 52, maxLines: 2 }));
     steps.forEach((step, i) => {
       const angle = -Math.PI / 2 + i * 2 * Math.PI / Math.max(1, steps.length);
       const x = center[0] + Math.cos(angle) * (loopW / 2 + 18);
       const y = center[1] + Math.sin(angle) * (loopH / 2 + 14);
       ellipse(canvas, rc, x, y, 96, 50, { fill: "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 1380 + loopIdx * 20 + i });
-      canvas.add(svgText(x, y + 7, wrapCjk(step.label, 6).slice(0, 2), { size: 18, weight: 800, lineHeight: 20 }));
+      canvas.add(svgText(x, y + 7, step.label, { size: 18, weight: 800, lineHeight: 20, maxWidth: 82, maxLines: 2 }));
     });
   });
   for (let i = 0; i < centers.length - 1; i += 1) {
@@ -1115,11 +1264,11 @@ function drawSpiralIterationLadder(spec) {
     const highlighted = step.id === visual.highlight;
     if (last) curve(canvas, rc, last[0], last[1], x, y, i % 2 ? -42 : 42, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3 : 2.1, seed: 1420 + i });
     ellipse(canvas, rc, x, y, highlighted ? 146 : 124, highlighted ? 84 : 70, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.3 : 2.2, seed: 1440 + i });
-    canvas.add(svgText(x, y - 4, wrapCjk(step.label, 7).slice(0, 2), { size: 23, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 25 }));
-    canvas.add(svgText(x, y + 25, wrapCjk(step.note || "", 8).slice(0, 1), { size: 16, fill: colors.muted }));
+    canvas.add(svgText(x, y - 4, step.label, { size: 22, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: highlighted ? 128 : 106, maxLines: 2 }));
+    canvas.add(svgText(x, y + 26, step.note || "", { size: 16, fill: colors.muted, maxWidth: highlighted ? 122 : 100, maxLines: 1 }));
     last = [x, y];
   });
-  canvas.add(svgText(760, 216, visual.center || "迭代爬升", { size: 35, weight: 900, fill: colors.red }));
+  canvas.add(svgText(760, 216, visual.center || "迭代爬升", { size: 35, weight: 900, fill: colors.red, maxWidth: 520, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1148,8 +1297,8 @@ function drawHorizontalSequence(spec) {
     });
     ellipse(canvas, rc, x + 24, y - 70, 44, 34, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 450 + i });
     canvas.add(svgText(x + 24, y - 61, String(i + 1), { size: 18, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
-    canvas.add(svgText(x + stepW / 2, y - 16, wrapCjk(step.label, stepW < 140 ? 4 : 7).slice(0, 2), { size: stepW < 140 ? 20 : 26, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
-    canvas.add(svgText(x + stepW / 2, y + 28, wrapCjk(step.note, stepW < 140 ? 5 : 9).slice(0, 2), { size: stepW < 140 ? 16 : 19, weight: 500, fill: colors.muted, lineHeight: 20 }));
+    canvas.add(svgText(x + stepW / 2, y - 16, step.label, { size: stepW < 140 ? 20 : 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: stepW - 30, maxLines: 2 }));
+    canvas.add(svgText(x + stepW / 2, y + 30, step.note, { size: stepW < 140 ? 16 : 18, weight: 500, fill: colors.muted, lineHeight: 20, maxWidth: stepW - 28, maxLines: 2 }));
     if (i < steps.length - 1) {
       curve(canvas, rc, x + stepW + 8, y, x + stepW + gap - 8, y, i % 2 ? -18 : 18, {
         arrow: true,
@@ -1186,8 +1335,8 @@ function drawVerticalProcess(spec) {
     });
     ellipse(canvas, rc, x - 190, y + stepH / 2, 52, 42, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 1180 + i });
     canvas.add(svgText(x - 190, y + stepH / 2 + 8, String(i + 1), { size: 18, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
-    canvas.add(svgText(x, y + stepH / 2 - 8, step.label, { size: 27, weight: 850, fill: highlighted ? colors.red : colors.ink }));
-    canvas.add(svgText(x, y + stepH / 2 + 28, wrapCjk(step.note || step.time || "", 14).slice(0, 2), { size: 19, fill: colors.muted, lineHeight: 22 }));
+    canvas.add(svgText(x, y + stepH / 2 - 8, step.label, { size: 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 27, maxWidth: 350, maxLines: 2 }));
+    canvas.add(svgText(x, y + stepH / 2 + 30, step.note || step.time || "", { size: 18, fill: colors.muted, lineHeight: 21, maxWidth: 350, maxLines: 2 }));
     if (i < steps.length - 1) line(canvas, rc, x, y + stepH + 8, x, y + stepH + gap - 8, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: 2.2, seed: 1200 + i });
   });
   pathRough(canvas, rc, "M 970 260 C 1140 216 1342 285 1370 446 C 1398 610 1220 724 1018 650 C 902 608 868 314 970 260 Z", { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 2.3, fillStyle: "zigzag", seed: 1220 });
@@ -1212,8 +1361,8 @@ function drawTimeline(spec) {
     ellipse(canvas, rc, x, y, highlighted ? 76 : 58, highlighted ? 58 : 46, { fill: highlighted ? colors.pink : "#ffffff", stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.2 : 2.1, seed: 1260 + i });
     canvas.add(svgText(x, y - 70, step.time || `T${i + 1}`, { size: 23, weight: 900, fill: highlighted ? colors.red : colors.ink }));
     rect(canvas, rc, x - 95, y + 52, 190, 118, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, seed: 1280 + i });
-    canvas.add(svgText(x, y + 96, wrapCjk(step.label, 7).slice(0, 2), { size: 24, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 26 }));
-    canvas.add(svgText(x, y + 132, wrapCjk(step.note || "", 8).slice(0, 2), { size: 17, fill: colors.muted, lineHeight: 20 }));
+    canvas.add(svgText(x, y + 96, step.label, { size: 22, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: 166, maxLines: 2 }));
+    canvas.add(svgText(x, y + 134, step.note || "", { size: 16, fill: colors.muted, lineHeight: 19, maxWidth: 166, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -1231,7 +1380,7 @@ function drawSwimlane(spec) {
   lanes.forEach((lane, laneIdx) => {
     const y = y0 + laneIdx * laneH;
     rect(canvas, rc, x0, y, w, laneH - 12, { fill: [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][laneIdx % 4], stroke: colors.line, strokeWidth: 1.6, hachureGap: 26, seed: 1300 + laneIdx });
-    canvas.add(svgText(x0 + 70, y + laneH / 2, lane.label, { size: 25, weight: 900, fill: colors.red }));
+    canvas.add(svgText(x0 + 70, y + laneH / 2, lane.label, { size: 23, weight: 900, fill: colors.red, lineHeight: 25, maxWidth: 120, maxLines: 2 }));
     const laneSteps = lane.steps || [];
     const slotW = (w - 190) / Math.max(1, laneSteps.length);
     laneSteps.forEach((step, stepIdx) => {
@@ -1239,7 +1388,7 @@ function drawSwimlane(spec) {
       const cy = y + laneH / 2;
       const highlighted = step.id === visual.highlight;
       rect(canvas, rc, cx - 95, cy - 42, 190, 84, { fill: highlighted ? colors.pink : "#ffffff", stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.1 : 2, seed: 1320 + laneIdx * 20 + stepIdx });
-      canvas.add(svgText(cx, cy + 8, wrapCjk(step.label, 8).slice(0, 2), { size: 22, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
+      canvas.add(svgText(cx, cy + 8, step.label, { size: 21, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 23, maxWidth: 162, maxLines: 2 }));
       if (stepIdx < laneSteps.length - 1) line(canvas, rc, cx + 100, cy, cx + slotW - 100, cy, { arrow: true, stroke: colors.ink, strokeWidth: 2, seed: 1340 + laneIdx * 20 + stepIdx });
     });
   });
@@ -1263,29 +1412,50 @@ function drawQuadrantMatrix(spec) {
   line(canvas, rc, x0, y0 + h + 36, x0 + w, y0 + h + 36, { arrow: true, stroke: colors.red, strokeWidth: 2.4, seed: 513 });
   line(canvas, rc, x0 - 42, y0 + h, x0 - 42, y0, { arrow: true, stroke: colors.red, strokeWidth: 2.4, seed: 514 });
 
-  canvas.add(svgText(x0 + w / 2, y0 + h + 76, visual.x_axis?.label || "横轴", { size: 24, weight: 800, fill: colors.red }));
-  canvas.add(svgText(x0 - 94, y0 + h / 2, visual.y_axis?.label || "纵轴", { size: 24, weight: 800, fill: colors.red }));
-  canvas.add(svgText(x0, y0 + h + 22, visual.x_axis?.left || "低", { size: 20, anchor: "start", fill: colors.muted }));
-  canvas.add(svgText(x0 + w, y0 + h + 22, visual.x_axis?.right || "高", { size: 20, anchor: "end", fill: colors.muted }));
-  canvas.add(svgText(x0 - 58, y0 + h, visual.y_axis?.bottom || "低", { size: 20, anchor: "end", fill: colors.muted }));
-  canvas.add(svgText(x0 - 58, y0, visual.y_axis?.top || "高", { size: 20, anchor: "end", fill: colors.muted }));
+  canvas.add(svgText(x0 + w / 2, y0 + h + 76, visual.x_axis?.label || "横轴", { size: 24, weight: 800, fill: colors.red, maxWidth: 420, maxLines: 2 }));
+  canvas.add(svgText(x0 - 94, y0 + h / 2, visual.y_axis?.label || "纵轴", { size: 24, weight: 800, fill: colors.red, maxWidth: 180, maxLines: 3 }));
+  canvas.add(svgText(x0, y0 + h + 22, visual.x_axis?.left || "低", { size: 20, anchor: "start", fill: colors.muted, maxWidth: 210, maxLines: 2 }));
+  canvas.add(svgText(x0 + w, y0 + h + 22, visual.x_axis?.right || "高", { size: 20, anchor: "end", fill: colors.muted, maxWidth: 210, maxLines: 2 }));
+  canvas.add(svgText(x0 - 58, y0 + h, visual.y_axis?.bottom || "低", { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
+  canvas.add(svgText(x0 - 58, y0, visual.y_axis?.top || "高", { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
+
+  if ((visual.items || []).length > 8) {
+    throw new Error(`quadrant_matrix supports at most 8 items without tiny labels; received ${(visual.items || []).length}.`);
+  }
 
   (visual.items || []).forEach((item, i) => {
     const px = x0 + Math.max(0.06, Math.min(0.94, Number(item.x) || 0.5)) * w;
     const py = y0 + (1 - Math.max(0.06, Math.min(0.94, Number(item.y) || 0.5))) * h;
     const highlighted = item.label === visual.highlight || item.id === visual.highlight;
-    const itemW = visual.items.length > 8 ? 140 : 170;
-    ellipse(canvas, rc, px, py, highlighted ? itemW + 24 : itemW, highlighted ? 86 : 74, {
-      fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4],
+    const dense = visual.items.length > 8;
+    const itemW = dense ? 152 : 170;
+    const itemH = dense ? 82 : 74;
+    const fill = highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4];
+    ellipse(canvas, rc, px, py, highlighted ? itemW + 24 : itemW, highlighted ? itemH + 12 : itemH, {
+      fill,
+      opaqueFill: fill,
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.5 : 2.3,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
       seed: 530 + i,
     });
-    canvas.add(svgText(px, py - 8, wrapCjk(item.label, visual.items.length > 8 ? 5 : 8).slice(0, 2), { size: visual.items.length > 8 ? 20 : 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 22 }));
-    canvas.add(svgText(px, py + 25, wrapCjk(item.note || "", 8).slice(0, 2), { size: 17, fill: colors.muted, lineHeight: 20 }));
+    canvas.add(svgText(px, py - (dense ? 6 : 8), item.label, {
+      size: dense ? 14 : 23,
+      weight: 850,
+      fill: highlighted ? colors.red : colors.ink,
+      lineHeight: dense ? 15 : 22,
+      maxWidth: itemW - 24,
+      maxLines: 2,
+    }));
+    canvas.add(svgText(px, py + (dense ? 25 : 26), item.note || "", {
+      size: dense ? 10 : 16,
+      fill: colors.muted,
+      lineHeight: dense ? 12 : 19,
+      maxWidth: itemW - 28,
+      maxLines: dense ? 1 : 2,
+    }));
   });
-  canvas.add(svgText(1130, 170, "先定位关系，再选渲染器", { size: 24, weight: 800, fill: colors.red, anchor: "end" }));
+  canvas.add(svgText(1130, 170, "先定位关系，再选渲染器", { size: 24, weight: 800, fill: colors.red, anchor: "end", maxWidth: 330, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1300,9 +1470,9 @@ function drawMatrixGrid(spec) {
   const grid = { x: 310, y: 220, w: 900, h: 500 };
   const cellW = grid.w / Math.max(1, columns.length);
   const cellH = grid.h / Math.max(1, rows.length);
-  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, wrapCjk(column, 8).slice(0, 2), { size: 22, weight: 850, fill: colors.red, lineHeight: 24 })));
+  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, column, { size: 22, weight: 850, fill: colors.red, lineHeight: 24, maxWidth: cellW - 14, maxLines: 2 })));
   rows.forEach((row, rowIdx) => {
-    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(row, 8).slice(0, 2), { size: 22, weight: 850, anchor: "end", fill: colors.ink, lineHeight: 24 }));
+    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, row, { size: 22, weight: 850, anchor: "end", fill: colors.ink, lineHeight: 24, maxWidth: 210, maxLines: 2 }));
     columns.forEach((column, colIdx) => {
       const value = values[rowIdx]?.[colIdx] ?? "";
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
@@ -1313,7 +1483,7 @@ function drawMatrixGrid(spec) {
         fillStyle: highlighted ? "cross-hatch" : "hachure",
         seed: 1460 + rowIdx * 20 + colIdx,
       });
-      canvas.add(svgText(grid.x + colIdx * cellW + cellW / 2 - 5, grid.y + rowIdx * cellH + cellH / 2 + 8, wrapCjk(value, 8).slice(0, 2), { size: 22, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 24 }));
+      canvas.add(svgText(grid.x + colIdx * cellW + cellW / 2 - 5, grid.y + rowIdx * cellH + cellH / 2 + 8, value, { size: 21, weight: 800, fill: highlighted ? colors.red : colors.ink, lineHeight: 23, maxWidth: cellW - 18, maxLines: 2 }));
     });
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
@@ -1343,8 +1513,8 @@ function drawPyramidCapabilityStack(spec) {
       fillStyle: highlighted ? "cross-hatch" : "hachure",
       seed: 1500 + idx,
     });
-    canvas.add(svgText(centerX, y + levelH / 2 - 4, level.label, { size: 28, weight: 900, fill: highlighted ? colors.red : colors.ink }));
-    canvas.add(svgText(centerX, y + levelH / 2 + 32, wrapCjk(level.note || "", 12).slice(0, 1), { size: 18, fill: colors.muted }));
+    canvas.add(svgText(centerX, y + levelH / 2 - 4, level.label, { size: 26, weight: 900, fill: highlighted ? colors.red : colors.ink, lineHeight: 29, maxWidth: Math.max(180, wBottom - 80), maxLines: 2 }));
+    canvas.add(svgText(centerX, y + levelH / 2 + 34, level.note || "", { size: 18, fill: colors.muted, maxWidth: Math.max(160, wBottom - 100), maxLines: 1 }));
   });
   canvas.add(svgText(1240, 445, "越往上越接近\n业务判断", { size: 26, weight: 800, fill: colors.red, lineHeight: 34 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
@@ -1357,8 +1527,14 @@ function drawGenericNetworkGraph(spec) {
   const visual = spec.visual_spec || {};
   const nodes = visual.nodes || [];
   const center = [800, 475];
-  const radiusX = 480;
-  const radiusY = 270;
+  const dense = nodes.length > 8;
+  const veryDense = nodes.length > 10;
+  const radiusX = veryDense ? 560 : (dense ? 520 : 480);
+  const radiusY = veryDense ? 318 : (dense ? 292 : 270);
+  const nodeW = veryDense ? 150 : (dense ? 178 : 232);
+  const nodeH = veryDense ? 70 : (dense ? 82 : 104);
+  const labelSize = veryDense ? 15 : (dense ? 18 : 22);
+  const noteSize = dense ? 14 : 16;
   const positions = new Map();
   nodes.forEach((node, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(nodes.length, 1);
@@ -1378,15 +1554,16 @@ function drawGenericNetworkGraph(spec) {
   nodes.forEach((node, i) => {
     const [x, y] = positions.get(node.id);
     const highlighted = node.id === visual.highlight || node.label === visual.highlight;
-    rect(canvas, rc, x - 116, y - 52, 232, 104, {
+    rect(canvas, rc, x - nodeW / 2, y - nodeH / 2, nodeW, nodeH, {
       fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
+      opaqueFill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.3 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
       seed: 1580 + i,
     });
-    canvas.add(svgText(x, y - 9, wrapCjk(node.label, 8).slice(0, 2), { size: 23, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 25 }));
-    canvas.add(svgText(x, y + 25, wrapCjk(node.note || "", 8).slice(0, 1), { size: 16, fill: colors.muted }));
+    canvas.add(svgText(x, y - (dense ? 7 : 9), node.label, { size: labelSize, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: veryDense ? 17 : (dense ? 20 : 24), maxWidth: nodeW - 20, maxLines: 2 }));
+    canvas.add(svgText(x, y + (veryDense ? 20 : (dense ? 22 : 27)), node.note || "", { size: noteSize, fill: colors.muted, lineHeight: veryDense ? 15 : (dense ? 17 : 19), maxWidth: nodeW - 24, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -1399,8 +1576,14 @@ function drawHubSpokeNetwork(spec) {
   const hub = visual.hub || { id: "hub", label: "中心" };
   const nodes = visual.nodes || [];
   const center = [800, 475];
-  const radiusX = 455;
-  const radiusY = 245;
+  const dense = nodes.length > 8;
+  const veryDense = nodes.length > 10;
+  const radiusX = veryDense ? 560 : (dense ? 520 : 455);
+  const radiusY = veryDense ? 318 : (dense ? 292 : 245);
+  const nodeW = veryDense ? 150 : (dense ? 178 : 230);
+  const nodeH = veryDense ? 70 : (dense ? 82 : 110);
+  const labelSize = veryDense ? 15 : (dense ? 18 : 22);
+  const noteSize = dense ? 14 : 16;
   const positions = new Map([[hub.id, center]]);
   nodes.forEach((node, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(nodes.length, 1);
@@ -1420,24 +1603,27 @@ function drawHubSpokeNetwork(spec) {
     });
   });
 
-  ellipse(canvas, rc, center[0], center[1], 250, 142, { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.5, fillStyle: "cross-hatch", seed: 650 });
-  canvas.add(svgText(center[0], center[1] + 8, hub.label, { size: 36, weight: 900, fill: colors.red }));
+  ellipse(canvas, rc, center[0], center[1], 250, 142, { fill: colors.yellowPale, opaqueFill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.5, fillStyle: "cross-hatch", seed: 650 });
+  canvas.add(svgText(center[0], center[1] + 8, hub.label, { size: 32, weight: 900, fill: colors.red, lineHeight: 35, maxWidth: 210, maxLines: 2 }));
 
   nodes.forEach((node, i) => {
     const [x, y] = positions.get(node.id);
     const highlighted = node.id === visual.highlight || node.label === visual.highlight;
-    rect(canvas, rc, x - 115, y - 55, 230, 110, {
+    rect(canvas, rc, x - nodeW / 2, y - nodeH / 2, nodeW, nodeH, {
       fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
+      opaqueFill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
       stroke: highlighted ? colors.red : colors.ink,
       strokeWidth: highlighted ? 3.3 : 2.2,
       fillStyle: highlighted ? "cross-hatch" : "hachure",
       seed: 660 + i,
     });
-    canvas.add(svgText(x, y - 10, node.label, { size: 24, weight: 850, fill: highlighted ? colors.red : colors.ink }));
-    canvas.add(svgText(x, y + 25, wrapCjk(node.note || "", 8), { size: 17, fill: colors.muted, lineHeight: 20 }));
+    canvas.add(svgText(x, y - (dense ? 7 : 10), node.label, { size: labelSize, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: veryDense ? 17 : (dense ? 20 : 24), maxWidth: nodeW - 20, maxLines: 2 }));
+    canvas.add(svgText(x, y + (veryDense ? 20 : (dense ? 22 : 28)), node.note || "", { size: noteSize, fill: colors.muted, lineHeight: veryDense ? 15 : (dense ? 17 : 19), maxWidth: nodeW - 24, maxLines: dense ? 1 : 2 }));
   });
-  canvas.add(`<path d="M250 720 C505 795 1040 800 1345 708" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.45"/>`);
-  canvas.add(svgText(800, 785, "网络图只用于真正的多实体协同，不替代层级或流程", { size: 24, weight: 800, fill: colors.red }));
+  if (!dense) {
+    canvas.add(`<path d="M250 720 C505 795 1040 800 1345 708" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.45"/>`);
+    canvas.add(svgText(800, 842, "网络图只用于真正的多实体协同，不替代层级或流程", { size: 22, weight: 800, fill: colors.red, maxWidth: 820, maxLines: 2 }));
+  }
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1515,16 +1701,103 @@ function valueAt(values, row, col) {
   return Array.isArray(values?.[row]) ? values[row][col] : "";
 }
 
+function estimateNativeTextUnits(text) {
+  let units = 0;
+  for (const char of String(text || "")) {
+    if (/[\u3400-\u9fff]/.test(char)) units += 1;
+    else if (/[A-Z]/.test(char)) units += 0.72;
+    else if (/[a-z]/.test(char)) units += 0.55;
+    else if (/[0-9]/.test(char)) units += 0.55;
+    else if (/\s/.test(char)) units += 0.3;
+    else units += 0.35;
+  }
+  return units;
+}
+
+function estimateNativeTextWidth(text, fontSize) {
+  return estimateNativeTextUnits(text) * (fontSize / 72);
+}
+
+function normalizeNativeMargin(margin) {
+  if (typeof margin === "number") return margin;
+  if (Array.isArray(margin)) return Math.max(...margin.map((value) => Number(value) || 0));
+  if (margin && typeof margin === "object") return Math.max(...Object.values(margin).map((value) => Number(value) || 0));
+  return 0.04;
+}
+
+function wrapNativeTextToBox(text, opts) {
+  const value = safeText(text);
+  if (!value) return "";
+  const fontSize = opts.fontSize || 11;
+  if (fontSize < TEXT_LIMITS.minNativeFontSize) {
+    throw new Error(`ppt_native text font size ${fontSize} is below the ${TEXT_LIMITS.minNativeFontSize}pt minimum: ${value}`);
+  }
+  const boxW = Number(opts.w);
+  const boxH = Number(opts.h);
+  if (!Number.isFinite(boxW) || boxW <= 0 || !Number.isFinite(boxH) || boxH <= 0) return value;
+
+  const margin = normalizeNativeMargin(opts.margin);
+  const maxWidth = boxW - margin * 2;
+  const lineHeight = (fontSize / 72) * (opts.lineSpacingMultiple || 1.16);
+  const maxLines = Math.max(1, Math.floor((boxH - margin * 2) / lineHeight));
+  if (maxWidth <= 0) {
+    throw new Error(`ppt_native text box is too narrow for ${value}`);
+  }
+
+  const output = [];
+  const pushLine = (line) => {
+    if (output.length >= maxLines) {
+      throw new Error(`ppt_native text exceeds ${maxLines} line(s) in ${boxW.toFixed(2)}x${boxH.toFixed(2)} box: ${value}`);
+    }
+    output.push(trimLineEnd(line));
+  };
+
+  for (const rawLine of value.split("\n")) {
+    const tokens = splitTextForWrap(rawLine);
+    if (!tokens.length) {
+      pushLine("");
+      continue;
+    }
+    let current = "";
+    for (const token of tokens) {
+      const candidate = current ? `${current}${token}` : token;
+      if (estimateNativeTextWidth(candidate, fontSize) <= maxWidth) {
+        current = candidate;
+        continue;
+      }
+      if (current) pushLine(current);
+      let rest = token.trimStart();
+      while (rest && estimateNativeTextWidth(rest, fontSize) > maxWidth) {
+        let chunk = "";
+        for (const char of Array.from(rest)) {
+          if (chunk && estimateNativeTextWidth(`${chunk}${char}`, fontSize) > maxWidth) break;
+          chunk += char;
+        }
+        if (!chunk) throw new Error(`ppt_native text token cannot fit at ${fontSize}pt: ${token}`);
+        pushLine(chunk);
+        rest = Array.from(rest).slice(Array.from(chunk).length).join("");
+      }
+      current = rest;
+    }
+    if (current) pushLine(current);
+  }
+
+  return output.join("\n");
+}
+
 function nativeText(slide, text, options = {}) {
-  slide.addText(String(text ?? ""), {
+  if (options.fit) {
+    throw new Error(`ppt_native text does not allow fit:${options.fit}; resize the box, wrap text, or reject the render.`);
+  }
+  const opts = {
     fontFace: "Microsoft YaHei",
     fontSize: 11,
     color: "333333",
     margin: 0.04,
     breakLine: false,
-    fit: "shrink",
     ...options,
-  });
+  };
+  slide.addText(wrapNativeTextToBox(text, opts), opts);
 }
 
 function nativeRect(slide, x, y, w, h, options = {}) {

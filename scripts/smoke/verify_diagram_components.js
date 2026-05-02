@@ -46,6 +46,10 @@ function cleanDefaultOutputDir(outDir) {
   fs.mkdirSync(outDir, { recursive: true });
 }
 
+function isTextCapacityError(error) {
+  return /Diagram text exceeds|supports at most|below the \d+px minimum|ppt_native text exceeds|ppt_native text font size/.test(String(error?.message || error));
+}
+
 async function writeDiagramAssets(spec, outRoot) {
   process.env.HW_VISUAL_ANCHOR_RENDERER = "rough_svg";
   const kindDir = safePathPart(spec.kind);
@@ -198,6 +202,15 @@ function getCaseDescription(asset) {
   return asset.scenario || asset.claim || asset.title || asset.id || asset.template || "未命名用例";
 }
 
+function sortReviewItems(items) {
+  return [...items].sort((a, b) => {
+    const aLong = String(a.id || "").startsWith("long_text") ? 0 : 1;
+    const bLong = String(b.id || "").startsWith("long_text") ? 0 : 1;
+    if (aLong !== bLong) return aLong - bLong;
+    return 0;
+  });
+}
+
 function addCaseImageSlide(slide, asset) {
   const pngPath = path.join(ROOT, asset.png);
   const imageArea = { x: 0.45, y: 1.12, w: 12.25, h: 5.86 };
@@ -227,6 +240,7 @@ function fitAreaContain(area, imageWidth, imageHeight) {
 
 async function writeRoughReviewDeck(assets, outRoot, manifest) {
   const groups = groupAssetsByTemplate(assets);
+  const reviewAssets = sortReviewItems(assets);
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "hw-ppt-gen";
@@ -240,7 +254,7 @@ async function writeRoughReviewDeck(assets, outRoot, manifest) {
     lang: "zh-CN",
   };
 
-  const totalPages = assets.length + 1;
+  const totalPages = reviewAssets.length + 1;
   const cover = pptx.addSlide();
   cover.background = { color: "FFFFFF" };
   addSlideTitle(cover, "视觉锚点 Rough SVG Smoke Review", `${assets.length} images · ${groups.length} templates · ${manifest.generated_at}`);
@@ -269,7 +283,7 @@ async function writeRoughReviewDeck(assets, outRoot, manifest) {
   });
   addFooter(cover, 1, totalPages);
 
-  assets.forEach((asset, assetIdx) => {
+  reviewAssets.forEach((asset, assetIdx) => {
     const slide = pptx.addSlide();
     slide.background = { color: "FFFFFF" };
     addSlideTitle(slide, getCaseDescription(asset), `${asset.kind} / ${asset.template} · ${asset.id}`);
@@ -284,6 +298,28 @@ async function writeRoughReviewDeck(assets, outRoot, manifest) {
 
 async function writeNativeReviewDeck(cases, outRoot, manifest) {
   process.env.HW_VISUAL_ANCHOR_RENDERER = "ppt_native";
+  const reviewCases = sortReviewItems(cases);
+  const renderableCases = [];
+  const rejectedCases = [];
+  for (const spec of reviewCases) {
+    try {
+      validateVisualAnchorSpec(spec);
+      const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" });
+      if (!["ppt_native", "evidence"].includes(renderPath)) throw new Error(`Expected ppt_native/evidence render path for ${spec.id}, got ${renderPath}`);
+      renderableCases.push({ spec, renderPath });
+    } catch (error) {
+      if (!isTextCapacityError(error)) throw error;
+      rejectedCases.push({
+        id: spec.id,
+        title: spec.title,
+        claim: spec.claim,
+        kind: spec.kind,
+        template: spec.template,
+        renderer: "ppt_native",
+        reason: error.message,
+      });
+    }
+  }
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = "hw-ppt-gen";
@@ -295,10 +331,10 @@ async function writeNativeReviewDeck(cases, outRoot, manifest) {
 
   const groups = new Map();
   cases.forEach((spec) => groups.set(`${spec.kind}/${spec.template}`, (groups.get(`${spec.kind}/${spec.template}`) || 0) + 1));
-  const totalPages = cases.length + 1;
+  const totalPages = renderableCases.length + 1;
   const cover = pptx.addSlide();
   cover.background = { color: "FFFFFF" };
-  addSlideTitle(cover, "视觉锚点 PPT Native Smoke Review", `${cases.length} cases · ${groups.size} templates · ${manifest.generated_at}`);
+  addSlideTitle(cover, "视觉锚点 PPT Native Smoke Review", `${renderableCases.length}/${cases.length} rendered · ${rejectedCases.length} rejected · ${groups.size} templates · ${manifest.generated_at}`);
   cover.addText("封面后每页用 PPT 原生形状渲染同一批语义用例。该卡组验证 ppt_native 全局模式能覆盖现有 visual anchor case。", {
     x: 0.75,
     y: 1.55,
@@ -324,20 +360,33 @@ async function writeNativeReviewDeck(cases, outRoot, manifest) {
   });
   addFooter(cover, 1, totalPages);
 
-  cases.forEach((spec, idx) => {
-    validateVisualAnchorSpec(spec);
-    const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" });
-    if (!["ppt_native", "evidence"].includes(renderPath)) throw new Error(`Expected ppt_native/evidence render path for ${spec.id}, got ${renderPath}`);
+  let nativePage = 0;
+  renderableCases.forEach(({ spec }) => {
     const slide = pptx.addSlide();
     slide.background = { color: "FFFFFF" };
     addSlideTitle(slide, spec.scenario || spec.claim || spec.title || spec.id, `${spec.kind} / ${spec.template} · ${spec.id}`);
-    renderVisualAnchorPptNative(slide, spec);
-    addFooter(slide, idx + 2, totalPages);
+    try {
+      renderVisualAnchorPptNative(slide, spec);
+      nativePage += 1;
+      addFooter(slide, nativePage + 1, totalPages);
+    } catch (error) {
+      if (!isTextCapacityError(error)) throw error;
+      pptx._slides.pop();
+      rejectedCases.push({
+        id: spec.id,
+        title: spec.title,
+        claim: spec.claim,
+        kind: spec.kind,
+        template: spec.template,
+        renderer: "ppt_native",
+        reason: error.message,
+      });
+    }
   });
 
   const pptxPath = path.join(outRoot, "visual_anchor_ppt_native_review.pptx");
   await pptx.writeFile({ fileName: pptxPath });
-  return pptxPath;
+  return { pptxPath, rejectedCases };
 }
 
 async function main() {
@@ -354,11 +403,25 @@ async function main() {
 
   const assets = [];
   const fixedRuleCases = [];
+  const rejectedCases = [];
   for (const spec of cases) {
     validateVisualAnchorSpec(spec);
     const roughPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" });
     if (roughPath === "rough_svg") {
-      assets.push(await writeDiagramAssets(spec, args.out));
+      try {
+        assets.push(await writeDiagramAssets(spec, args.out));
+      } catch (error) {
+        if (!isTextCapacityError(error)) throw error;
+        rejectedCases.push({
+          id: spec.id,
+          title: spec.title,
+          claim: spec.claim,
+          kind: spec.kind,
+          template: spec.template,
+          renderer: "rough_svg",
+          reason: error.message,
+        });
+      }
     } else {
       fixedRuleCases.push({
         id: spec.id,
@@ -378,9 +441,12 @@ async function main() {
     output_contract: ["image/svg+xml", "image/png"],
     assets,
     fixed_rule_cases: fixedRuleCases,
+    rejected_cases: rejectedCases,
   };
   const roughReviewPptx = await writeRoughReviewDeck(assets, args.out, manifest);
-  const nativeReviewPptx = await writeNativeReviewDeck(cases, args.out, manifest);
+  const nativeReview = await writeNativeReviewDeck(cases, args.out, manifest);
+  const nativeReviewPptx = nativeReview.pptxPath;
+  manifest.rejected_cases.push(...nativeReview.rejectedCases);
   manifest.review_pptx = path.relative(ROOT, roughReviewPptx).replace(/\\/g, "/");
   manifest.review_pptx_by_renderer = {
     rough_svg: path.relative(ROOT, roughReviewPptx).replace(/\\/g, "/"),
@@ -388,6 +454,7 @@ async function main() {
   };
   fs.writeFileSync(path.join(args.out, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
   console.log(`Generated ${assets.length} SVG+PNG pairs under ${args.out}`);
+  console.log(`Rejected ${manifest.rejected_cases.length} over-capacity render cases`);
   console.log(`Covered ${fixedRuleCases.length} fixed-rule Evidence/table cases in native review deck`);
   console.log(`Generated rough_svg review deck: ${roughReviewPptx}`);
   console.log(`Generated ppt_native review deck: ${nativeReviewPptx}`);

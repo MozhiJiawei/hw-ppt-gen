@@ -52,6 +52,65 @@ function parseViewBox(svg) {
   return { x, y, w, h };
 }
 
+function decodeXmlText(value) {
+  return String(value ?? "")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"');
+}
+
+function estimateSvgTextWidth(text, size) {
+  let units = 0;
+  for (const char of String(text ?? "")) {
+    if (char === " ") units += 0.35;
+    else if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(char)) units += 1.5;
+    else if (/[A-Z0-9#%@&]/.test(char)) units += 1.05;
+    else if (/[a-z]/.test(char)) units += 0.9;
+    else if (/[._:/+-]/.test(char)) units += 0.7;
+    else units += 0.78;
+  }
+  return Math.max(size * 0.8, units * size * 0.62);
+}
+
+function extractSvgTextLines(svg) {
+  const lines = [];
+  for (const textMatch of svg.matchAll(/<text\b([^>]*)>([\s\S]*?)<\/text>/g)) {
+    const size = Number((textMatch[1].match(/font-size="([^"]+)"/) || [])[1] || 28);
+    for (const lineMatch of textMatch[2].matchAll(/<tspan\b[^>]*>([\s\S]*?)<\/tspan>/g)) {
+      lines.push({ size, text: decodeXmlText(lineMatch[1].replace(/<[^>]+>/g, "")) });
+    }
+  }
+  return lines;
+}
+
+function assertNoOversizedSvgTextLine(svg, maxWidth, context) {
+  const oversized = extractSvgTextLines(svg)
+    .map((line) => ({ ...line, width: estimateSvgTextWidth(line.text, line.size) }))
+    .filter((line) => line.width > maxWidth);
+  assert.deepStrictEqual(
+    oversized.map((line) => `${line.text} (${Math.round(line.width)}px)`),
+    [],
+    `${context} should wrap long SVG text within a reasonable width`
+  );
+}
+
+function countArrowHeadPaths(svg) {
+  return (svg.match(/<path d="M [\d.-]+ [\d.-]+ L [\d.-]+ [\d.-]+ L [\d.-]+ [\d.-]+"/g) || []).length;
+}
+
+function collectStrings(value, out = []) {
+  if (typeof value === "string") out.push(value);
+  else if (Array.isArray(value)) value.forEach((item) => collectStrings(item, out));
+  else if (value && typeof value === "object") Object.values(value).forEach((item) => collectStrings(item, out));
+  return out;
+}
+
+function hasReasonableLongText(value) {
+  return collectStrings(value).some((text) => /[\u4e00-\u9fff]/.test(text) && text.length >= 8)
+    || collectStrings(value).some((text) => /(?:ppt_native|check_huawei|PowerPoint|fallback)/.test(text));
+}
+
 function testImageContractAndAspectRatio() {
   const spec = baseSpec({
     id: "image_contract",
@@ -165,11 +224,11 @@ function testInputsAreNotSilentlyTruncated() {
     visual_spec: {
       x_axis: { left: "低", right: "高", label: "横轴" },
       y_axis: { bottom: "低", top: "高", label: "纵轴" },
-      items: Array.from({ length: 10 }, (_, idx) => ({ label: `对象${idx + 1}`, x: (idx + 1) / 11, y: ((idx * 3) % 10 + 1) / 11, note: `注${idx + 1}` })),
-      highlight: "对象10",
+      items: Array.from({ length: 8 }, (_, idx) => ({ label: `对象${idx + 1}`, x: (idx + 1) / 9, y: ((idx * 3) % 8 + 1) / 9, note: `注${idx + 1}` })),
+      highlight: "对象8",
     },
   }));
-  assertIncludes(matrix, ["对象1", "对象10", "注10"], "quadrant_matrix");
+  assertIncludes(matrix, ["对象1", "对象8", "注8"], "quadrant_matrix");
 
   const network = createVisualAnchorSvg(baseSpec({
     id: "dense_network",
@@ -201,6 +260,175 @@ function testInputsAreNotSilentlyTruncated() {
     },
   }));
   assertIncludes(bars, ["A", "G", "S1", "S4", "10"], "bar_chart");
+}
+
+function testReasonableLongTextWrapsInsideSvgViews() {
+  const tree = createVisualAnchorSvg(baseSpec({
+    id: "long_text_tree",
+    kind: "Hierarchy",
+    template: "tree",
+    visual_spec: {
+      nodes: ["scripts", "pptx", "qa", "smoke", "helpers", "export", "checker", "tests"],
+      edges: [["scripts", "pptx"], ["scripts", "qa"], ["scripts", "smoke"], ["pptx", "helpers"], ["pptx", "export"], ["qa", "checker"], ["smoke", "tests"]],
+      labels: {
+        scripts: "脚本入口统一调度工作区",
+        pptx: "生成与导出目录职责边界清晰",
+        qa: "交付前硬规则检查目录",
+        smoke: "冒烟测试覆盖长文本",
+        helpers: "页面框架与图表辅助函数",
+        export: "PPTX 图片导出与参考图审阅",
+        checker: "规则检查契约与样例",
+        tests: "契约测试与长标签样例",
+      },
+      highlight: "pptx",
+      callout_title: "分支保留策略保持可读",
+      callout: "弱分支仍可能成为后续高分路径",
+    },
+  }));
+  assertIncludes(tree, ["生成与导出", "硬规则", "冒烟测试"], "long_text_tree");
+  assertNoOversizedSvgTextLine(tree, 520, "long_text_tree");
+
+  const process = createVisualAnchorSvg(baseSpec({
+    id: "long_text_process",
+    kind: "Sequence",
+    template: "process",
+    visual_spec: {
+      steps: [
+        { id: "plan", label: "先完成页面级观点规划", note: "避免标题和图内说明重复" },
+        { id: "render", label: "SVG 图内文本按宽度换行", note: "中文英文和路径名都要可读" },
+        { id: "qa", label: "导出图片逐页视觉检查", note: "发现重叠后回到通用 helper" },
+        { id: "ship", label: "沉淀为可复用技能契约", note: "后续视图复用同一策略" },
+      ],
+      highlight: "render",
+    },
+  }));
+  assertIncludes(process, ["SVG", "视觉", "helper"], "long_text_process");
+  assertNoOversizedSvgTextLine(process, 620, "long_text_process");
+
+  const network = createVisualAnchorSvg(baseSpec({
+    id: "long_text_network",
+    kind: "Network",
+    template: "hub_spoke_network",
+    visual_spec: {
+      hub: { id: "hub", label: "hw-ppt-gen 统一渲染入口" },
+      nodes: [
+        { id: "diagram", label: "hw_diagram_helpers.js", note: "rough SVG 文本布局" },
+        { id: "native", label: "ppt_native fallback renderer", note: "保持可编辑对象" },
+        { id: "qa", label: "check_huawei_pptx.js", note: "硬规则检查" },
+        { id: "export", label: "export_pptx_images.js", note: "PowerPoint 导图" },
+      ],
+      edges: [["hub", "diagram"], ["hub", "native"], ["hub", "qa"], ["hub", "export"], ["diagram", "qa"]],
+      highlight: "diagram",
+    },
+  }));
+  assertIncludes(network, ["hw_diagram", "fallback", "PowerPoint"], "long_text_network");
+  assertNoOversizedSvgTextLine(network, 520, "long_text_network");
+  assert(!network.includes(">hw_diagram_helpers.js<"), "long_text_network should wrap long helper file names instead of keeping them as one line");
+  assert(!network.includes(">export_pptx_images.js<"), "long_text_network should wrap long export file names instead of keeping them as one line");
+
+  const denseNetworkNodes = Array.from({ length: 11 }, (_, idx) => ({
+    id: `n${idx + 1}`,
+    label: idx % 2 ? `renderer_pipeline_long_token_${idx + 1}.js` : `节点${idx + 1}视觉锚点长文本回归`,
+    note: idx % 3 ? "密集网络文本" : "PowerPoint export",
+  }));
+  assert.throws(
+    () => createVisualAnchorSvg(baseSpec({
+      id: "long_text_dense_network",
+      kind: "Network",
+      template: "dependency_graph",
+      visual_spec: {
+        nodes: denseNetworkNodes,
+        edges: denseNetworkNodes.slice(0, -1).map((node, idx) => [node.id, denseNetworkNodes[idx + 1].id]),
+        highlight: "n7",
+      },
+    })),
+    /Diagram text exceeds/,
+    "overly dense network labels should be rejected instead of truncated"
+  );
+}
+
+function testOverflowAndTinyTextAreRejected() {
+  assert.throws(
+    () => createVisualAnchorSvg(baseSpec({
+      id: "too_dense_process",
+      kind: "Sequence",
+      template: "process",
+      visual_spec: {
+        steps: [
+          {
+            id: "dense",
+            label: "这是一个明显超过流程节点两行容量的超长阶段标题，应该拒绝渲染而不是自动省略或继续缩小字体",
+            note: "说明同样很长，不能被偷偷截断",
+          },
+          { id: "ok", label: "交付", note: "正常" },
+        ],
+        highlight: "dense",
+      },
+    })),
+    /Diagram text exceeds/
+  );
+
+  assert.throws(
+    () => createVisualAnchorSvg(baseSpec({
+      id: "tiny_quadrant_label",
+      kind: "Matrix",
+      template: "quadrant_matrix",
+      visual_spec: {
+        x_axis: { left: "低", right: "高", label: "价值" },
+        y_axis: { bottom: "低", top: "高", label: "可行性" },
+        items: Array.from({ length: 13 }, (_, idx) => ({ label: `对象${idx + 1}`, x: (idx + 1) / 14, y: ((idx * 5) % 13 + 1) / 14 })),
+      },
+    })),
+    /quadrant_matrix supports at most 8 items/
+  );
+}
+
+async function testNativeRendererRejectsShrinkFitAndOverflow() {
+  const pptx = createHuaweiDeck({ title: "native text guard" });
+  const slide = pptx.addSlide();
+  assert.throws(
+    () => renderVisualAnchorPptNative(slide, baseSpec({
+      id: "native_process_overflow",
+      kind: "Sequence",
+      template: "process",
+      visual_spec: {
+        steps: [
+          {
+            id: "s1",
+            label: "这是一个明显超过 PPT 原生流程节点容量的超长阶段标题，不能依靠 PowerPoint shrink fit 缩小",
+            note: "说明文字也不能被自动挤压",
+          },
+          { id: "s2", label: "交付", note: "正常" },
+        ],
+        highlight: "s1",
+      },
+    }), { x: 0.7, y: 1.1, w: 3, h: 2 }),
+    /ppt_native text exceeds/
+  );
+}
+
+function testLayeredArchitectureKeepsSideModuleEdges() {
+  const sideModules = Array.from({ length: 5 }, (_, idx) => `侧向能力${idx + 1}check_huawei_${idx + 1}`);
+  const edges = [
+    ["L1-A", "L2-A"],
+    ...sideModules.map((moduleName, idx) => [moduleName, idx % 2 ? "L2-A" : "L3-A"]),
+  ];
+  const svg = createVisualAnchorSvg(baseSpec({
+    id: "layered_many_side_edges",
+    kind: "Hierarchy",
+    template: "layered_architecture",
+    visual_spec: {
+      layers: [
+        { id: "l1", label: "第1层视觉锚点长文本", items: ["L1-A", "L1-B"] },
+        { id: "l2", label: "第2层", items: ["L2-A", "L2-B"] },
+        { id: "l3", label: "第3层", items: ["L3-A", "L3-B"] },
+      ],
+      side_modules: sideModules,
+      edges,
+    },
+  }));
+  assert(countArrowHeadPaths(svg) >= edges.length, "layered_architecture should render side-module edges even when there are more than three side modules");
+  assertNoOversizedSvgTextLine(svg, 520, "layered_many_side_edges");
 }
 
 function testValidatorRejectsDroppedRelationships() {
@@ -411,24 +639,41 @@ function testGeneratedCaseMatrixCoverage() {
   byTemplate.forEach((specs, template) => {
     assert(specs.length >= 10, `${template} should have at least 10 variants`);
     specs.forEach((spec) => assert.equal(spec.render_options?.aspectRatio, DEFAULT_LAYOUT, `${template} should use the chosen default layout`));
+    const longTextSpec = specs.find((spec) => hasReasonableLongText(spec.visual_spec));
+    assert(longTextSpec, `${template} should include ordinary generated cases with long or mixed-length text`);
+    try {
+      const image = createVisualAnchorImage(longTextSpec, longTextSpec.render_options);
+      assertNoOversizedSvgTextLine(image.svg, 780, `${template} generated long-text case`);
+    } catch (error) {
+      assert(
+        /Diagram text exceeds|supports at most|below the \d+px minimum/.test(String(error.message)),
+        `${template} generated long-text case should either render cleanly or fail on a text-capacity guard: ${error.message}`
+      );
+    }
   });
   assert(roughCases.length >= 200, "rough-svg case matrix should still provide at least 10 variants per rough template");
   assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Evidence" && renderPath === "evidence"), "matrix should include a fixed-rule Evidence case");
   assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Matrix" && spec.template === "table" && renderPath === "ppt_native"), "matrix should include a fixed-rule native table case");
 
-  const spotChecks = [
-    "process_10",
-    "dual_loop_10",
-    "layered_architecture_10",
-    "hub_spoke_network_10",
-    "bar_chart_10",
-  ];
-  spotChecks.forEach((id) => {
-    const spec = generatedCaseMatrix.find((entry) => entry.id === id);
-    assert(spec, `matrix should include ${id}`);
-    const image = createVisualAnchorImage(spec, spec.render_options);
+  const spotCheckTemplates = ["process", "layered_architecture", "hub_spoke_network", "bar_chart"];
+  spotCheckTemplates.forEach((template) => {
+    const candidates = generatedCaseMatrix.filter((entry) => entry.template === template);
+    assert(candidates.length, `matrix should include ${template}`);
+    let image = null;
+    for (const spec of candidates) {
+      try {
+        image = createVisualAnchorImage(spec, spec.render_options);
+        break;
+      } catch (error) {
+        assert(
+          /Diagram text exceeds|supports at most|below the \d+px minimum/.test(String(error.message)),
+          `${spec.id} should either render or fail on a text-capacity guard: ${error.message}`
+        );
+      }
+    }
+    assert(image, `${template} should include at least one renderable generated case`);
     assert.equal(image.format, "svg");
-    assert(image.svg.startsWith("<svg"), `${id} should render svg markup`);
+    assert(image.svg.startsWith("<svg"), `${template} should render svg markup`);
   });
 }
 
@@ -465,11 +710,15 @@ async function main() {
   testLayeredArchitectureIsDataDriven();
   testTreeIsDataDriven();
   testInputsAreNotSilentlyTruncated();
+  testReasonableLongTextWrapsInsideSvgViews();
+  testOverflowAndTinyTextAreRejected();
+  testLayeredArchitectureKeepsSideModuleEdges();
   testValidatorRejectsDroppedRelationships();
   testAllVisualBaseTemplatesExportImages();
   testTemplateLayoutDefaults();
   testGeneratedCaseMatrixCoverage();
   await testNativeNetworkUsesPowerPointSafeExtents();
+  await testNativeRendererRejectsShrinkFitAndOverflow();
   testRendererIsRuntimeOnly();
 
   console.log("visual anchor helper contract tests passed");

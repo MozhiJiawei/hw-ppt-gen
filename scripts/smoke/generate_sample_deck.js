@@ -4,6 +4,7 @@ const {
   addTocSlide,
   createHuaweiDeck,
   ensureTmpPath,
+  repairPptxForPowerPointCom,
 } = require("../pptx/hw_pptx_helpers");
 const {
   addVisualAnchorContentSlide,
@@ -163,6 +164,7 @@ async function main() {
 
   writeVisualAnchorManifest(pptx, manifestPath);
   await pptx.writeFile({ fileName: output });
+  await repairPptxForPowerPointCom(output);
   console.log(`Wrote ${output}`);
   console.log(`Wrote ${manifestPath}`);
 }

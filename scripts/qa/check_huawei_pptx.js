@@ -142,6 +142,49 @@ function extractShapes(xml) {
       fill: fill ? fill.toUpperCase() : null,
     });
   }
+  for (const match of xml.matchAll(/<p:graphicFrame\b[\s\S]*?<a:tbl\b[\s\S]*?<\/p:graphicFrame>/g)) {
+    const block = match[0];
+    const off = block.match(/<a:off\s+x="(-?\d+)"\s+y="(-?\d+)"/);
+    const ext = block.match(/<a:ext\s+cx="(\d+)"\s+cy="(\d+)"/);
+    const tableX = off ? emuToIn(off[1]) : null;
+    const tableY = off ? emuToIn(off[2]) : null;
+    const tableW = ext ? emuToIn(ext[1]) : null;
+    const tableH = ext ? emuToIn(ext[2]) : null;
+    const colWidths = [...block.matchAll(/<a:gridCol\s+w="(\d+)"/g)].map((m) => emuToIn(m[1]));
+    let rowY = tableY;
+    for (const rowMatch of block.matchAll(/<a:tr\b([^>]*)>([\s\S]*?)<\/a:tr>/g)) {
+      const rowAttrs = rowMatch[1] || "";
+      const rowBlock = rowMatch[2] || "";
+      const rowH = emuToIn((rowAttrs.match(/\bh="(\d+)"/) || [])[1]) || tableH;
+      let cellX = tableX;
+      let colIdx = 0;
+      for (const cellMatch of rowBlock.matchAll(/<a:tc\b[\s\S]*?<\/a:tc>/g)) {
+        const cellBlock = cellMatch[0];
+        const cellW = colWidths[colIdx] || (tableW && colWidths.length ? tableW / colWidths.length : tableW);
+        const texts = [...cellBlock.matchAll(/<a:t>([\s\S]*?)<\/a:t>/g)].map((m) => decodeXmlText(m[1]));
+        const fontSizes = [...cellBlock.matchAll(/\bsz="(\d+)"/g)].map((m) => Number(m[1]) / 100).filter(Number.isFinite);
+        const fonts = [...cellBlock.matchAll(/\btypeface="([^"]+)"/g)].map((m) => m[1]);
+        const colors = [...cellBlock.matchAll(/<a:srgbClr\s+val="([^"]+)"/g)].map((m) => m[1].toUpperCase());
+        const fills = [...cellBlock.matchAll(/<a:solidFill>\s*<a:srgbClr\s+val="([^"]+)"/g)].map((m) => m[1]);
+        const fill = fills[fills.length - 1];
+        shapes.push({
+          text: texts.join("").trim(),
+          x: cellX,
+          y: rowY,
+          w: cellW,
+          h: rowH,
+          area: cellW && rowH ? cellW * rowH : 0,
+          fontSizes,
+          fonts,
+          colors,
+          fill: fill ? fill.toUpperCase() : null,
+        });
+        cellX = cellX === null || cellW === null ? null : cellX + cellW;
+        colIdx += 1;
+      }
+      rowY = rowY === null || rowH === null ? null : rowY + rowH;
+    }
+  }
   return shapes;
 }
 

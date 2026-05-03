@@ -19,6 +19,7 @@ const {
   cloneOptions,
   createHuaweiDeck,
   ensureTmpPath,
+  repairPptxForPowerPointCom,
   grayCard,
   redTitleCard,
   safeText,
@@ -377,6 +378,7 @@ async function buildDeck() {
 
   writeVisualAnchorManifest(pptx, MANIFEST);
   await pptx.writeFile({ fileName: OUT });
+  await repairPptxForPowerPointCom(OUT);
   await assertNoNegativeExtents(OUT);
 }
 

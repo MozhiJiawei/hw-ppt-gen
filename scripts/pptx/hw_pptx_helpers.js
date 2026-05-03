@@ -1,4 +1,6 @@
 const pptxgen = require("pptxgenjs");
+const fs = require("fs");
+const JSZip = require("jszip");
 
 const ShapeType = pptxgen.ShapeType || {
   rect: "rect",
@@ -90,6 +92,41 @@ function ensureTmpPath(fileName) {
     throw new Error(`Generated artifacts must be saved under .tmp: ${fileName}`);
   }
   return fileName;
+}
+
+async function repairPptxForPowerPointCom(fileName) {
+  ensureTmpPath(fileName);
+  if (!fs.existsSync(fileName)) throw new Error(`PPTX not found: ${fileName}`);
+  const zip = await JSZip.loadAsync(fs.readFileSync(fileName));
+  const slideEntries = Object.values(zip.files).filter((entry) => /^ppt\/slides\/slide\d+\.xml$/.test(entry.name));
+  for (const entry of slideEntries) {
+    const xml = await entry.async("string");
+    const ids = [...xml.matchAll(/<p:cNvPr\b[^>]*\bid="(\d+)"/g)].map((match) => Number(match[1])).filter(Number.isFinite);
+    const duplicateCount = ids.length - new Set(ids).size;
+
+    let nextId = Math.max(...ids, 1) + 1;
+    const seen = new Set();
+    let repaired = xml.replace(/<p:cNvPr\b[^>]*\bid="\d+"[^>]*>/g, (tag) => {
+      const id = Number((tag.match(/\bid="(\d+)"/) || [])[1]);
+      if (!Number.isFinite(id) || !seen.has(id)) {
+        if (Number.isFinite(id)) seen.add(id);
+        return tag;
+      }
+      const replacement = nextId;
+      nextId += 1;
+      seen.add(replacement);
+      return tag.replace(/\bid="\d+"/, `id="${replacement}"`);
+    });
+    repaired = repaired.replace(/<a:tcPr\b[^>]*>[\s\S]*?<\/a:tcPr>/g, (tag) =>
+      tag
+        .replace(/\s+mar[LRBT]="\d+"/g, "")
+        .replace(/\s+anchor="[^"]+"/g, "")
+        .replace(/<a:ln[LRBT]\b[\s\S]*?<\/a:ln[LRBT]>/g, "")
+    );
+    if (duplicateCount > 0 || repaired !== xml) zip.file(entry.name, repaired);
+  }
+  const buffer = await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" });
+  fs.writeFileSync(fileName, buffer);
 }
 
 function createHuaweiDeck(metadata = {}) {
@@ -236,33 +273,39 @@ function addSectionTabs(slide, sections, currentSection, options = {}) {
   const x = options.x ?? (12.78 - w);
   const y = options.y ?? 0;
   const h = options.h ?? 0.32;
+  const tableData = [
+    titles.map((title, idx) => {
+      const active = idx === activeIndex;
+      return {
+        text: title,
+        options: {
+          fontFace: HW_STYLE.font.cn,
+          fontSize: 8,
+          bold: true,
+          color: active ? HW_STYLE.color.white : HW_STYLE.color.black,
+          fill: { color: active ? HW_STYLE.color.red : HW_STYLE.color.white },
+          align: "center",
+          valign: "mid",
+          fit: "shrink",
+        },
+      };
+    }),
+  ];
+  slide.addTable(tableData, {
+    x,
+    y,
+    w,
+    h,
+    colW: widths,
+    rowH: [h],
+  });
+  addLine(slide, x, y, x + w, y, { line: { color: HW_STYLE.color.black, width: 0.5 } });
+  addLine(slide, x, y + h, x + w, y + h, { line: { color: HW_STYLE.color.black, width: 0.5 } });
+  addLine(slide, x, y, x, y + h, { line: { color: HW_STYLE.color.black, width: 0.5 } });
   let cursorX = x;
-  titles.forEach((title, idx) => {
-    const active = idx === activeIndex;
-    const tabW = widths[idx] ?? (w / titles.length);
-    addRect(slide, {
-      x: cursorX,
-      y,
-      w: tabW,
-      h,
-      fill: { color: active ? HW_STYLE.color.red : HW_STYLE.color.white },
-      line: { color: HW_STYLE.color.black, width: 0.5 },
-    });
-    textBox(slide, title, {
-      x: cursorX + 0.05,
-      y: y + 0.065,
-      w: tabW - 0.1,
-      h: h - 0.1,
-      fontSize: 8,
-      bold: true,
-      color: active ? HW_STYLE.color.white : HW_STYLE.color.black,
-      align: "center",
-      valign: "mid",
-      lineSpacingMultiple: 1,
-      margin: 0,
-      fit: "shrink",
-    });
+  widths.forEach((tabW) => {
     cursorX += tabW;
+    addLine(slide, cursorX, y, cursorX, y + h, { line: { color: HW_STYLE.color.black, width: 0.5 } });
   });
 }
 
@@ -613,6 +656,7 @@ module.exports = {
   cloneOptions,
   createHuaweiDeck,
   ensureTmpPath,
+  repairPptxForPowerPointCom,
   grayCard,
   redTitleCard,
   safeText,

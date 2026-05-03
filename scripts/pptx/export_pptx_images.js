@@ -2,6 +2,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
+const { repairPptxForPowerPointCom } = require("./hw_pptx_helpers");
 
 function usage() {
   console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice]");
@@ -251,6 +252,7 @@ async function main() {
   const renderer = args.renderer === "auto"
     ? (powerpointAvailable() ? "powerpoint" : "libreoffice")
     : args.renderer;
+  if (renderer === "powerpoint") await repairPptxForPowerPointCom(inputPath);
   const manifest = renderer === "powerpoint"
     ? exportWithPowerPoint(inputPath, outDir)
     : exportWithLibreOffice(inputPath, outDir, args.dpi);

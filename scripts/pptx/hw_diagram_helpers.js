@@ -1837,18 +1837,19 @@ function drawNativeTable(slide, visual, area) {
 
 function drawNativeEvidence(slide, spec, area) {
   const source = spec.source || {};
-  nativeRect(slide, area.x, area.y, area.w, area.h, { fill: "FFFFFF", stroke: "C00000", strokeWidth: 0.8 });
   const imagePath = source.path ? path.resolve(source.path) : "";
-  const imageBox = { x: area.x + 0.18, y: area.y + 0.18, w: area.w - 0.36, h: area.h - 0.92 };
+  const pad = 0.04;
+  const imageBox = { x: area.x + pad, y: area.y + pad, w: area.w - pad * 2, h: area.h - pad * 2 };
   if (imagePath && fs.existsSync(imagePath)) {
     const dimensions = readImageDimensions(imagePath);
     const fitted = dimensions ? fitAreaContain(imageBox, dimensions.width, dimensions.height) : imageBox;
     slide.addImage({ path: imagePath, ...fitted });
+    return { image_area: fitted };
   } else {
-    nativeRect(slide, area.x + 0.25, area.y + 0.25, area.w - 0.5, area.h - 1.1, { fill: "F7F7F7", stroke: "D9D9D9" });
+    nativeRect(slide, area.x + 0.08, area.y + 0.08, area.w - 0.16, area.h - 0.16, { fill: "F7F7F7", stroke: "D9D9D9" });
     nativeText(slide, source.path || source.id, { x: area.x + 0.45, y: area.y + 0.72, w: area.w - 0.9, h: 0.32, fontSize: 12, bold: true, color: "595959", align: "center" });
+    return { image_area: imageBox, placeholder: true };
   }
-  nativeText(slide, source.caption, { x: area.x + 0.22, y: area.y + area.h - 0.44, w: area.w - 0.44, h: 0.2, fontSize: 10, bold: true, italic: true, color: "333333", align: "center" });
 }
 
 function fitAreaContain(area, imageWidth, imageHeight) {
@@ -2027,10 +2028,12 @@ function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 
   validateVisualAnchorSpec(spec);
   const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" });
   const visual = spec.visual_spec || {};
+
+  if (renderPath === "evidence") return drawNativeEvidence(slide, spec, area);
+
   nativeRect(slide, area.x, area.y, area.w, area.h, { fill: "FFFFFF", stroke: "D9D9D9" });
   const inner = { x: area.x + 0.55, y: area.y + 0.58, w: area.w - 1.1, h: area.h - 1.15 };
 
-  if (renderPath === "evidence") return drawNativeEvidence(slide, spec, inner);
   if (spec.kind === "Matrix" && spec.template === "table") return drawNativeTable(slide, visual, inner);
   if (renderPath !== "ppt_native") throw new Error(`Visual anchor ${spec.kind}/${spec.template} is configured for ${renderPath}, not ppt_native.`);
 

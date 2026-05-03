@@ -85,8 +85,8 @@ function renderVisualAnchor(slide, visualAnchor, area) {
       image_area: image.imageArea,
     };
   }
-  renderVisualAnchorPptNative(slide, visualAnchor, area);
-  return { renderer: renderPath, rendered: true };
+  const nativeResult = renderVisualAnchorPptNative(slide, visualAnchor, area) || {};
+  return { renderer: renderPath, rendered: true, ...nativeResult };
 }
 
 function normalizeVisualAnchorCaption(data = {}) {

@@ -152,6 +152,41 @@ function assertContentSlideUsesProportionalImagePlacement() {
   );
 }
 
+function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
+  const previousRenderer = process.env.HW_VISUAL_ANCHOR_RENDERER;
+  delete process.env.HW_VISUAL_ANCHOR_RENDERER;
+  const pptx = createHuaweiDeck({ title: "caption contract" });
+  addVisualAnchorContentSlide(pptx, {
+    title: "图注渲染",
+    sections: ["测试"],
+    currentSection: "测试",
+    summary: { body: [{ label: "可编辑", text: "视觉锚点描述必须在 PPT 文本层。" }] },
+    anchorArea: { x: 1.0, y: 1.65, w: 10.0, h: 2.6 },
+    visualAnchorCaption: {
+      text: "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。",
+      source: "说明：图注不属于图形规格。",
+    },
+    visual_anchor: {
+      ...roughSvgSpec,
+      id: "caption_outside_visual_spec",
+    },
+    page: "01",
+  });
+  const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_caption_manifest.json"));
+  if (previousRenderer === undefined) delete process.env.HW_VISUAL_ANCHOR_RENDERER;
+  else process.env.HW_VISUAL_ANCHOR_RENDERER = previousRenderer;
+
+  const slide = manifest.slides[0];
+  assert(slide.visual_anchor_caption, "manifest should record PPT-layer visual anchor caption placement");
+  assert.equal(slide.visual_anchor_caption.text, "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。");
+  assert(!slide.visual_anchor.visual_spec.caption, "caption must stay outside visual_spec");
+  assert(!slide.visual_anchor.visual_spec.figure_legend, "figure legend must stay outside visual_spec");
+  assert(slide.visual_area.h < slide.anchor_area.h, "caption should reserve space below the visual anchor");
+  assert(slide.visual_anchor_caption.area.y >= slide.visual_area.y + slide.visual_area.h - 0.01, "caption should sit below the rendered visual area");
+}
+
 function assertDiagramExportsStayAvailable() {
   const diagram = require("../pptx/hw_diagram_helpers");
   for (const name of requiredDiagramExports) {
@@ -191,6 +226,7 @@ function main() {
   collect("visual-anchor content-slide surface exists", assertVisualAnchorSlideSurface, failures);
   collect("content-slide entrypoint honors default renderer", assertContentSlideHonorsDefaultRenderer, failures);
   collect("content-slide SVG images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
+  collect("content-slide captions stay outside visual_spec", assertContentSlideRendersEditableCaptionOutsideVisualSpec, failures);
   collect("diagram renderer exports remain available", assertDiagramExportsStayAvailable, failures);
   collect("sample deck uses the visual-anchor path", assertSampleDeckUsesVisualAnchorContentSlides, failures);
   collect("hard QA validates rendered visual anchors", assertHardQaKnowsVisualAnchorContract, failures);

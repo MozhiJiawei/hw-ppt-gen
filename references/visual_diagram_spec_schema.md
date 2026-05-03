@@ -38,9 +38,11 @@ Required common fields:
 
 For all conceptual anchors except `Evidence`, include `visual_spec`. For `Evidence`, include `source`.
 
-Do not output `renderer`, `visual_strategy`, `intent`, or `visual_spec.annotation`.
+Do not output `renderer`, `visual_strategy`, `intent`, or standalone text fields anywhere under `visual_spec`, including `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, and `conclusion`.
 
-`title` and `claim` are metadata for planning, manifest review, and PPT composition. They are not rendered inside generated SVG images. Standalone captions, figure legends, source notes, and explanatory paragraphs belong in editable PPT text boxes or supporting cards, not inside `visual_spec`.
+`title` and `claim` are metadata for planning, manifest review, and PPT composition. They are not rendered inside generated SVG images. Standalone captions, figure legends, source notes, explanatory paragraphs, side callouts, and bottom slogans belong in editable PPT text boxes or supporting cards, not inside `visual_spec`. When using `addVisualAnchorContentSlide`, put the editable figure-legend text in `visualAnchorCaption` or `visual_anchor_caption` beside `visual_anchor`, not under `visual_spec`.
+
+`visual_spec` is closed at the top level for each template. Use only the fields listed for that template; unknown top-level fields are validation errors.
 
 ## Quantity
 
@@ -52,8 +54,8 @@ Do not output `renderer`, `visual_strategy`, `intent`, or `visual_spec.annotatio
   "template": "data_cards",
   "visual_spec": {
     "cards": [
-      { "id": "roi", "label": "ROI 提升", "value": "42", "unit": "%", "note": "季度环比" },
-      { "id": "cost", "label": "成本下降", "value": "18", "unit": "%", "note": "资源节省" }
+      { "id": "roi", "label": "ROI 提升", "value": "42", "unit": "%" },
+      { "id": "cost", "label": "成本下降", "value": "18", "unit": "%" }
     ],
     "highlight": "roi"
   }
@@ -81,6 +83,7 @@ Do not output `renderer`, `visual_strategy`, `intent`, or `visual_spec.annotatio
 Rules:
 
 - All series must match category count.
+- `y_label` is required; do not rely on renderer defaults.
 - Use `highlight` for the main value, not every improved value.
 
 ### `proportion_chart`
@@ -100,6 +103,10 @@ Rules:
   }
 }
 ```
+
+Rules:
+
+- `total_label` is required; do not rely on renderer defaults.
 
 ### `heatmap`
 
@@ -128,9 +135,9 @@ Use for numeric values across two dimensions. It can be `Quantity` when cell val
   "template": "process",
   "visual_spec": {
     "steps": [
-      { "id": "request", "label": "需求输入", "note": "澄清目标" },
-      { "id": "plan", "label": "任务规划", "note": "拆分步骤" },
-      { "id": "review", "label": "规则校验", "note": "验证质量" }
+      { "id": "request", "label": "需求输入" },
+      { "id": "plan", "label": "任务规划" },
+      { "id": "review", "label": "规则校验" }
     ],
     "highlight": "review",
     "orientation": "horizontal"
@@ -171,9 +178,9 @@ Same as `process`, with `time` on each step.
   "visual_spec": {
     "center": "Self-improving Agent",
     "steps": [
-      { "id": "inspect", "label": "分析失败", "note": "读取日志" },
-      { "id": "edit", "label": "修改自身", "note": "改工具" },
-      { "id": "eval", "label": "基准评测", "note": "验证收益" }
+      { "id": "inspect", "label": "分析失败" },
+      { "id": "edit", "label": "修改自身" },
+      { "id": "eval", "label": "基准评测" }
     ],
     "highlight": "eval"
   }
@@ -187,7 +194,7 @@ Same as `process`, with `time` on each step.
 Supported templates:
 
 - `tree`: nodes, edges, labels, highlight.
-- `layered_architecture`: layers, side_modules, edges.
+- `layered_architecture`: layers, side_label, side_modules, edges. `side_label` is required when `side_modules` is non-empty.
 - `capability_stack`: levels, highlight.
 
 Edges must reference known node/item ids. Unknown endpoints are validation errors.
@@ -215,7 +222,7 @@ Tables are always native PPT tables. Use for generated or transcribed structured
 
 Use the same fields as the existing rough SVG implementations:
 
-- `quadrant_matrix`: `x_axis`, `y_axis`, `items`, optional `highlight`.
+- `quadrant_matrix`: `x_axis`, `y_axis`, `items`, optional `highlight`. `x_axis` requires `left`, `right`, and `label`; `y_axis` requires `bottom`, `top`, and `label`.
 - `capability_matrix`: `rows`, `columns`, `values`, optional `highlight`.
 
 ## Network
@@ -247,3 +254,5 @@ Evidence has no `visual_spec` requirement:
   }
 }
 ```
+
+`source.caption` is required for Evidence modules; the renderer will not invent fallback explanation text.

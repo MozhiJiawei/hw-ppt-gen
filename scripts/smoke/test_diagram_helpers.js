@@ -152,6 +152,7 @@ function testLayeredArchitectureIsDataDriven() {
         { id: "policy", label: "策略层", items: ["Risk Policy", "Quota Guard", "Routing Brain"] },
         { id: "runtime", label: "执行层", items: ["Batch Runner", "Realtime Worker"] },
       ],
+      side_label: "Control Plane",
       side_modules: ["Audit Lake", "SLO Board", "Cost Watch", "Incident Desk"],
       edges: [
         ["Partner Portal", "Risk Policy"],
@@ -199,11 +200,11 @@ function testInputsAreNotSilentlyTruncated() {
     kind: "Sequence",
     template: "process",
     visual_spec: {
-      steps: Array.from({ length: 7 }, (_, idx) => ({ id: `s${idx}`, label: `步骤${idx + 1}`, note: `说明${idx + 1}` })),
+      steps: Array.from({ length: 7 }, (_, idx) => ({ id: `s${idx}`, label: `步骤${idx + 1}` })),
       highlight: "s6",
     },
   }));
-  assertIncludes(sequence, ["步骤1", "步骤7", "说明7"], "process");
+  assertIncludes(sequence, ["步骤1", "步骤7"], "process");
 
   const loop = createVisualAnchorSvg(baseSpec({
     id: "long_loop",
@@ -211,11 +212,11 @@ function testInputsAreNotSilentlyTruncated() {
     template: "closed_loop",
     visual_spec: {
       center: "循环中心",
-      steps: Array.from({ length: 6 }, (_, idx) => ({ id: `l${idx}`, label: `环节${idx + 1}`, note: `反馈${idx + 1}` })),
+      steps: Array.from({ length: 6 }, (_, idx) => ({ id: `l${idx}`, label: `环节${idx + 1}` })),
       highlight: "l5",
     },
   }));
-  assertIncludes(loop, ["环节1", "环节6", "反馈6"], "closed_loop");
+  assertIncludes(loop, ["环节1", "环节6"], "closed_loop");
 
   const matrix = createVisualAnchorSvg(baseSpec({
     id: "dense_matrix",
@@ -224,11 +225,11 @@ function testInputsAreNotSilentlyTruncated() {
     visual_spec: {
       x_axis: { left: "低", right: "高", label: "横轴" },
       y_axis: { bottom: "低", top: "高", label: "纵轴" },
-      items: Array.from({ length: 8 }, (_, idx) => ({ label: `对象${idx + 1}`, x: (idx + 1) / 9, y: ((idx * 3) % 8 + 1) / 9, note: `注${idx + 1}` })),
+      items: Array.from({ length: 8 }, (_, idx) => ({ label: `对象${idx + 1}`, x: (idx + 1) / 9, y: ((idx * 3) % 8 + 1) / 9 })),
       highlight: "对象8",
     },
   }));
-  assertIncludes(matrix, ["对象1", "对象8", "注8"], "quadrant_matrix");
+  assertIncludes(matrix, ["对象1", "对象8"], "quadrant_matrix");
 
   const network = createVisualAnchorSvg(baseSpec({
     id: "dense_network",
@@ -236,12 +237,12 @@ function testInputsAreNotSilentlyTruncated() {
     template: "hub_spoke_network",
     visual_spec: {
       hub: { id: "hub", label: "中心" },
-      nodes: Array.from({ length: 9 }, (_, idx) => ({ id: `n${idx}`, label: `节点${idx + 1}`, note: `连接${idx + 1}` })),
+      nodes: Array.from({ length: 9 }, (_, idx) => ({ id: `n${idx}`, label: `节点${idx + 1}` })),
       edges: [["hub", "n0"], ["hub", "n1"], ["hub", "n2"], ["hub", "n3"], ["hub", "n4"], ["hub", "n5"], ["hub", "n6"], ["hub", "n7"], ["hub", "n8"], ["n8", "n0"]],
       highlight: "n8",
     },
   }));
-  assertIncludes(network, ["节点1", "节点9", "连接9"], "hub_spoke_network");
+  assertIncludes(network, ["节点1", "节点9"], "hub_spoke_network");
 
   const bars = createVisualAnchorSvg(baseSpec({
     id: "wide_bars",
@@ -281,8 +282,6 @@ function testReasonableLongTextWrapsInsideSvgViews() {
         tests: "契约测试与长标签样例",
       },
       highlight: "pptx",
-      callout_title: "分支保留策略保持可读",
-      callout: "弱分支仍可能成为后续高分路径",
     },
   }));
   assertIncludes(tree, ["生成与导出", "硬规则", "冒烟测试"], "long_text_tree");
@@ -294,10 +293,10 @@ function testReasonableLongTextWrapsInsideSvgViews() {
     template: "process",
     visual_spec: {
       steps: [
-        { id: "plan", label: "先完成页面级观点规划", note: "避免标题和图内说明重复" },
-        { id: "render", label: "SVG 图内文本按宽度换行", note: "中文英文和路径名都要可读" },
-        { id: "qa", label: "导出图片逐页视觉检查", note: "发现重叠后回到通用 helper" },
-        { id: "ship", label: "沉淀为可复用技能契约", note: "后续视图复用同一策略" },
+        { id: "plan", label: "先完成页面级观点规划" },
+        { id: "render", label: "SVG helper 文本按宽度换行" },
+        { id: "qa", label: "导出图片逐页视觉检查" },
+        { id: "ship", label: "沉淀为可复用技能契约" },
       ],
       highlight: "render",
     },
@@ -312,16 +311,16 @@ function testReasonableLongTextWrapsInsideSvgViews() {
     visual_spec: {
       hub: { id: "hub", label: "hw-ppt-gen 统一渲染入口" },
       nodes: [
-        { id: "diagram", label: "hw_diagram_helpers.js", note: "rough SVG 文本布局" },
-        { id: "native", label: "ppt_native fallback renderer", note: "保持可编辑对象" },
-        { id: "qa", label: "check_huawei_pptx.js", note: "硬规则检查" },
-        { id: "export", label: "export_pptx_images.js", note: "PowerPoint 导图" },
+        { id: "diagram", label: "hw_diagram_helpers.js" },
+        { id: "native", label: "ppt_native fallback renderer" },
+        { id: "qa", label: "check_huawei_pptx.js" },
+        { id: "export", label: "export_pptx_images.js" },
       ],
       edges: [["hub", "diagram"], ["hub", "native"], ["hub", "qa"], ["hub", "export"], ["diagram", "qa"]],
       highlight: "diagram",
     },
   }));
-  assertIncludes(network, ["hw_diagram", "fallback", "PowerPoint"], "long_text_network");
+  assertIncludes(network, ["hw_diagram", "fallback", "export_pptx"], "long_text_network");
   assertNoOversizedSvgTextLine(network, 520, "long_text_network");
   assert(!network.includes(">hw_diagram_helpers.js<"), "long_text_network should wrap long helper file names instead of keeping them as one line");
   assert(!network.includes(">export_pptx_images.js<"), "long_text_network should wrap long export file names instead of keeping them as one line");
@@ -329,7 +328,6 @@ function testReasonableLongTextWrapsInsideSvgViews() {
   const denseNetworkNodes = Array.from({ length: 11 }, (_, idx) => ({
     id: `n${idx + 1}`,
     label: idx % 2 ? `renderer_pipeline_long_token_${idx + 1}.js` : `节点${idx + 1}视觉锚点长文本回归`,
-    note: idx % 3 ? "密集网络文本" : "PowerPoint export",
   }));
   assert.throws(
     () => createVisualAnchorSvg(baseSpec({
@@ -347,6 +345,119 @@ function testReasonableLongTextWrapsInsideSvgViews() {
   );
 }
 
+function testStandaloneExplanationTextStaysOutOfSvg() {
+  const fixtures = [
+    ["Sequence", "process", {
+      steps: [
+        { id: "read", label: "读取材料" },
+        { id: "plan", label: "页面计划" },
+        { id: "render", label: "渲染锚点" },
+        { id: "qa", label: "质量检查" },
+      ],
+      highlight: "render",
+    }],
+    ["Sequence", "process", {
+      orientation: "vertical",
+      steps: [
+        { id: "a", label: "阶段一" },
+        { id: "b", label: "阶段二" },
+        { id: "c", label: "阶段三" },
+      ],
+      highlight: "b",
+    }],
+    ["Loop", "closed_loop", {
+      center: "视觉锚点 QA",
+      steps: [
+        { id: "render", label: "渲染" },
+        { id: "record", label: "记录" },
+        { id: "check", label: "检查" },
+        { id: "fix", label: "修正" },
+      ],
+      highlight: "check",
+    }],
+    ["Hierarchy", "capability_stack", {
+      levels: [
+        { label: "解释模块" },
+        { label: "视觉锚点" },
+        { label: "页面骨架" },
+      ],
+      highlight: "视觉锚点",
+    }],
+    ["Hierarchy", "layered_architecture", {
+      layers: [
+        { id: "a", label: "页面骨架", items: ["标题", "页脚"] },
+        { id: "b", label: "视觉锚点", items: ["节点", "连线"] },
+        { id: "c", label: "解释文本", items: ["总结", "旁注"] },
+      ],
+      side_label: "外部输入",
+      side_modules: ["来源", "证据"],
+      edges: [["标题", "节点"], ["节点", "总结"], ["来源", "节点"]],
+    }],
+    ["Matrix", "quadrant_matrix", {
+      x_axis: { left: "低", right: "高", label: "价值" },
+      y_axis: { bottom: "低", top: "高", label: "可行性" },
+      items: [
+        { label: "方案A", x: 0.3, y: 0.6 },
+        { label: "方案B", x: 0.7, y: 0.8 },
+      ],
+      highlight: "方案B",
+    }],
+    ["Network", "hub_spoke_network", {
+      hub: { id: "hub", label: "生成入口" },
+      nodes: [
+        { id: "diagram", label: "图形" },
+        { id: "ppt", label: "PPT" },
+      ],
+      edges: [["hub", "diagram"], ["hub", "ppt"]],
+      highlight: "diagram",
+    }],
+  ];
+
+  const staleStandaloneText = [
+    "每一步都留下可检查证据",
+    "自上而下推进",
+    "适合阶段门",
+    "评测结果回到 Archive",
+    "越往上越接近",
+    "分层协同",
+    "先定位关系",
+    "网络图只用于真正",
+    "互相校准",
+    "Value",
+    "合计",
+  ];
+
+  fixtures.forEach(([kind, template, visualSpec]) => {
+    const svg = createVisualAnchorSvg(baseSpec({ id: `no_explanation_${template}`, kind, template, visual_spec: visualSpec }));
+    assertNotIncludes(svg, staleStandaloneText, `${kind}/${template}`);
+  });
+
+  const barChart = createVisualAnchorSvg(baseSpec({
+    id: "no_empty_bar_chart_callout",
+    kind: "Quantity",
+    template: "bar_chart",
+    visual_spec: {
+      y_label: "得分",
+      categories: ["A", "B"],
+      series: [{ name: "S", values: [1, 2] }],
+      highlight: { category: "B", series: "S" },
+    },
+  }));
+  assertNotIncludes(barChart, ["M 1188 470 C 1320 420 1435 462 1450 566"], "bar_chart should not keep empty explanatory bubble");
+
+  const proportionChart = createVisualAnchorSvg(baseSpec({
+    id: "no_empty_proportion_callout",
+    kind: "Quantity",
+    template: "proportion_chart",
+    visual_spec: {
+      total_label: "占比",
+      segments: [{ label: "A", value: 40 }, { label: "B", value: 60 }],
+      highlight: "B",
+    },
+  }));
+  assertNotIncludes(proportionChart, ["M 1005 308 C 1188 246 1376 312 1412 458"], "proportion_chart should not keep empty explanatory bubble");
+}
+
 function testOverflowAndTinyTextAreRejected() {
   assert.throws(
     () => createVisualAnchorSvg(baseSpec({
@@ -358,9 +469,8 @@ function testOverflowAndTinyTextAreRejected() {
           {
             id: "dense",
             label: "这是一个明显超过流程节点两行容量的超长阶段标题，应该拒绝渲染而不是自动省略或继续缩小字体",
-            note: "说明同样很长，不能被偷偷截断",
           },
-          { id: "ok", label: "交付", note: "正常" },
+          { id: "ok", label: "交付" },
         ],
         highlight: "dense",
       },
@@ -396,9 +506,8 @@ async function testNativeRendererRejectsShrinkFitAndOverflow() {
           {
             id: "s1",
             label: "这是一个明显超过 PPT 原生流程节点容量的超长阶段标题，不能依靠 PowerPoint shrink fit 缩小",
-            note: "说明文字也不能被自动挤压",
           },
-          { id: "s2", label: "交付", note: "正常" },
+          { id: "s2", label: "交付" },
         ],
         highlight: "s1",
       },
@@ -423,6 +532,7 @@ function testLayeredArchitectureKeepsSideModuleEdges() {
         { id: "l2", label: "第2层", items: ["L2-A", "L2-B"] },
         { id: "l3", label: "第3层", items: ["L3-A", "L3-B"] },
       ],
+      side_label: "侧向能力",
       side_modules: sideModules,
       edges,
     },
@@ -444,6 +554,110 @@ function testValidatorRejectsDroppedRelationships() {
       },
     })),
     /visual_spec.annotation is not supported/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_slide_callout",
+      kind: "Sequence",
+      template: "process",
+      visual_spec: {
+        steps: [
+          { id: "a", label: "生成" },
+          { id: "b", label: "解释" },
+        ],
+        callout: "这类解释应该放在 PPT 可编辑文本中",
+      },
+    })),
+    /visual_spec.callout is not supported/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_nested_caption",
+      kind: "Sequence",
+      template: "process",
+      visual_spec: {
+        steps: [
+          { id: "a", label: "生成", caption: "这类说明不属于流程节点" },
+          { id: "b", label: "解释" },
+        ],
+      },
+    })),
+    /visual_spec\.steps\[0\]\.caption is not supported/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_nested_note",
+      kind: "Sequence",
+      template: "process",
+      visual_spec: {
+        steps: [
+          { id: "a", label: "生成", note: "图内说明" },
+          { id: "b", label: "解释" },
+        ],
+      },
+    })),
+    /visual_spec\.steps\[0\]\.note is not supported/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_unknown_top_level",
+      kind: "Quantity",
+      template: "bar_chart",
+      visual_spec: {
+        y_label: "得分",
+        categories: ["A"],
+        series: [{ name: "S", values: [1] }],
+        business_judgment: "这类判断应进入 PPT 文本层",
+      },
+    })),
+    /visual_spec\.business_judgment is not part of the visual_spec schema/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_missing_axis_label",
+      kind: "Quantity",
+      template: "bar_chart",
+      visual_spec: {
+        categories: ["A"],
+        series: [{ name: "S", values: [1] }],
+      },
+    })),
+    /bar_chart requires visual_spec\.y_label/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_missing_total_label",
+      kind: "Quantity",
+      template: "proportion_chart",
+      visual_spec: {
+        segments: [{ label: "A", value: 1 }, { label: "B", value: 2 }],
+      },
+    })),
+    /proportion_chart requires visual_spec\.total_label/
+  );
+
+  assert.throws(
+    () => validateVisualAnchorSpec(baseSpec({
+      id: "bad_missing_side_label",
+      kind: "Hierarchy",
+      template: "layered_architecture",
+      visual_spec: {
+        layers: [
+          { id: "l1", label: "L1", items: ["A"] },
+          { id: "l2", label: "L2", items: ["B"] },
+          { id: "l3", label: "L3", items: ["C"] },
+        ],
+        side_modules: ["D"],
+        edges: [["A", "B"], ["D", "B"]],
+      },
+    })),
+    /requires visual_spec\.side_label/
   );
 
   assert.throws(
@@ -483,10 +697,10 @@ function allSubclassSpecs() {
   const heatmapRows = ["安全", "效率", "成本"];
   const heatmapCols = ["方案A", "方案B", "方案C"];
   const processSteps = [
-    { id: "s1", label: "发现", note: "定位问题" },
-    { id: "s2", label: "设计", note: "形成方案" },
-    { id: "s3", label: "验证", note: "检查收益" },
-    { id: "s4", label: "交付", note: "沉淀证据" },
+    { id: "s1", label: "发现" },
+    { id: "s2", label: "设计" },
+    { id: "s3", label: "验证" },
+    { id: "s4", label: "交付" },
   ];
   const lanes = [
     { id: "biz", label: "业务", steps: [{ id: "b1", label: "提出目标" }, { id: "b2", label: "确认价值" }] },
@@ -494,27 +708,27 @@ function allSubclassSpecs() {
     { id: "review", label: "评审", steps: [{ id: "r1", label: "检查风险" }, { id: "r2", label: "批准发布" }] },
   ];
   const loopSteps = [
-    { id: "observe", label: "观察", note: "收集信号" },
-    { id: "decide", label: "判断", note: "选择策略" },
-    { id: "act", label: "执行", note: "触发动作" },
-    { id: "learn", label: "学习", note: "更新经验" },
+    { id: "observe", label: "观察" },
+    { id: "decide", label: "判断" },
+    { id: "act", label: "执行" },
+    { id: "learn", label: "学习" },
   ];
   const hierarchyNodes = ["Root", "A", "B", "A1", "A2", "B1"];
   const hierarchyLabels = Object.fromEntries(hierarchyNodes.map((node) => [node, `${node} 能力`]));
   const graphNodes = [
-    { id: "agent", label: "Agent", note: "中心调度" },
-    { id: "model", label: "模型", note: "推理" },
-    { id: "memory", label: "记忆", note: "检索" },
-    { id: "tool", label: "工具", note: "执行" },
-    { id: "eval", label: "评测", note: "反馈" },
+    { id: "agent", label: "Agent" },
+    { id: "model", label: "模型" },
+    { id: "memory", label: "记忆" },
+    { id: "tool", label: "工具" },
+    { id: "eval", label: "评测" },
   ];
 
   return [
     ["Quantity", "data_cards", {
       cards: [
-        { id: "roi", label: "ROI 提升", value: "42", unit: "%", note: "季度环比" },
-        { id: "cost", label: "成本下降", value: "18", unit: "%", note: "资源节省" },
-        { id: "speed", label: "交付速度", value: "2.3", unit: "x", note: "周期缩短" },
+        { id: "roi", label: "ROI 提升", value: "42", unit: "%" },
+        { id: "cost", label: "成本下降", value: "18", unit: "%" },
+        { id: "speed", label: "交付速度", value: "2.3", unit: "x" },
       ],
       highlight: "roi",
     }, ["ROI 提升", "42", "交付速度"]],
@@ -552,7 +766,7 @@ function allSubclassSpecs() {
       ],
       highlight: "outer",
     }, ["快速反馈", "长期学习", "学习"]],
-    ["Loop", "spiral_iteration_ladder", { center: "能力演进", steps: loopSteps.concat([{ id: "scale", label: "扩展", note: "放大收益" }]), highlight: "scale" }, ["能力演进", "观察", "扩展"]],
+    ["Loop", "spiral_iteration_ladder", { center: "能力演进", steps: loopSteps.concat([{ id: "scale", label: "扩展" }]), highlight: "scale" }, ["能力演进", "观察", "扩展"]],
     ["Hierarchy", "tree", { nodes: hierarchyNodes, edges: [["Root", "A"], ["Root", "B"], ["A", "A1"], ["A", "A2"], ["B", "B1"]], labels: hierarchyLabels, highlight: "A2" }, ["#Root", "#A2", "A2 能力"]],
     ["Hierarchy", "layered_architecture", {
       layers: [
@@ -560,10 +774,11 @@ function allSubclassSpecs() {
         { id: "l2", label: "服务层", items: ["策略", "编排"] },
         { id: "l3", label: "资源层", items: ["模型", "数据"] },
       ],
+      side_label: "治理能力",
       side_modules: ["审计"],
       edges: [["门户", "策略"], ["API", "编排"], ["编排", "模型"], ["审计", "策略"]],
     }, ["入口层", "编排", "审计"]],
-    ["Hierarchy", "capability_stack", { levels: [{ label: "体验层", note: "用户价值" }, { label: "平台层", note: "通用能力" }, { label: "基础层", note: "数据模型" }], highlight: "平台层" }, ["体验层", "平台层", "基础层"]],
+    ["Hierarchy", "capability_stack", { levels: [{ label: "体验层" }, { label: "平台层" }, { label: "基础层" }], highlight: "平台层" }, ["体验层", "平台层", "基础层"]],
     ["Matrix", "quadrant_matrix", { x_axis: { left: "低", right: "高", label: "价值" }, y_axis: { bottom: "低", top: "高", label: "可行性" }, items: [{ label: "方案A", x: 0.2, y: 0.7 }, { label: "方案B", x: 0.8, y: 0.8 }], highlight: "方案B" }, ["价值", "可行性", "方案B"]],
     ["Matrix", "capability_matrix", { rows: ["产品", "工程"], columns: ["当前", "目标"], values: [["可用", "优秀"], ["手工", "自动"]], highlight: { row: "工程", column: "目标" } }, ["产品", "工程", "自动"]],
     ["Network", "hub_spoke_network", { hub: { id: "agent", label: "Agent" }, nodes: graphNodes.slice(1), edges: [["agent", "model"], ["agent", "memory"], ["agent", "tool"], ["agent", "eval"], ["memory", "eval"]], highlight: "eval" }, ["Agent", "模型", "评测"]],
@@ -711,6 +926,7 @@ async function main() {
   testTreeIsDataDriven();
   testInputsAreNotSilentlyTruncated();
   testReasonableLongTextWrapsInsideSvgViews();
+  testStandaloneExplanationTextStaysOutOfSvg();
   testOverflowAndTinyTextAreRejected();
   testLayeredArchitectureKeepsSideModuleEdges();
   testValidatorRejectsDroppedRelationships();
@@ -728,9 +944,9 @@ function testRendererIsRuntimeOnly() {
   assert.equal(getVisualAnchorRenderer({}), "rough_svg");
   assert.equal(getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
   assert.throws(() => getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "auto" }), /Unsupported HW_VISUAL_ANCHOR_RENDERER/);
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { categories: ["A"], series: [{ name: "S", values: [1] }] } }), { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { y_label: "得分", categories: ["A"], series: [{ name: "S", values: [1] }] } }), { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
   assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "ppt_native");
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png" }, visual_spec: undefined }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "evidence");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png", caption: "来源图" }, visual_spec: undefined }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "evidence");
   assert.throws(() => validateVisualAnchorSpec(baseSpec({ renderer: "rough_svg" })), /renderer is a runtime setting/);
   assert.throws(() => validateVisualAnchorSpec({ id: "old", title: "Old", claim: "旧接口。", intent: "Quantity", template: "bar_chart", visual_spec: {} }), /Use kind instead/);
   const svgPolicySpec = baseSpec({ visual_spec: { nodes: ["A", "B"], edges: [["A", "B"]], labels: { A: "起点", B: "终点" }, highlight: "B" } });

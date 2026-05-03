@@ -40,7 +40,9 @@ Required fields:
 
 Never include `renderer`, `visual_strategy`, or the old `intent` field. Rendering is a runtime policy controlled by code.
 
-Do not put slide-level wording inside SVG data. `title` and `claim` are planning/manifest metadata, not image text. Do not include `visual_spec.annotation`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards.
+Do not put slide-level wording inside SVG data. `title` and `claim` are planning/manifest metadata, not image text. Do not include standalone explanation fields anywhere under `visual_spec`, such as `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards. For conceptual visual anchors, use `visualAnchorCaption` / `visual_anchor_caption` on `addVisualAnchorContentSlide` to render the editable figure-legend text below the visual anchor.
+
+`visual_spec` is closed at the top level for each template. Do not add ad hoc keys to carry prose. If the slide needs prose, put it in `summary`, supporting cards, evidence legends, or other PPT text-layer fields outside the image spec.
 
 ## Top-Level Kinds
 
@@ -87,7 +89,7 @@ HW_VISUAL_ANCHOR_RENDERER=ppt_native
 
 Default is `rough_svg`.
 
-Rough SVG output is an image of the visual relationship only. It may contain node labels, axis labels, values, and brief in-shape notes needed to understand the diagram, but it must not render page titles, slide claims, figure legends, source notes, or standalone interpretation callouts.
+Rough SVG output is an image of the visual relationship only. It may contain node labels, axis labels, values, and time labels, but it must not render page titles, slide claims, figure legends, source notes, standalone interpretation callouts, node notes, bottom slogans, side explanations, or decorative empty placeholders.
 
 Fixed overrides:
 
@@ -133,7 +135,7 @@ Do not make a visual anchor a full-slide poster.
 - Confirm the selected `kind` matches the slide's central question.
 - Confirm the anchor is more informative than plain cards.
 - Confirm generated labels are readable and not clipped.
-- Confirm rough SVG images contain only diagram-native labels/values/short node notes. Page-level explanations must remain editable PPT text.
+- Confirm rough SVG images contain only diagram-native labels, values, axes, and time labels. Page-level explanations must remain editable PPT text. Fail any generated image that includes standalone explanatory phrases, captions, source notes, node notes, or empty red callout boxes.
 - Confirm rough SVG images are placed with proportional contain scaling; leave whitespace or redesign the layout rather than stretching the image to fill a region.
 - Run `npm run test:diagram` after changing visual-anchor helpers.
 - Run `npm run diagram-smoke` for rough SVG template changes and inspect the generated review deck.

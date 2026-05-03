@@ -16,11 +16,10 @@ function variedText(base, idx, variant = 0) {
   return samples[(idx + variant) % samples.length];
 }
 
-function makeSteps(prefix, count, labelBase, noteBase, variant = 0) {
+function makeSteps(prefix, count, labelBase, _noteBase, variant = 0) {
   return Array.from({ length: count }, (_, idx) => ({
     id: `${prefix}${idx + 1}`,
     label: variedText(labelBase, idx, variant),
-    note: variedText(noteBase, idx, variant + 3),
   }));
 }
 
@@ -50,7 +49,7 @@ function makeLayeredArchitecture(layerCount, itemsPerLayer, sideCount, variant =
   side_modules.slice(0, Math.min(side_modules.length, layers[1]?.items.length || 0)).forEach((side, idx) => {
     edges.push([side, layers[1].items[idx]]);
   });
-  return { layers, side_modules, edges };
+  return { layers, side_label: variedText("侧向组", 0, variant), side_modules, edges };
 }
 
 function makeQuadrantItems(count, variant = 0) {
@@ -58,7 +57,6 @@ function makeQuadrantItems(count, variant = 0) {
     label: variedText("对象", idx, variant),
     x: Number((((idx % 5) + 1) / 6).toFixed(2)),
     y: Number((((idx * 3) % 5 + 1) / 6).toFixed(2)),
-    note: variedText("注", idx, variant + 1),
   }));
 }
 
@@ -66,7 +64,6 @@ function makeNetworkNodes(count, prefix = "节点", variant = 0) {
   return Array.from({ length: count }, (_, idx) => ({
     id: `n${idx + 1}`,
     label: variedText(prefix, idx, variant),
-    note: variedText("连接", idx, variant + 2),
   }));
 }
 
@@ -97,7 +94,6 @@ function buildTemplateCases() {
       label: variedText("指标", cardIdx, idx),
       value: `${20 + idx * 3 + cardIdx * 7}`,
       unit: cardIdx % 2 ? "%" : "分",
-      note: variedText("变化", cardIdx, idx + 2),
     }));
     return withMeta(`data_cards_${idx + 1}`, "Quantity", "data_cards", "KPI 卡片属于数量型视觉锚点，同一语义可走 rough_svg 或 PPT 原生。", {
       cards,
@@ -224,7 +220,7 @@ function buildTemplateCases() {
   add("layered_architecture", (idx, aspectRatio) => withMeta(`layered_architecture_${idx + 1}`, "Hierarchy", "layered_architecture", "分层架构图需要覆盖层数、层内元素数和侧向能力数量变化。", makeLayeredArchitecture(3 + (idx % 3), [2 + (idx % 3), 3 + (idx % 2), 2 + ((idx + 1) % 3), 2], 1 + (idx % 5), idx), aspectRatio));
 
   add("capability_stack", (idx, aspectRatio) => withMeta(`capability_stack_${idx + 1}`, "Hierarchy", "capability_stack", "金字塔需要覆盖 3 到 6 层的成熟度表达。", {
-    levels: Array.from({ length: 3 + (idx % 4) }, (_, i) => ({ label: variedText("能力层", i, idx), note: variedText("说明", i, idx + 2) })),
+    levels: Array.from({ length: 3 + (idx % 4) }, (_, i) => ({ label: variedText("能力层", i, idx) })),
     highlight: variedText("能力层", 1 + (idx % 3), idx),
   }, aspectRatio));
 
@@ -316,16 +312,14 @@ function buildTemplateCases() {
       tests: "契约测试与长标签样例",
     },
     highlight: "pptx",
-    callout_title: "分支保留策略保持可读",
-    callout: "弱分支仍可能成为后续高分路径",
   }, DEFAULT_LAYOUT));
 
   cases.push(withMeta("long_text_process_1", "Sequence", "process", "长文本回归：流程节点的中文说明和英文 helper 名称需要被限制在卡片内。", {
     steps: [
-      { id: "plan", label: "先完成页面级观点规划", note: "避免标题和图内说明重复" },
-      { id: "render", label: "SVG 图内文本按宽度换行", note: "中文英文和路径名都要可读" },
-      { id: "qa", label: "导出图片逐页视觉检查", note: "发现重叠后回到通用 helper" },
-      { id: "ship", label: "沉淀为可复用技能契约", note: "后续视图复用同一策略" },
+      { id: "plan", label: "先完成页面级观点规划" },
+      { id: "render", label: "SVG 图内文本按宽度换行" },
+      { id: "qa", label: "导出图片逐页视觉检查" },
+      { id: "ship", label: "沉淀为可复用技能契约" },
     ],
     highlight: "render",
   }, DEFAULT_LAYOUT));
@@ -333,10 +327,10 @@ function buildTemplateCases() {
   cases.push(withMeta("long_text_hub_spoke_network_1", "Network", "hub_spoke_network", "长文本回归：网络节点中的文件名、renderer 名称和中文注释需要保持可读。", {
     hub: { id: "hub", label: "hw-ppt-gen 统一渲染入口" },
     nodes: [
-      { id: "diagram", label: "hw_diagram_helpers.js", note: "rough SVG 文本布局" },
-      { id: "native", label: "ppt_native fallback renderer", note: "保持可编辑对象" },
-      { id: "qa", label: "check_huawei_pptx.js", note: "硬规则检查" },
-      { id: "export", label: "export_pptx_images.js", note: "PowerPoint 导图" },
+      { id: "diagram", label: "hw_diagram_helpers.js" },
+      { id: "native", label: "ppt_native fallback renderer" },
+      { id: "qa", label: "check_huawei_pptx.js" },
+      { id: "export", label: "export_pptx_images.js" },
     ],
     edges: [["hub", "diagram"], ["hub", "native"], ["hub", "qa"], ["hub", "export"], ["diagram", "qa"]],
     highlight: "diagram",

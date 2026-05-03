@@ -54,10 +54,10 @@ async function main() {
       template: "process",
       visual_spec: {
         steps: [
-          { id: "source", label: "读取材料", note: "确认受众与证据" },
-          { id: "plan", label: "页面计划", note: "定义 kind/template" },
-          { id: "render", label: "渲染锚点", note: "生成主视觉区域" },
-          { id: "qa", label: "质量检查", note: "核对 manifest" },
+          { id: "source", label: "读取材料" },
+          { id: "plan", label: "页面计划" },
+          { id: "render", label: "渲染锚点" },
+          { id: "qa", label: "质量检查" },
         ],
         highlight: "render",
       },
@@ -88,9 +88,9 @@ async function main() {
       template: "data_cards",
       visual_spec: {
         cards: [
-          { id: "refs", label: "参考图", value: "10", unit: "张", note: "生成前校准" },
-          { id: "kinds", label: "锚点类别", value: "7", unit: "类", note: "Evidence + 六类关系" },
-          { id: "qa", label: "QA 入口", value: "1", unit: "套", note: "硬规则检查" },
+          { id: "refs", label: "参考图", value: "10", unit: "张" },
+          { id: "kinds", label: "锚点类别", value: "7", unit: "类" },
+          { id: "qa", label: "QA 入口", value: "1", unit: "套" },
         ],
         highlight: "kinds",
       },
@@ -118,9 +118,9 @@ async function main() {
       template: "capability_stack",
       visual_spec: {
         levels: [
-          { label: "页面骨架", note: "标题、章节、分析总结、页脚" },
-          { label: "视觉锚点", note: "Evidence、数量、序列、循环、层级、矩阵、网络" },
-          { label: "解释模块", note: "侧边卡、图例、来源说明" },
+          { label: "页面骨架" },
+          { label: "视觉锚点" },
+          { label: "解释模块" },
         ],
         highlight: "视觉锚点",
       },
@@ -149,10 +149,10 @@ async function main() {
       visual_spec: {
         center: "视觉锚点 QA",
         steps: [
-          { id: "render", label: "渲染", note: "写入页面" },
-          { id: "manifest", label: "记录", note: "写入 manifest" },
-          { id: "check", label: "检查", note: "硬规则读取" },
-          { id: "fix", label: "修正", note: "回到生成脚本" },
+          { id: "render", label: "渲染" },
+          { id: "manifest", label: "记录" },
+          { id: "check", label: "检查" },
+          { id: "fix", label: "修正" },
         ],
         highlight: "check",
       },

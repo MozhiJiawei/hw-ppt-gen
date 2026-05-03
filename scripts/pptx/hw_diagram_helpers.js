@@ -69,6 +69,39 @@ const TEMPLATE_LAYOUTS = Object.freeze({
   causal_influence_graph: "16:9",
 });
 
+const STANDALONE_VISUAL_SPEC_TEXT_FIELDS = Object.freeze([
+  "annotation",
+  "caption",
+  "callout",
+  "callout_title",
+  "claim",
+  "conclusion",
+  "explanation",
+  "explanations",
+  "figure_legend",
+  "footer",
+  "detail",
+  "details",
+  "insight",
+  "insights",
+  "interpretation",
+  "interpretations",
+  "legend",
+  "note",
+  "notes",
+  "rationale",
+  "reading_guide",
+  "remark",
+  "remarks",
+  "source_note",
+  "source_notes",
+  "subtitle",
+  "summary",
+  "takeaway",
+  "takeaways",
+  "title",
+]);
+
 function chooseTemplateLayout(spec) {
   const template = spec?.template || spec?.kind;
   return TEMPLATE_LAYOUTS[template] || "16:9";
@@ -268,7 +301,6 @@ function wrapCjk(text, chars = 12) {
   const value = safeText(text);
   if (!value) return [""];
   if (/^[\x00-\x7F]+$/.test(value)) return [value];
-  if (value.includes("workflow")) return ["改 workflow / tools", "/ prompt"];
   if (value.length <= chars) return [value];
   return value.match(new RegExp(`.{1,${chars}}`, "g")) || [value];
 }
@@ -729,7 +761,9 @@ function drawLayeredArchitecture(spec) {
       roughness: 2.2,
       seed: 130,
     });
-    canvas.add(svgText(sideX + sideW / 2, sideY - 48, visual.side_label || "侧向能力", { size: 27, weight: 800, fill: colors.red, maxWidth: sideW }));
+    if (visual.side_label) {
+      canvas.add(svgText(sideX + sideW / 2, sideY - 48, visual.side_label, { size: 27, weight: 800, fill: colors.red, maxWidth: sideW }));
+    }
     const gap = Math.max(16, (sideH - sideModules.length * 68) / Math.max(1, sideModules.length - 1));
     sideModules.forEach((label, i) => {
       const y = sideY + 30 + i * (68 + gap);
@@ -760,8 +794,6 @@ function drawLayeredArchitecture(spec) {
     });
   });
 
-  canvas.add(`<path d="M1084 180 C1058 320 1062 594 1096 770" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="14 12" opacity="0.55"/>`);
-  canvas.add(svgText(1112, 790, visual.summary || "分层协同", { size: 24, weight: 800, fill: colors.red, anchor: "start", maxWidth: 350, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -796,7 +828,7 @@ function drawGroupedBarChart(spec) {
     line(canvas, rc, chart.x - 8, y, chart.x + chart.w, y, { stroke: tick === 0 ? colors.ink : colors.line, strokeWidth: tick === 0 ? 2 : 1.2, roughness: 0.8, seed: 720 + tick });
     canvas.add(svgText(chart.x - 22, y + 7, String(Math.round(tick)), { size: 18, weight: 500, anchor: "end", fill: colors.muted }));
   }
-  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label || "Value", { size: 22, weight: 800, anchor: "start", fill: colors.red }));
+  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label, { size: 22, weight: 800, anchor: "start", fill: colors.red }));
 
   const seriesColor = (entry, idx, highlighted) => {
     if (highlighted) return colors.red;
@@ -834,15 +866,6 @@ function drawGroupedBarChart(spec) {
     rect(canvas, rc, x, y - 18, 46, 28, { fill: seriesColor(entry, idx, false), stroke: colors.lineDark, seed: 820 + idx });
     canvas.add(svgText(x + 62, y + 4, entry.name, { size: series.length > 4 ? 18 : 22, weight: 700, anchor: "start", fill: colors.ink, lineHeight: 22, maxWidth: 230, maxLines: 2 }));
   });
-  pathRough(canvas, rc, "M 1188 470 C 1320 420 1435 462 1450 566 C 1462 666 1328 724 1205 666 C 1098 614 1100 514 1188 470 Z", {
-    fill: colors.yellowPale,
-    stroke: colors.red,
-    strokeWidth: 2.5,
-    fillStyle: "zigzag",
-    hachureGap: 13,
-    seed: 840,
-  });
-  canvas.add(svgText(1320, 532, "跨模型收益", { size: 29, weight: 900, fill: colors.red }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -867,7 +890,7 @@ function drawLineChart(spec) {
     line(canvas, rc, x, baseline, x, baseline + 8, { stroke: colors.ink, strokeWidth: 1.6, seed: 920 + idx });
     canvas.add(svgText(x, baseline + 42, category, { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21, maxWidth: Math.max(86, chart.w / Math.max(1, categories.length) - 12), maxLines: 2 }));
   });
-  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label || "Value", { size: 22, weight: 800, anchor: "start", fill: colors.red }));
+  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label, { size: 22, weight: 800, anchor: "start", fill: colors.red }));
   series.forEach((entry, seriesIdx) => {
     const points = (entry.values || []).map((value, idx) => [xFor(idx), yFor(value)]);
     for (let i = 0; i < points.length - 1; i += 1) {
@@ -929,10 +952,7 @@ function drawDonutProportionChart(spec) {
     start = end;
   });
   ellipse(canvas, rc, center[0], center[1], 180, 120, { fill: colors.paper, stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
-  canvas.add(svgText(center[0], center[1] + 8, visual.total_label || "合计", { size: 28, weight: 900, fill: colors.red, lineHeight: 32, maxWidth: 150, maxLines: 2 }));
-  pathRough(canvas, rc, "M 1005 308 C 1188 246 1376 312 1412 458 C 1448 607 1305 704 1116 672 C 974 648 908 426 1005 308 Z", { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 2.4, fillStyle: "zigzag", seed: 1090 });
-  canvas.add(svgText(1190, 438, "比例关系", { size: 31, weight: 900, fill: colors.red }));
-  canvas.add(svgText(1190, 504, "用面积/角度强调\n份额结构", { size: 26, weight: 700, lineHeight: 34 }));
+  canvas.add(svgText(center[0], center[1] + 8, visual.total_label, { size: 28, weight: 900, fill: colors.red, lineHeight: 32, maxWidth: 150, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -996,7 +1016,6 @@ function drawDataCards(spec) {
     canvas.add(svgText(x + cardW / 2, y + 78, card.value, { size: 58, weight: 850, fill: highlighted ? colors.red : colors.ink }));
     canvas.add(svgText(x + cardW / 2, y + 138, card.unit || "", { size: 22, weight: 700, fill: colors.muted }));
     canvas.add(svgText(x + cardW / 2, y + 194, card.label || "", { size: 27, weight: 850, fill: colors.ink, lineHeight: 31, maxWidth: cardW - 32, maxLines: 2 }));
-    canvas.add(svgText(x + cardW / 2, y + 250, card.note || "", { size: 19, fill: colors.muted, lineHeight: 23, maxWidth: cardW - 36, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -1073,22 +1092,7 @@ function drawArchiveEvolutionTree(spec) {
       maxLines: 2,
     }));
   });
-  const scorePath = mainPath.length
-    ? mainPath.map((id) => visual.labels?.[id]).filter(Boolean).join(" → ")
-    : Object.values(visual.labels || {}).join(" → ");
   const highlightPos = pos.get(visual.highlight);
-  pathRough(canvas, rc, "M 920 282 C 1070 230 1255 264 1370 348 C 1470 426 1452 568 1325 654 C 1188 750 978 724 872 640 C 760 552 785 332 920 282 Z", {
-    fill: colors.yellowPale,
-    stroke: colors.red,
-    strokeWidth: 2.6,
-    fillStyle: "zigzag",
-    hachureGap: 14,
-    roughness: 2,
-    seed: 301,
-  });
-  canvas.add(svgText(1130, 365, visual.callout_title || "分支保留策略", { size: 32, weight: 900, fill: colors.red, maxWidth: 420, maxLines: 2 }));
-  canvas.add(svgText(1130, 420, visual.callout || "弱分支仍可能成为高分路径", { size: 29, weight: 700, lineHeight: 36, maxWidth: 420, maxLines: 2 }));
-  canvas.add(svgText(1130, 510, scorePath, { size: 25, weight: 800, lineHeight: 31, maxWidth: 500, maxLines: 3 }));
   const highlightBox = visual.highlight ? nodeBoxes.get(visual.highlight) : null;
   if (highlightPos && highlightBox) canvas.add(`<path d="M${highlightPos[0] - highlightBox.w / 2 + 6} ${highlightPos[1] + highlightBox.h / 2 - 8} C${highlightPos[0] - 8} ${highlightPos[1] + highlightBox.h / 2 - 28} ${highlightPos[0] + 44} ${highlightPos[1] + highlightBox.h / 2 - 18} ${highlightPos[0] + highlightBox.w / 2 + 22} ${highlightPos[1] + highlightBox.h / 2 + 14}" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" opacity="0.8"/>`);
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
@@ -1122,8 +1126,8 @@ function layoutTree(nodes, edges) {
     }
   });
   const positions = new Map();
-  const xMin = 105;
-  const xMax = 880;
+  const xMin = 125;
+  const xMax = 1475;
   const yMin = 160;
   const yMax = 770;
   levels.forEach((levelNodes, levelIdx) => {
@@ -1205,10 +1209,7 @@ function drawSelfImprovementLoop(spec) {
       seed: 380 + i,
     });
     canvas.add(svgText(step.x, step.y - 10, step.label, { size: 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 28, maxWidth: 230, maxLines: 2 }));
-    canvas.add(svgText(step.x, step.y + 30, step.note, { size: 18, weight: 500, fill: colors.muted, lineHeight: 21, maxWidth: 226, maxLines: 2 }));
   });
-  canvas.add(`<path d="M438 729 C612 835 938 842 1158 710" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.78"/>`);
-  canvas.add(svgText(800, 825, "评测结果回到 Archive，再选择下一代 parent", { size: 26, weight: 800, fill: colors.red }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1216,7 +1217,8 @@ function drawDualLoop(spec) {
   const colors = DIAGRAM_STYLE.color;
   const { rc } = roughSvg(304);
   const canvas = createCanvas();
-  const loops = spec.visual_spec?.loops || [];
+  const visual = spec.visual_spec || {};
+  const loops = visual.loops || [];
   const centerY = 480;
   const startX = 350;
   const span = 980;
@@ -1227,7 +1229,7 @@ function drawDualLoop(spec) {
   loops.forEach((loopSpec, loopIdx) => {
     const center = centers[loopIdx] || [565 + loopIdx * 450, 480];
     const steps = loopSpec.steps || [];
-    const highlighted = loopSpec.id === spec.visual_spec?.highlight;
+    const highlighted = loopSpec.id === visual.highlight;
     const loopW = clamp(420 - loops.length * 22, 220, 330);
     const loopH = clamp(240 - loops.length * 8, 160, 210);
     ellipse(canvas, rc, center[0], center[1], loopW, loopH, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][loopIdx % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.4 : 2.4, seed: 1360 + loopIdx });
@@ -1244,8 +1246,8 @@ function drawDualLoop(spec) {
     line(canvas, rc, centers[i][0] + 90, centers[i][1], centers[i + 1][0] - 90, centers[i + 1][1], { arrow: true, stroke: colors.red, strokeWidth: 3.2, seed: 1400 + i * 2 });
     line(canvas, rc, centers[i + 1][0] - 90, centers[i][1] + 55, centers[i][0] + 90, centers[i][1] + 55, { arrow: true, stroke: colors.muted, strokeWidth: 2.2, seed: 1401 + i * 2 });
   }
-  if (centers.length > 1) {
-    canvas.add(svgText((centers[0][0] + centers[centers.length - 1][0]) / 2, centerY - 32, "互相校准", { size: 23, weight: 900, fill: colors.red }));
+  if (centers.length > 1 && visual.bridge_label) {
+    canvas.add(svgText((centers[0][0] + centers[centers.length - 1][0]) / 2, centerY - 32, visual.bridge_label, { size: 23, weight: 900, fill: colors.red }));
   }
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -1265,10 +1267,9 @@ function drawSpiralIterationLadder(spec) {
     if (last) curve(canvas, rc, last[0], last[1], x, y, i % 2 ? -42 : 42, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3 : 2.1, seed: 1420 + i });
     ellipse(canvas, rc, x, y, highlighted ? 146 : 124, highlighted ? 84 : 70, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.3 : 2.2, seed: 1440 + i });
     canvas.add(svgText(x, y - 4, step.label, { size: 22, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: highlighted ? 128 : 106, maxLines: 2 }));
-    canvas.add(svgText(x, y + 26, step.note || "", { size: 16, fill: colors.muted, maxWidth: highlighted ? 122 : 100, maxLines: 1 }));
     last = [x, y];
   });
-  canvas.add(svgText(760, 216, visual.center || "迭代爬升", { size: 35, weight: 900, fill: colors.red, maxWidth: 520, maxLines: 2 }));
+  canvas.add(svgText(760, 216, visual.center, { size: 35, weight: 900, fill: colors.red, maxWidth: 520, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1283,7 +1284,6 @@ function drawHorizontalSequence(spec) {
   const gap = Math.max(14, Math.min(32, 170 / Math.max(1, steps.length)));
   const stepW = Math.max(110, Math.min(220, (1360 - gap * Math.max(steps.length - 1, 0)) / Math.max(steps.length, 1)));
   const palette = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale];
-  canvas.add(`<path d="M120 454 C390 421 665 487 913 445 S1280 428 1460 470" fill="none" stroke="${colors.red}" stroke-width="5" stroke-linecap="round" stroke-dasharray="18 13" opacity="0.35"/>`);
   steps.forEach((step, i) => {
     const x = startX + i * (stepW + gap);
     const highlighted = step.id === visual.highlight;
@@ -1298,7 +1298,6 @@ function drawHorizontalSequence(spec) {
     ellipse(canvas, rc, x + 24, y - 70, 44, 34, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 450 + i });
     canvas.add(svgText(x + 24, y - 61, String(i + 1), { size: 18, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
     canvas.add(svgText(x + stepW / 2, y - 16, step.label, { size: stepW < 140 ? 20 : 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: stepW - 30, maxLines: 2 }));
-    canvas.add(svgText(x + stepW / 2, y + 30, step.note, { size: stepW < 140 ? 16 : 18, weight: 500, fill: colors.muted, lineHeight: 20, maxWidth: stepW - 28, maxLines: 2 }));
     if (i < steps.length - 1) {
       curve(canvas, rc, x + stepW + 8, y, x + stepW + gap - 8, y, i % 2 ? -18 : 18, {
         arrow: true,
@@ -1308,7 +1307,6 @@ function drawHorizontalSequence(spec) {
       });
     }
   });
-  canvas.add(svgText(800, 725, "每一步都留下可检查证据，质量门槛前置到交付之前", { size: 25, weight: 800, fill: colors.red }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1336,12 +1334,11 @@ function drawVerticalProcess(spec) {
     ellipse(canvas, rc, x - 190, y + stepH / 2, 52, 42, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 1180 + i });
     canvas.add(svgText(x - 190, y + stepH / 2 + 8, String(i + 1), { size: 18, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
     canvas.add(svgText(x, y + stepH / 2 - 8, step.label, { size: 25, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 27, maxWidth: 350, maxLines: 2 }));
-    canvas.add(svgText(x, y + stepH / 2 + 30, step.note || step.time || "", { size: 18, fill: colors.muted, lineHeight: 21, maxWidth: 350, maxLines: 2 }));
+    if (step.time) {
+      canvas.add(svgText(x, y + stepH / 2 + 30, step.time, { size: 18, fill: colors.muted, lineHeight: 21, maxWidth: 350, maxLines: 2 }));
+    }
     if (i < steps.length - 1) line(canvas, rc, x, y + stepH + 8, x, y + stepH + gap - 8, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: 2.2, seed: 1200 + i });
   });
-  pathRough(canvas, rc, "M 970 260 C 1140 216 1342 285 1370 446 C 1398 610 1220 724 1018 650 C 902 608 868 314 970 260 Z", { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 2.3, fillStyle: "zigzag", seed: 1220 });
-  canvas.add(svgText(1170, 430, "自上而下推进", { size: 31, weight: 900, fill: colors.red }));
-  canvas.add(svgText(1170, 492, "适合阶段门\n和审批链路", { size: 25, weight: 700, lineHeight: 32 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1362,7 +1359,6 @@ function drawTimeline(spec) {
     canvas.add(svgText(x, y - 70, step.time || `T${i + 1}`, { size: 23, weight: 900, fill: highlighted ? colors.red : colors.ink }));
     rect(canvas, rc, x - 95, y + 52, 190, 118, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, seed: 1280 + i });
     canvas.add(svgText(x, y + 96, step.label, { size: 22, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: 166, maxLines: 2 }));
-    canvas.add(svgText(x, y + 134, step.note || "", { size: 16, fill: colors.muted, lineHeight: 19, maxWidth: 166, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -1412,12 +1408,12 @@ function drawQuadrantMatrix(spec) {
   line(canvas, rc, x0, y0 + h + 36, x0 + w, y0 + h + 36, { arrow: true, stroke: colors.red, strokeWidth: 2.4, seed: 513 });
   line(canvas, rc, x0 - 42, y0 + h, x0 - 42, y0, { arrow: true, stroke: colors.red, strokeWidth: 2.4, seed: 514 });
 
-  canvas.add(svgText(x0 + w / 2, y0 + h + 76, visual.x_axis?.label || "横轴", { size: 24, weight: 800, fill: colors.red, maxWidth: 420, maxLines: 2 }));
-  canvas.add(svgText(x0 - 94, y0 + h / 2, visual.y_axis?.label || "纵轴", { size: 24, weight: 800, fill: colors.red, maxWidth: 180, maxLines: 3 }));
-  canvas.add(svgText(x0, y0 + h + 22, visual.x_axis?.left || "低", { size: 20, anchor: "start", fill: colors.muted, maxWidth: 210, maxLines: 2 }));
-  canvas.add(svgText(x0 + w, y0 + h + 22, visual.x_axis?.right || "高", { size: 20, anchor: "end", fill: colors.muted, maxWidth: 210, maxLines: 2 }));
-  canvas.add(svgText(x0 - 58, y0 + h, visual.y_axis?.bottom || "低", { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
-  canvas.add(svgText(x0 - 58, y0, visual.y_axis?.top || "高", { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
+  canvas.add(svgText(x0 + w / 2, y0 + h + 76, visual.x_axis.label, { size: 24, weight: 800, fill: colors.red, maxWidth: 420, maxLines: 2 }));
+  canvas.add(svgText(x0 - 94, y0 + h / 2, visual.y_axis.label, { size: 24, weight: 800, fill: colors.red, maxWidth: 180, maxLines: 3 }));
+  canvas.add(svgText(x0, y0 + h + 22, visual.x_axis.left, { size: 20, anchor: "start", fill: colors.muted, maxWidth: 210, maxLines: 2 }));
+  canvas.add(svgText(x0 + w, y0 + h + 22, visual.x_axis.right, { size: 20, anchor: "end", fill: colors.muted, maxWidth: 210, maxLines: 2 }));
+  canvas.add(svgText(x0 - 58, y0 + h, visual.y_axis.bottom, { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
+  canvas.add(svgText(x0 - 58, y0, visual.y_axis.top, { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
 
   if ((visual.items || []).length > 8) {
     throw new Error(`quadrant_matrix supports at most 8 items without tiny labels; received ${(visual.items || []).length}.`);
@@ -1447,15 +1443,7 @@ function drawQuadrantMatrix(spec) {
       maxWidth: itemW - 24,
       maxLines: 2,
     }));
-    canvas.add(svgText(px, py + (dense ? 25 : 26), item.note || "", {
-      size: dense ? 10 : 16,
-      fill: colors.muted,
-      lineHeight: dense ? 12 : 19,
-      maxWidth: itemW - 28,
-      maxLines: dense ? 1 : 2,
-    }));
   });
-  canvas.add(svgText(1130, 170, "先定位关系，再选渲染器", { size: 24, weight: 800, fill: colors.red, anchor: "end", maxWidth: 330, maxLines: 2 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1514,9 +1502,7 @@ function drawPyramidCapabilityStack(spec) {
       seed: 1500 + idx,
     });
     canvas.add(svgText(centerX, y + levelH / 2 - 4, level.label, { size: 26, weight: 900, fill: highlighted ? colors.red : colors.ink, lineHeight: 29, maxWidth: Math.max(180, wBottom - 80), maxLines: 2 }));
-    canvas.add(svgText(centerX, y + levelH / 2 + 34, level.note || "", { size: 18, fill: colors.muted, maxWidth: Math.max(160, wBottom - 100), maxLines: 1 }));
   });
-  canvas.add(svgText(1240, 445, "越往上越接近\n业务判断", { size: 26, weight: 800, fill: colors.red, lineHeight: 34 }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1534,7 +1520,6 @@ function drawGenericNetworkGraph(spec) {
   const nodeW = veryDense ? 150 : (dense ? 178 : 232);
   const nodeH = veryDense ? 70 : (dense ? 82 : 104);
   const labelSize = veryDense ? 15 : (dense ? 18 : 22);
-  const noteSize = dense ? 14 : 16;
   const positions = new Map();
   nodes.forEach((node, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(nodes.length, 1);
@@ -1563,7 +1548,6 @@ function drawGenericNetworkGraph(spec) {
       seed: 1580 + i,
     });
     canvas.add(svgText(x, y - (dense ? 7 : 9), node.label, { size: labelSize, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: veryDense ? 17 : (dense ? 20 : 24), maxWidth: nodeW - 20, maxLines: 2 }));
-    canvas.add(svgText(x, y + (veryDense ? 20 : (dense ? 22 : 27)), node.note || "", { size: noteSize, fill: colors.muted, lineHeight: veryDense ? 15 : (dense ? 17 : 19), maxWidth: nodeW - 24, maxLines: 2 }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -1573,7 +1557,7 @@ function drawHubSpokeNetwork(spec) {
   const { rc } = roughSvg(606);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
-  const hub = visual.hub || { id: "hub", label: "中心" };
+  const hub = visual.hub || { id: "", label: "" };
   const nodes = visual.nodes || [];
   const center = [800, 475];
   const dense = nodes.length > 8;
@@ -1583,7 +1567,6 @@ function drawHubSpokeNetwork(spec) {
   const nodeW = veryDense ? 150 : (dense ? 178 : 230);
   const nodeH = veryDense ? 70 : (dense ? 82 : 110);
   const labelSize = veryDense ? 15 : (dense ? 18 : 22);
-  const noteSize = dense ? 14 : 16;
   const positions = new Map([[hub.id, center]]);
   nodes.forEach((node, i) => {
     const angle = -Math.PI / 2 + (i * 2 * Math.PI) / Math.max(nodes.length, 1);
@@ -1618,12 +1601,7 @@ function drawHubSpokeNetwork(spec) {
       seed: 660 + i,
     });
     canvas.add(svgText(x, y - (dense ? 7 : 10), node.label, { size: labelSize, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: veryDense ? 17 : (dense ? 20 : 24), maxWidth: nodeW - 20, maxLines: 2 }));
-    canvas.add(svgText(x, y + (veryDense ? 20 : (dense ? 22 : 28)), node.note || "", { size: noteSize, fill: colors.muted, lineHeight: veryDense ? 15 : (dense ? 17 : 19), maxWidth: nodeW - 24, maxLines: dense ? 1 : 2 }));
   });
-  if (!dense) {
-    canvas.add(`<path d="M250 720 C505 795 1040 800 1345 708" fill="none" stroke="${colors.red}" stroke-width="4" stroke-linecap="round" stroke-dasharray="16 12" opacity="0.45"/>`);
-    canvas.add(svgText(800, 842, "网络图只用于真正的多实体协同，不替代层级或流程", { size: 22, weight: 800, fill: colors.red, maxWidth: 820, maxLines: 2 }));
-  }
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1868,10 +1846,9 @@ function drawNativeEvidence(slide, spec, area) {
     slide.addImage({ path: imagePath, ...fitted });
   } else {
     nativeRect(slide, area.x + 0.25, area.y + 0.25, area.w - 0.5, area.h - 1.1, { fill: "F7F7F7", stroke: "D9D9D9" });
-    nativeText(slide, source.path || source.id || "原始证据", { x: area.x + 0.45, y: area.y + 0.72, w: area.w - 0.9, h: 0.32, fontSize: 12, bold: true, color: "595959", align: "center" });
+    nativeText(slide, source.path || source.id, { x: area.x + 0.45, y: area.y + 0.72, w: area.w - 0.9, h: 0.32, fontSize: 12, bold: true, color: "595959", align: "center" });
   }
-  nativeText(slide, source.caption || spec.claim, { x: area.x + 0.22, y: area.y + area.h - 0.56, w: area.w - 0.44, h: 0.2, fontSize: 10, bold: true, italic: true, color: "333333", align: "center" });
-  nativeText(slide, source.relevance ? `来源相关性：${source.relevance}` : "证据模块按来源图/表规则处理", { x: area.x + 0.22, y: area.y + area.h - 0.28, w: area.w - 0.44, h: 0.14, fontSize: 6, color: "595959", align: "center" });
+  nativeText(slide, source.caption, { x: area.x + 0.22, y: area.y + area.h - 0.44, w: area.w - 0.44, h: 0.2, fontSize: 10, bold: true, italic: true, color: "333333", align: "center" });
 }
 
 function fitAreaContain(area, imageWidth, imageHeight) {
@@ -1917,7 +1894,6 @@ function drawNativeDataCards(slide, visual, area) {
     nativeText(slide, card.value, { x: x + 0.08, y: area.y + 0.34, w: cardW - 0.16, h: 0.42, fontFace: "Impact", fontSize: 26, color: highlighted ? "C00000" : "333333", align: "center" });
     nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + 0.8, w: cardW - 0.16, h: 0.18, fontSize: 9, color: "595959", align: "center" });
     nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + 1.15, w: cardW - 0.16, h: 0.22, fontSize: 12, bold: true, align: "center" });
-    nativeText(slide, card.note || "", { x: x + 0.08, y: area.y + 1.48, w: cardW - 0.16, h: 0.22, fontSize: 9, color: "595959", align: "center" });
   });
 }
 
@@ -1991,7 +1967,9 @@ function drawNativeProcess(slide, visual, area) {
     const highlighted = step.id === visual.highlight;
     nativeRect(slide, x, area.y + 0.85, stepW, 0.85, { fill: highlighted ? "C00000" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF" });
     nativeText(slide, step.label, { x: x + 0.04, y: area.y + 1.02, w: stepW - 0.08, h: 0.2, fontSize: 11, bold: true, align: "center", color: highlighted ? "FFFFFF" : "333333" });
-    nativeText(slide, step.note || step.time || "", { x: x + 0.04, y: area.y + 1.32, w: stepW - 0.08, h: 0.16, fontSize: 7, align: "center", color: highlighted ? "FFFFFF" : "595959" });
+    if (step.time) {
+      nativeText(slide, step.time, { x: x + 0.04, y: area.y + 1.32, w: stepW - 0.08, h: 0.16, fontSize: 7, align: "center", color: highlighted ? "FFFFFF" : "595959" });
+    }
     if (idx < steps.length - 1) slide.addShape(ShapeType.line, { x: x + stepW, y: area.y + 1.28, w: gap, h: 0, line: { color: "8C8C8C", width: 0.6, endArrowType: "triangle" } });
   });
 }
@@ -2001,7 +1979,7 @@ function drawNativeLoop(slide, visual, area) {
   const cx = area.x + area.w / 2;
   const cy = area.y + area.h / 2;
   const radius = Math.min(area.w, area.h) * 0.34;
-  nativeText(slide, visual.center || visual.loops?.[0]?.label || "闭环", { x: cx - 0.8, y: cy - 0.16, w: 1.6, h: 0.28, fontSize: 13, bold: true, align: "center", color: "C00000" });
+  nativeText(slide, visual.center || visual.loops?.[0]?.label || "", { x: cx - 0.8, y: cy - 0.16, w: 1.6, h: 0.28, fontSize: 13, bold: true, align: "center", color: "C00000" });
   steps.forEach((step, idx) => {
     const angle = -Math.PI / 2 + idx * (Math.PI * 2 / Math.max(1, steps.length));
     const x = cx + Math.cos(angle) * radius - 0.55;
@@ -2027,7 +2005,7 @@ function drawNativeHierarchy(slide, spec, area) {
     return;
   }
   const labels = spec.template === "layered_architecture" ? (visual.layers || []).map((layer) => layer.label) : (visual.nodes || []).slice(0, 8);
-  drawNativeProcess(slide, { steps: labels.map((label, idx) => ({ id: `h${idx}`, label, note: "" })), highlight: "h0" }, area);
+  drawNativeProcess(slide, { steps: labels.map((label, idx) => ({ id: `h${idx}`, label })), highlight: "h0" }, area);
 }
 
 function drawNativeNetwork(slide, visual, area) {
@@ -2098,6 +2076,7 @@ function validateVisualAnchorSpec(spec) {
   if (spec.kind === "Evidence") {
     if (!spec.source || typeof spec.source !== "object") errors.push("Evidence requires a source object.");
     if (spec.source && !safeText(spec.source.path) && !safeText(spec.source.id)) errors.push("Evidence source requires path or id.");
+    if (spec.source && !safeText(spec.source.caption)) errors.push("Evidence source requires caption; do not rely on renderer fallback text.");
     if (!["source_figure", "source_table", "source_screenshot", "source_chart"].includes(spec.template)) {
       errors.push("Evidence template must be source_figure, source_table, source_screenshot, or source_chart.");
     }
@@ -2107,8 +2086,8 @@ function validateVisualAnchorSpec(spec) {
 
   const visual = spec.visual_spec;
   if (!visual || typeof visual !== "object") errors.push("Missing required object: visual_spec");
-  if (visual && Object.prototype.hasOwnProperty.call(visual, "annotation")) {
-    errors.push("visual_spec.annotation is not supported; put slide-level explanations in editable PPT text boxes.");
+  if (visual && typeof visual === "object") {
+    collectForbiddenVisualFields(visual, "visual_spec").forEach((error) => errors.push(error));
   }
   const template = spec.template;
   const templatesByKind = {
@@ -2124,15 +2103,18 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (spec.kind === "Matrix" && template === "table") {
+    rejectUnknownFields(visual || {}, ["rows"], "visual_spec", errors);
     if (!Array.isArray(visual?.rows) || visual.rows.length < 1) errors.push("table requires visual_spec.rows.");
     if (errors.length) throw new Error(`Invalid visual anchor spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
     return true;
   }
 
   if (visual && spec.template === "layered_architecture") {
+    rejectUnknownFields(visual, ["layers", "side_label", "side_modules", "edges"], "visual_spec", errors);
     if (!Array.isArray(visual.layers) || visual.layers.length < 3) errors.push("layered_architecture requires at least three visual_spec.layers.");
     if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push("layered_architecture requires visual_spec.edges.");
     if (!Array.isArray(visual.side_modules)) errors.push("layered_architecture requires visual_spec.side_modules.");
+    if ((visual.side_modules || []).length && !safeText(visual.side_label)) errors.push("layered_architecture with side_modules requires visual_spec.side_label.");
     if (Array.isArray(visual.layers) && Array.isArray(visual.edges)) {
       const itemIds = new Set([...visual.layers.flatMap((layer) => layer.items || []), ...(visual.side_modules || [])]);
       collectUnknownEdgeEndpoints(visual.edges, itemIds, "layered_architecture").forEach((error) => errors.push(error));
@@ -2140,12 +2122,15 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && ["bar_chart", "line_chart"].includes(template)) {
+    rejectUnknownFields(visual, ["y_label", "categories", "series", "highlight"], "visual_spec", errors);
+    if (!safeText(visual.y_label)) errors.push(`${template} requires visual_spec.y_label.`);
     if (!Array.isArray(visual.categories) || visual.categories.length < 1) errors.push(`${template} requires visual_spec.categories.`);
     if (!Array.isArray(visual.series) || visual.series.length < 1) errors.push(`${template} requires visual_spec.series.`);
     validateSeriesValues(visual, template).forEach((error) => errors.push(error));
   }
 
   if (visual && template === "data_cards") {
+    rejectUnknownFields(visual, ["cards", "highlight"], "visual_spec", errors);
     if (!Array.isArray(visual.cards) || visual.cards.length < 1) errors.push("data_cards requires visual_spec.cards.");
     if (Array.isArray(visual.cards)) {
       visual.cards.forEach((card, idx) => {
@@ -2156,6 +2141,8 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && template === "proportion_chart") {
+    rejectUnknownFields(visual, ["total_label", "segments", "highlight"], "visual_spec", errors);
+    if (!safeText(visual.total_label)) errors.push(`${template} requires visual_spec.total_label.`);
     if (!Array.isArray(visual.segments) || visual.segments.length < 2) errors.push(`${template} requires at least two visual_spec.segments.`);
     if (Array.isArray(visual.segments)) {
       visual.segments.forEach((segment, idx) => {
@@ -2166,10 +2153,12 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && template === "heatmap") {
+    rejectUnknownFields(visual, ["rows", "columns", "values", "highlight"], "visual_spec", errors);
     validateGridValues(visual, template).forEach((error) => errors.push(error));
   }
 
   if (visual && template === "tree") {
+    rejectUnknownFields(visual, ["nodes", "edges", "labels", "highlight"], "visual_spec", errors);
     if (!Array.isArray(visual.nodes) || visual.nodes.length < 2) errors.push("tree requires at least two visual_spec.nodes.");
     if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push("tree requires visual_spec.edges.");
     if (!visual.labels || typeof visual.labels !== "object") errors.push("tree requires visual_spec.labels.");
@@ -2187,6 +2176,7 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && template === "capability_stack") {
+    rejectUnknownFields(visual, ["levels", "highlight"], "visual_spec", errors);
     if (!Array.isArray(visual.levels) || visual.levels.length < 2) errors.push(`${template} requires at least two visual_spec.levels.`);
     if (Array.isArray(visual.levels)) {
       visual.levels.forEach((level, idx) => {
@@ -2196,6 +2186,7 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && ["closed_loop", "spiral_iteration_ladder"].includes(template)) {
+    rejectUnknownFields(visual, ["center", "steps", "highlight"], "visual_spec", errors);
     if (!Array.isArray(visual.steps) || visual.steps.length < 3) errors.push("closed_loop requires at least three visual_spec.steps.");
     if (!safeText(visual.center)) errors.push("closed_loop requires visual_spec.center.");
     if (Array.isArray(visual.steps)) {
@@ -2210,6 +2201,7 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && ["process", "timeline"].includes(template)) {
+    rejectUnknownFields(visual, ["steps", "highlight", "orientation"], "visual_spec", errors);
     if (!Array.isArray(visual.steps) || visual.steps.length < 2) errors.push(`${template} requires at least two visual_spec.steps.`);
     if (Array.isArray(visual.steps)) {
       visual.steps.forEach((step, idx) => {
@@ -2223,6 +2215,7 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && template === "swimlane") {
+    rejectUnknownFields(visual, ["lanes", "highlight"], "visual_spec", errors);
     if (!Array.isArray(visual.lanes) || visual.lanes.length < 1) errors.push("swimlane requires visual_spec.lanes.");
     if (Array.isArray(visual.lanes)) {
       const stepIds = [];
@@ -2241,6 +2234,7 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && template === "dual_loop") {
+    rejectUnknownFields(visual, ["loops", "highlight", "bridge_label"], "visual_spec", errors);
     if (!Array.isArray(visual.loops) || visual.loops.length < 2) errors.push("dual_loop requires at least two visual_spec.loops.");
     if (Array.isArray(visual.loops)) {
       visual.loops.forEach((loop, loopIdx) => {
@@ -2253,8 +2247,15 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && spec.template === "quadrant_matrix") {
+    rejectUnknownFields(visual, ["x_axis", "y_axis", "items", "highlight"], "visual_spec", errors);
     if (!visual.x_axis || typeof visual.x_axis !== "object") errors.push("quadrant_matrix requires visual_spec.x_axis.");
     if (!visual.y_axis || typeof visual.y_axis !== "object") errors.push("quadrant_matrix requires visual_spec.y_axis.");
+    if (visual.x_axis && (!safeText(visual.x_axis.left) || !safeText(visual.x_axis.right) || !safeText(visual.x_axis.label))) {
+      errors.push("quadrant_matrix visual_spec.x_axis requires left, right, and label.");
+    }
+    if (visual.y_axis && (!safeText(visual.y_axis.bottom) || !safeText(visual.y_axis.top) || !safeText(visual.y_axis.label))) {
+      errors.push("quadrant_matrix visual_spec.y_axis requires bottom, top, and label.");
+    }
     if (!Array.isArray(visual.items) || visual.items.length < 2) errors.push("quadrant_matrix requires at least two visual_spec.items.");
     if (Array.isArray(visual.items)) {
       visual.items.forEach((item, idx) => {
@@ -2265,10 +2266,12 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && template === "capability_matrix") {
+    rejectUnknownFields(visual, ["rows", "columns", "values", "highlight"], "visual_spec", errors);
     validateGridValues(visual, template).forEach((error) => errors.push(error));
   }
 
   if (visual && spec.template === "hub_spoke_network") {
+    rejectUnknownFields(visual, ["hub", "nodes", "edges", "highlight"], "visual_spec", errors);
     if (!visual.hub || typeof visual.hub !== "object" || !safeText(visual.hub.id) || !safeText(visual.hub.label)) errors.push("hub_spoke_network requires visual_spec.hub with id and label.");
     if (!Array.isArray(visual.nodes) || visual.nodes.length < 2) errors.push("hub_spoke_network requires at least two visual_spec.nodes.");
     if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push("hub_spoke_network requires visual_spec.edges.");
@@ -2285,6 +2288,7 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (visual && ["dependency_graph", "module_interaction_map", "causal_influence_graph"].includes(template)) {
+    rejectUnknownFields(visual, ["nodes", "edges", "highlight"], "visual_spec", errors);
     if (!Array.isArray(visual.nodes) || visual.nodes.length < 2) errors.push(`${template} requires at least two visual_spec.nodes.`);
     if (!Array.isArray(visual.edges) || !visual.edges.length) errors.push(`${template} requires visual_spec.edges.`);
     if (Array.isArray(visual.nodes)) {
@@ -2316,6 +2320,32 @@ function collectUnknownEdgeEndpoints(edges, validIds, template) {
     if (!validIds.has(to)) errors.push(`${template} edge ${idx + 1} references unknown target: ${to}`);
   });
   return errors;
+}
+
+function collectForbiddenVisualFields(value, pathName, errors = []) {
+  if (Array.isArray(value)) {
+    value.forEach((item, idx) => collectForbiddenVisualFields(item, `${pathName}[${idx}]`, errors));
+    return errors;
+  }
+  if (!value || typeof value !== "object") return errors;
+  Object.entries(value).forEach(([field, child]) => {
+    const childPath = `${pathName}.${field}`;
+    if (STANDALONE_VISUAL_SPEC_TEXT_FIELDS.includes(field)) {
+      errors.push(`${childPath} is not supported; put slide-level explanations, captions, legends, and conclusions in editable PPT text boxes.`);
+    }
+    collectForbiddenVisualFields(child, childPath, errors);
+  });
+  return errors;
+}
+
+function rejectUnknownFields(value, allowedFields, pathName, errors) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const allowed = new Set(allowedFields);
+  Object.keys(value).forEach((field) => {
+    if (!allowed.has(field)) {
+      errors.push(`${pathName}.${field} is not part of the ${pathName} schema; remove it or move explanatory content to PPT text boxes.`);
+    }
+  });
 }
 
 function validateSeriesValues(visual, template) {

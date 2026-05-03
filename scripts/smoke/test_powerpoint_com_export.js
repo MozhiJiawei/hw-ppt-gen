@@ -103,18 +103,20 @@ function visualSpecs() {
   return [
     baseSpec("Quantity", "data_cards", {
       cards: [
-        { id: "pass", label: "正例", value: "1", unit: "套", note: "可导出" },
-        { id: "fail", label: "阻塞", value: "0", unit: "项", note: "无错误" },
-        { id: "cover", label: "覆盖", value: "7", unit: "类", note: "全能力" },
+        { id: "pass", label: "正例", value: "1", unit: "套" },
+        { id: "fail", label: "阻塞", value: "0", unit: "项" },
+        { id: "cover", label: "覆盖", value: "7", unit: "类" },
       ],
       highlight: "fail",
     }),
     baseSpec("Quantity", "bar_chart", {
+      y_label: "覆盖数",
       categories: ["契约", "生成", "导出"],
       series: [{ name: "覆盖", values: [1, 1, 1] }],
       highlight: { category: "导出", series: "覆盖" },
     }),
     baseSpec("Quantity", "line_chart", {
+      y_label: "稳定性",
       categories: ["T1", "T2", "T3", "T4"],
       series: [{ name: "稳定性", values: [1, 2, 3, 4] }],
       highlight: { category: "T4", series: "稳定性" },
@@ -132,17 +134,17 @@ function visualSpecs() {
     }),
     baseSpec("Sequence", "process", {
       steps: [
-        { id: "build", label: "生成", note: "创建 PPTX" },
-        { id: "open", label: "打开", note: "PowerPoint COM" },
-        { id: "export", label: "导出", note: "逐页 PNG" },
+        { id: "build", label: "生成" },
+        { id: "open", label: "打开" },
+        { id: "export", label: "导出" },
       ],
       highlight: "export",
     }),
     baseSpec("Sequence", "timeline", {
       steps: [
-        { id: "t1", time: "T1", label: "写入", note: "接口调用" },
-        { id: "t2", time: "T2", label: "保存", note: "生成文件" },
-        { id: "t3", time: "T3", label: "导出", note: "COM 渲染" },
+        { id: "t1", time: "T1", label: "写入" },
+        { id: "t2", time: "T2", label: "保存" },
+        { id: "t3", time: "T3", label: "导出" },
       ],
       highlight: "t3",
     }),
@@ -193,14 +195,15 @@ function visualSpecs() {
         { id: "script", label: "脚本层", items: ["content entry", "diagram renderer"] },
         { id: "export", label: "导出层", items: ["PowerPoint COM"] },
       ],
+      side_label: "检查",
       side_modules: ["QA"],
       edges: [["visual_anchor", "content entry"], ["diagram renderer", "PowerPoint COM"], ["QA", "content entry"]],
     }),
     baseSpec("Hierarchy", "capability_stack", {
       levels: [
-        { label: "开发测试", note: "调用所有接口" },
-        { label: "生成 PPT", note: "覆盖视觉锚点" },
-        { label: "COM 导出", note: "验证真实打开" },
+        { label: "开发测试" },
+        { label: "生成 PPT" },
+        { label: "COM 导出" },
       ],
       highlight: "COM 导出",
     }),

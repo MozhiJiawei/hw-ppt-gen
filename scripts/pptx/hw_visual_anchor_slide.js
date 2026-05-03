@@ -8,6 +8,8 @@ const {
   cloneOptions,
   grayCard,
   redTitleCard,
+  safeText,
+  textBox,
 } = require("./hw_pptx_helpers");
 const {
   createVisualAnchorImage,
@@ -87,6 +89,74 @@ function renderVisualAnchor(slide, visualAnchor, area) {
   return { renderer: renderPath, rendered: true };
 }
 
+function normalizeVisualAnchorCaption(data = {}) {
+  const caption = data.visualAnchorCaption
+    ?? data.visualAnchorLegend
+    ?? data.visual_anchor_caption
+    ?? data.visual_anchor_legend
+    ?? data.figureLegend
+    ?? data.figure_legend;
+  if (!caption) return null;
+  if (typeof caption === "string" || Array.isArray(caption)) return { text: caption };
+  if (typeof caption === "object") {
+    return {
+      text: caption.text || caption.body || caption.caption || caption.legend || "",
+      source: caption.source || caption.sourceNote || caption.source_note || "",
+      align: caption.align || "center",
+    };
+  }
+  return { text: String(caption) };
+}
+
+function addVisualAnchorCaption(slide, caption, renderResult, anchorArea, visualArea) {
+  const text = Array.isArray(caption.text) ? caption.text.filter(Boolean).join("\n") : safeText(caption.text);
+  const source = safeText(caption.source);
+  if (!text) return null;
+
+  const imageArea = renderResult.image_area || visualArea;
+  const captionH = source ? 0.46 : 0.3;
+  const captionY = Math.min(
+    imageArea.y + imageArea.h + 0.06,
+    anchorArea.y + anchorArea.h - captionH
+  );
+  textBox(slide, text, {
+    x: anchorArea.x + 0.12,
+    y: captionY,
+    w: anchorArea.w - 0.24,
+    h: source ? 0.22 : 0.28,
+    fontSize: 12,
+    bold: true,
+    italic: true,
+    color: HW_STYLE.color.dark,
+    align: caption.align || "center",
+    valign: "mid",
+    lineSpacingMultiple: 1,
+  });
+  if (source) {
+    textBox(slide, source, {
+      x: anchorArea.x + 0.12,
+      y: captionY + 0.25,
+      w: anchorArea.w - 0.24,
+      h: 0.14,
+      fontSize: 6,
+      color: HW_STYLE.color.gray,
+      align: caption.align || "center",
+      valign: "mid",
+      lineSpacingMultiple: 1,
+    });
+  }
+  return {
+    text,
+    source,
+    area: {
+      x: anchorArea.x + 0.12,
+      y: captionY,
+      w: anchorArea.w - 0.24,
+      h: captionH,
+    },
+  };
+}
+
 function fitAreaContain(area, imageWidth, imageHeight) {
   if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) {
     throw new Error("fitAreaContain requires positive image dimensions.");
@@ -116,13 +186,19 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
 
   const supportingCards = data.supportingCards || data.supporting_cards || [];
   const hasSideCards = supportingCards.length > 0;
+  const visualCaption = normalizeVisualAnchorCaption(data);
   const anchorArea = cloneOptions(data.anchorArea || {
     x: HW_STYLE.slide.marginX,
     y: HW_STYLE.summary.contentTop,
     w: hasSideCards ? 7.52 : 12.23,
     h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - 0.35,
   });
-  const renderResult = renderVisualAnchor(slide, data.visual_anchor, anchorArea);
+  const captionReserveH = visualCaption ? (visualCaption.source ? 0.58 : 0.42) : 0;
+  const visualArea = visualCaption
+    ? { ...anchorArea, h: Math.max(1.4, anchorArea.h - captionReserveH) }
+    : anchorArea;
+  const renderResult = renderVisualAnchor(slide, data.visual_anchor, visualArea);
+  const captionResult = visualCaption ? addVisualAnchorCaption(slide, visualCaption, renderResult, anchorArea, visualArea) : null;
   if (hasSideCards) {
     addSupportingCards(slide, supportingCards, data.supportingArea || {
       x: anchorArea.x + anchorArea.w + 0.18,
@@ -146,6 +222,8 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     image_height: renderResult.image_height,
     image_area: renderResult.image_area,
     anchor_area: anchorArea,
+    visual_area: visualArea,
+    visual_anchor_caption: captionResult,
   });
   return slide;
 }

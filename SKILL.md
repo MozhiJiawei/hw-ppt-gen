@@ -12,17 +12,23 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 1. Read the user's source material and identify the audience, purpose, story line, and evidence.
    - All visible deck text that you create must be Chinese. Keep source figures/tables as-is, but translate slide titles, subtitles, card titles, body text, captions, footers, contents, and QA notes into Chinese.
    - Keep necessary technical acronyms in parentheses or inline, for example `首 Token 时延（TTFT）`, `每 Token 时延（TPOT）`, `服务等级目标（SLO）`, `GPU`, `KV cache`, and `SM`.
-2. For parsed PDF/XML/HTML directories, create a source inventory before planning. Save it under `.tmp/` and include:
+2. Choose a filesystem-safe deck name `<deck>` before creating any artifacts. Create the deck workspace `.tmp/<deck>/` and save every deck-specific generated or temporary file under that directory. Use this pattern consistently:
+   - Final PPTX: `.tmp/<deck>/<deck>.pptx`
+   - Deck-specific generation script: `.tmp/<deck>/generate_<deck>.js`
+   - Plans, inventories, manifests, QA notes, and scratch JSON: `.tmp/<deck>/<deck>_*.json` or `.tmp/<deck>/<deck>_*.md`
+   - Derived images and screenshots: `.tmp/<deck>/images/` or another subdirectory inside `.tmp/<deck>/`
+   - Exported slide PNGs: `.tmp/<deck>/slides/`
+3. For parsed PDF/XML/HTML directories, create a source inventory before planning. Save it under `.tmp/<deck>/` and include:
    - Source title, authors/date when available, and source file paths.
    - Major sections and the one-sentence role each section plays in the story.
    - Figure/table image paths, captions, and which ones are worth using as evidence.
    - Headline numeric claims that will appear in the deck.
-3. Inspect the bundled reference images in `assets/slides_ref/` before writing generation code. This is a blocking gate:
-   - Run `node scripts/pptx/prepare_reference_review.js --out .tmp/<deck>_reference_review.json`.
+4. Inspect the bundled reference images in `assets/slides_ref/` before writing generation code. This is a blocking gate:
+   - Run `node scripts/pptx/prepare_reference_review.js --out .tmp/<deck>/<deck>_reference_review.json`.
    - Open the reference images and fill every `observations` and `applied_to_slides` entry in that JSON before writing generation code.
    - Use the notes to calibrate density, card shapes, grid proportions, red/gray usage, table treatment, chart treatment, and footer language.
-   - Do not merely say the images were referenced; leave review evidence in `.tmp/<deck>_reference_review.json`.
-4. Plan the deck slide by slide before coding. Save the plan as `.tmp/<deck>_plan.json` or `.tmp/<deck>_plan.md`. Keep the plan separate from visual construction:
+   - Do not merely say the images were referenced; leave review evidence in `.tmp/<deck>/<deck>_reference_review.json`.
+5. Plan the deck slide by slide before coding. Save the plan as `.tmp/<deck>/<deck>_plan.json` or `.tmp/<deck>/<deck>_plan.md`. Keep the plan separate from visual construction:
    - Define the deck outline once as `sections`, using the same top-level chapter names as the contents page. Use the real chapter names; do not shorten them just to fit the indicator.
    - Do not insert standalone chapter divider slides. The top-right chapter indicator on each正文内容页 is the only chapter/progress marker.
    - Every正文内容页 must show a compact top-right chapter indicator that mirrors the reference images: white tabs for sibling sections and a Huawei-red tab for the current section. Pass `sections` and `currentSection` to the helper for each content page so the reader can see where the page sits in the outline. The helper dynamically sizes each tab by label length, right-aligns the full indicator to the content edge, and caps total width so the indicator does not collide with the page title.
@@ -40,22 +46,22 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    - Every embedded source figure or table must be treated as an evidence module, not a picture-only box. Prefer `visual + Chinese figure legend + 1-3 short interpretation lines` inside the same module when space permits. If the module would otherwise look empty, add source-grounded observations, conclusions, or reading guidance instead of leaving blank space.
    - Every embedded source figure or table must have a Chinese figure-legend description tightly attached below the visual, not pinned to the bottom of the card. By default, center the visual within its available visual area; the legend follows the visual's actual bottom edge. Use 12 pt, bold, italic text for the legend, for example `semi-PD 实验结果：Llama3-8B / 70B 的实验结果`. Keep the smaller source/caption note directly below the legend at 6 pt, then place optional interpretation lines below the source note. Leave extra whitespace beneath the interpretation, not between the visual and legend.
    - For tables that you create or transcribe, use native PowerPoint tables via `slide.addTable` / `addHuaweiTable`. Do not simulate a table by stacking rectangles and text boxes. Use source table screenshots only when the table is being cited as visual evidence from the paper.
-5. Create deck-specific generation scripts and all generated files under `.tmp/`. Do not write generated `.pptx`, deck-specific scripts, images, extracted text, QA reports, or scratch JSON outside `.tmp/`.
-6. Generate the PPTX with `pptxgenjs`. Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, footer, and table primitives; use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页 so the visual anchor, supporting cards, and manifest evidence stay on one path.
-7. Run content QA manually against the source material: missing text, ordering mistakes, placeholders, stale examples, unsourced numeric claims, and obvious wording errors. Save a concise QA note to `.tmp/<deck>_content_qa.json` or `.tmp/<deck>_content_qa.md`.
-8. Run hard style QA:
+6. Create deck-specific generation scripts and all generated files under `.tmp/<deck>/`. Do not write generated `.pptx`, deck-specific scripts, images, extracted text, QA reports, or scratch JSON outside that deck workspace.
+7. Generate the PPTX with `pptxgenjs`. Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, footer, and table primitives; use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页 so the visual anchor, supporting cards, and manifest evidence stay on one path.
+8. Run content QA manually against the source material: missing text, ordering mistakes, placeholders, stale examples, unsourced numeric claims, and obvious wording errors. Save a concise QA note to `.tmp/<deck>/<deck>_content_qa.json` or `.tmp/<deck>/<deck>_content_qa.md`.
+9. Run hard style QA:
 
    ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>.pptx --out .tmp/<deck>.qa.json --require-reference-review .tmp/<deck>_reference_review.json --require-visual-anchor-manifest .tmp/<deck>_visual_anchor_manifest.json
+   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json
    ```
 
-9. Export slide images with the target PPT renderer:
+10. Export slide images with the target PPT renderer:
 
    ```bash
-   node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides
+   node scripts/pptx/export_pptx_images.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/slides
    ```
 
-   On Windows, this script defaults to PowerPoint COM when PowerPoint is available so the exported PNGs match the actual PPTX rendering. LibreOffice is only a fallback. Check `.tmp/<deck>_slides/render_manifest.json`; if `renderer` is `libreoffice`, record that final PowerPoint visual rendering was unavailable.
+   On Windows, this script defaults to PowerPoint COM when PowerPoint is available so the exported PNGs match the actual PPTX rendering. LibreOffice is only a fallback. Check `.tmp/<deck>/slides/render_manifest.json`; if `renderer` is `libreoffice`, record that final PowerPoint visual rendering was unavailable.
 
    If fallback rendering needs `soffice`, `pdfinfo`, or `pdftoppm` and they are not on PATH, run:
 
@@ -64,30 +70,31 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    ```
 
    The export script must call command names from PATH; do not hardcode executable paths in deck scripts.
-10. Re-run hard QA with render evidence:
+11. Re-run hard QA with render evidence:
 
    ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>.pptx --out .tmp/<deck>.qa.json --require-reference-review .tmp/<deck>_reference_review.json --require-visual-anchor-manifest .tmp/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>_slides
+   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>/slides
    ```
 
-11. Triage hard-QA output. Treat errors as blockers. For every warning, either fix it or record why it is accepted in the QA note. Re-run hard QA after fixes.
-12. Run independent LLM visual QA from the exported PNGs. This is a blocking gate:
-   - Limit visual-QA-driven regeneration to **two total visual QA iterations** per deck. The first exported deck counts as iteration 1; one regenerated-and-rechecked deck counts as iteration 2. After iteration 2, do not keep looping. Record any remaining non-blocking concerns in `.tmp/<deck>_visual_qa.json` or `.tmp/<deck>_visual_qa.md`, and report unresolved blocking issues explicitly instead of starting another regeneration cycle.
+12. Triage hard-QA output. Treat errors as blockers. For every warning, either fix it or record why it is accepted in the QA note. Re-run hard QA after fixes.
+13. Run independent LLM visual QA from the exported PNGs. This is a blocking gate:
+   - Limit visual-QA-driven regeneration to **two total visual QA iterations** per deck. The first exported deck counts as iteration 1; one regenerated-and-rechecked deck counts as iteration 2. After iteration 2, do not keep looping. Record any remaining non-blocking concerns in `.tmp/<deck>/<deck>_visual_qa.json` or `.tmp/<deck>/<deck>_visual_qa.md`, and report unresolved blocking issues explicitly instead of starting another regeneration cycle.
    - Tell the visual reviewer this iteration cap in its prompt: "最多进行两轮视觉 QA 迭代；若第二轮后仍有问题，只报告问题，不要求继续重做。"
    - Use a separate reviewer subagent when subagents are available. Give it only the exported slide PNGs, the reference images, and the visual QA rubric; do not give it the generation script, prior QA pass/fail result, or your intended fixes.
    - If subagents are unavailable, perform a fresh independent review pass yourself after clearing generation assumptions from the prompt context. Treat the pass as adversarial review, not author self-check.
-   - Inspect every `.tmp/<deck>_slides/slide_XX.png` at original size, not only a contact sheet.
-   - Save `.tmp/<deck>_visual_qa.json` or `.tmp/<deck>_visual_qa.md` with one entry per slide. Each entry must include `language_status`, `title_status`, `overflow_status`, `overlap_status`, `reference_match_status`, and `blocking_findings`.
+   - Inspect every `.tmp/<deck>/slides/slide_XX.png` at original size, not only a contact sheet.
+   - Save `.tmp/<deck>/<deck>_visual_qa.json` or `.tmp/<deck>/<deck>_visual_qa.md` with one entry per slide. Each entry must include `language_status`, `title_status`, `overflow_status`, `overlap_status`, `reference_match_status`, and `blocking_findings`.
    - Fail visual QA if any created visible text is not Chinese, any page title wraps to multiple lines, any text leaves its card/text box, any module overlaps another module, or any footer/title/card is visibly clipped.
    - If image export fails, visual QA is not complete; report `visual_qa_status: failed_or_unavailable`, not `completed`.
-13. Fix the first version and regenerate when content QA, hard style QA, or visual QA finds issues, while respecting the two-iteration cap for visual-QA-driven regeneration. Content QA and hard style QA errors remain blockers, but visual QA must not become an unbounded loop.
+14. Fix the first version and regenerate when content QA, hard style QA, or visual QA finds issues, while respecting the two-iteration cap for visual-QA-driven regeneration. Content QA and hard style QA errors remain blockers, but visual QA must not become an unbounded loop.
 
 ## Output Rules
 
-- Save generated decks to `.tmp/*.pptx`.
-- Save generated plans, deck-specific scripts, intermediate JSON, screenshots, extracted images, and QA reports to `.tmp/`.
+- Save each generated deck and every deck-specific temporary artifact under `.tmp/<deck>/`.
+- Save generated decks to `.tmp/<deck>/<deck>.pptx`.
+- Save generated plans, deck-specific scripts, intermediate JSON, screenshots, extracted images, slide exports, and QA reports inside `.tmp/<deck>/` or its child directories.
 - Keep reusable skill files in `scripts/`, `references/`, and `assets/`; keep run-specific artifacts out of those folders.
-- When embedding source figures or tables, the source images may remain in their original input directory, but any derived or edited copies must be written to `.tmp/`.
+- When embedding source figures or tables, the source images may remain in their original input directory, but any derived or edited copies must be written inside `.tmp/<deck>/`.
 
 ## Huawei Style Contract
 
@@ -134,7 +141,7 @@ Use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页:
 - `addVisualAnchorContentSlide(pptx, data)` creates the page title, top-right chapter indicator, `分析总结`, one primary visual anchor, optional supporting cards, footer, and manifest entry.
 - `addEvidenceModule(slide, visualAnchor, area)` renders a source-backed evidence anchor inside an existing content region.
 - `addSupportingCards(slide, cards, area)` adds interpretation cards that explain the primary visual anchor.
-- `writeVisualAnchorManifest(pptx, fileName)` writes `.tmp/<deck>_visual_anchor_manifest.json`; hard QA uses this as evidence that every正文内容页 has exactly one rendered visual anchor.
+- `writeVisualAnchorManifest(pptx, fileName)` writes `.tmp/<deck>/<deck>_visual_anchor_manifest.json`; hard QA uses this as evidence that every正文内容页 has exactly one rendered visual anchor.
 
 For `addVisualAnchorContentSlide`, pass the 24 pt title as `title` and the 18 pt explanatory subtitle as `titleNote` or `titleSubtitle`. Pass `summary` as a string, array, or `{ body/items, fill }`. Prefer `summary.body` entries as `{ label, text }`, for example `{ label: "规划先行", text: "先完成页面级观点规划，再进入生成脚本。" }`. The helper keeps the left label fixed as `分析总结`; do not use `summary.title` to replace that label. Use `visualAnchorCaption` or `visual_anchor_caption` for the editable Chinese figure-legend text below the visual anchor. This caption is PPT text-layer content and must stay outside `visual_anchor.visual_spec`.
 

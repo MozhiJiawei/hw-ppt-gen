@@ -18,6 +18,7 @@ const expectedPagePrimitiveExports = [
   "ensureTmpPath",
   "grayCard",
   "redTitleCard",
+  "repairPptxForPowerPointCom",
   "safeText",
   "stripHash",
   "textBox",
@@ -47,6 +48,11 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_template_invalid",
   "content_visual_anchor_image_missing",
   "content_visual_anchor_image_invalid",
+  "content_visual_anchor_highlight_unexplained",
+  "content_visual_anchor_subjective_scores",
+  "content_visual_anchor_relationship_unproven",
+  "content_visual_anchor_plan_mismatch",
+  "content_visual_anchor_layout_unintegrated",
 ];
 
 const roughSvgSpec = {
@@ -62,6 +68,7 @@ const roughSvgSpec = {
     ],
     highlight: "render",
   },
+  highlight_reason: "高亮渲染，因为它验证默认路径是否真正生成 SVG。",
 };
 
 function read(relativePath) {
@@ -168,6 +175,10 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
       text: "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。",
       source: "说明：图注不属于图形规格。",
     },
+    supportingCards: [
+      { title: "解读", body: ["侧边卡用于形成图文并茂阅读路径。"] },
+    ],
+    layoutReference: "10 内容 图文并茂2",
     visual_anchor: {
       ...roughSvgSpec,
       id: "caption_outside_visual_spec",
@@ -180,6 +191,8 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
 
   const slide = manifest.slides[0];
   assert(slide.visual_anchor_caption, "manifest should record PPT-layer visual anchor caption placement");
+  assert.equal(slide.supporting_cards_count, 1, "manifest should record side interpretation cards for 图文并茂 layouts");
+  assert.equal(slide.layout_reference, "10 内容 图文并茂2", "manifest should record the intended content layout reference");
   assert.equal(slide.visual_anchor_caption.text, "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。");
   assert(!slide.visual_anchor.visual_spec.caption, "caption must stay outside visual_spec");
   assert(!slide.visual_anchor.visual_spec.figure_legend, "figure legend must stay outside visual_spec");
@@ -211,6 +224,8 @@ function assertSkillDocumentsCurrentPath() {
   const skill = read("SKILL.md");
   assert(skill.includes("addVisualAnchorContentSlide"), "SKILL should document the unified content-slide entrypoint");
   assert(skill.includes("--require-visual-anchor-manifest"), "SKILL should require manifest-backed visual-anchor QA");
+  assert(skill.includes("--require-plan"), "SKILL should require plan-backed visual-anchor alignment QA");
+  assert(skill.includes("10 内容 图文并茂2"), "SKILL should preserve the large-visual-plus-side-cards reference layout");
 }
 
 function assertPackageScriptsRunContractBeforeSmoke() {

@@ -108,6 +108,17 @@ function normalizeVisualAnchorCaption(data = {}) {
   return { text: String(caption) };
 }
 
+function normalizeHighlightReason(data = {}) {
+  const reason = data.highlightReason
+    ?? data.highlight_reason
+    ?? data.whyHighlight
+    ?? data.why_highlight
+    ?? data.visual_anchor?.highlight_reason
+    ?? data.visual_anchor?.why_highlight
+    ?? "";
+  return safeText(reason);
+}
+
 function addVisualAnchorCaption(slide, caption, renderResult, anchorArea, visualArea) {
   const text = Array.isArray(caption.text) ? caption.text.filter(Boolean).join("\n") : safeText(caption.text);
   const source = safeText(caption.source);
@@ -187,6 +198,10 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   const supportingCards = data.supportingCards || data.supporting_cards || [];
   const hasSideCards = supportingCards.length > 0;
   const visualCaption = normalizeVisualAnchorCaption(data);
+  const highlightReason = normalizeHighlightReason(data);
+  const relationshipTest = safeText(data.relationshipTest ?? data.relationship_test ?? data.visual_anchor.relationship_test ?? "");
+  const scoreBasis = safeText(data.scoreBasis ?? data.score_basis ?? data.visual_anchor.score_basis ?? "");
+  const layoutReference = safeText(data.layoutReference ?? data.layout_reference ?? data.visual_anchor.layout_reference ?? "");
   const anchorArea = cloneOptions(data.anchorArea || {
     x: HW_STYLE.slide.marginX,
     y: HW_STYLE.summary.contentTop,
@@ -224,6 +239,11 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     anchor_area: anchorArea,
     visual_area: visualArea,
     visual_anchor_caption: captionResult,
+    supporting_cards_count: supportingCards.length,
+    layout_reference: layoutReference || undefined,
+    highlight_reason: highlightReason || undefined,
+    relationship_test: relationshipTest || undefined,
+    score_basis: scoreBasis || undefined,
   });
   return slide;
 }

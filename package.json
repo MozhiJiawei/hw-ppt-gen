@@ -7,7 +7,7 @@
   "scripts": {
     "setup-render-path": "powershell -ExecutionPolicy Bypass -File scripts/pptx/setup_render_tools_path.ps1",
     "sample": "node scripts/smoke/generate_sample_deck.js",
-    "check-sample": "node scripts/qa/check_huawei_pptx.js .tmp/sample_huawei_deck.pptx --require-visual-anchor-manifest .tmp/sample_huawei_deck_visual_anchor_manifest.json",
+    "check-sample": "node scripts/qa/check_huawei_pptx.js .tmp/sample_huawei_deck.pptx --require-plan .tmp/sample_huawei_deck_plan.json --require-visual-anchor-manifest .tmp/sample_huawei_deck_visual_anchor_manifest.json",
     "export-sample": "node scripts/pptx/export_pptx_images.js .tmp/sample_huawei_deck.pptx --out .tmp/sample_huawei_deck_slides",
     "test:diagram": "node scripts/smoke/test_diagram_helpers.js",
     "test:visual-anchor-contract": "node scripts/smoke/test_visual_anchor_content_contract.js",

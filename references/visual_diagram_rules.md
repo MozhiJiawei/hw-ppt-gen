@@ -38,6 +38,13 @@ Required fields:
 - `template`: a kind-specific visual template.
 - `visual_spec`: structured data for conceptual anchors. `Evidence` uses `source` instead.
 
+Recommended semantic fields outside `visual_spec`:
+
+- `layout_reference`: composition reference such as `09 内容 图文并茂1` or `10 内容 图文并茂2`; this controls how the visual anchor is integrated with interpretation text.
+- `relationship_test`: a one-sentence check that the chosen kind/template matches the slide's real information relationship.
+- `highlight_reason`: required whenever `visual_spec.highlight` is present; this must also be reflected in visible slide text.
+- `score_basis`: required when matrix/heatmap values are subjective scores rather than sourced measurements.
+
 Never include `renderer`, `visual_strategy`, or the old `intent` field. Rendering is a runtime policy controlled by code.
 
 Do not put slide-level wording inside SVG data. `title` and `claim` are planning/manifest metadata, not image text. Do not include standalone explanation fields anywhere under `visual_spec`, such as `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards. For conceptual visual anchors, use `visualAnchorCaption` / `visual_anchor_caption` on `addVisualAnchorContentSlide` to render the editable figure-legend text below the visual anchor.
@@ -60,9 +67,17 @@ Decision priority:
 2. If numeric evidence is central, choose `Quantity`.
 3. If a closed feedback relation is central, choose `Loop`.
 4. If order over time or stages is central, choose `Sequence`.
-5. If containment, branching, decomposition, or layers are central, choose `Hierarchy`.
+5. If containment, branching, decomposition, bottom-to-top support, or layers are central, choose `Hierarchy`.
 6. If two dimensions classify or compare items, choose `Matrix`.
 7. Use `Network` only for genuinely many-to-many interaction or dependency.
+
+Rejection checks:
+
+- Do not choose `Hierarchy` for a set of parallel mechanisms, risks, observations, metrics, or takeaways. Use `Matrix/table`, `Sequence/process`, `Network/module_interaction_map`, or `Quantity/data_cards` instead.
+- Do not choose `capability_stack` unless each level clearly supports, contains, depends on, or abstracts the adjacent levels. If the relationship is "A, B, and C all matter", it is not a stack.
+- Do not choose `capability_matrix` or `heatmap` for subjective risks, priorities, or maturity unless there is a source value or an explicit scoring method. Prefer qualitative tables with `高 / 中 / 低`, drivers, and observable signals.
+- Do not add `highlight` just to make the visual look designed. A highlight must identify the slide's decisive evidence, bottleneck, inflection point, or action priority.
+- Do not treat an `Evidence` anchor as permission to make a picture-only slide. Important source figures/charts should normally use `10 内容 图文并茂2`: a framed evidence region plus side interpretation cards in PPT text.
 
 ## Templates
 
@@ -133,7 +148,11 @@ Do not make a visual anchor a full-slide poster.
 - Confirm each正文内容页 declares exactly one primary `visual_anchor`.
 - Confirm source evidence was considered before choosing a conceptual anchor.
 - Confirm the selected `kind` matches the slide's central question.
+- Confirm important `Evidence/source_figure` and `Evidence/source_chart` slides include side interpretation cards or another explicit 图文并茂 layout reference.
+- Confirm `relationship_test` proves the selected template's relationship. Fail `Hierarchy` when the visual is only a list of peers.
 - Confirm the anchor is more informative than plain cards.
+- Confirm every `highlight` has `highlight_reason`, and that the visible slide text explains the reason.
+- Confirm subjective risk/priority/capability judgments are not rendered as decimal scores without `score_basis`.
 - Confirm generated labels are readable and not clipped.
 - Confirm rough SVG images contain only diagram-native labels, values, axes, and time labels. Page-level explanations must remain editable PPT text. Fail any generated image that includes standalone explanatory phrases, captions, source notes, node notes, or empty red callout boxes.
 - Confirm rough SVG images are placed with proportional contain scaling; leave whitespace or redesign the layout rather than stretching the image to fill a region.

@@ -38,6 +38,13 @@ Required common fields:
 
 For all conceptual anchors except `Evidence`, include `visual_spec`. For `Evidence`, include `source`.
 
+Recommended semantic fields outside `visual_spec`:
+
+- `layout_reference`: required by the skill workflow for正文内容页. Use values like `09 内容 图文并茂1`, `10 内容 图文并茂2`, `二分栏`, `三分栏`, or `四分栏` to keep semantic anchor choice separate from page composition.
+- `relationship_test`: required by the skill workflow for conceptual anchors. It explains why the selected kind/template is semantically valid.
+- `highlight_reason`: required whenever `visual_spec.highlight` is present. It is manifest/QA metadata and must be echoed in visible slide text.
+- `score_basis`: required when matrix/heatmap values are subjective scores, model judgments, or normalized indices rather than directly sourced measurements.
+
 Do not output `renderer`, `visual_strategy`, `intent`, or standalone text fields anywhere under `visual_spec`, including `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, and `conclusion`.
 
 `title` and `claim` are metadata for planning, manifest review, and PPT composition. They are not rendered inside generated SVG images. Standalone captions, figure legends, source notes, explanatory paragraphs, side callouts, and bottom slogans belong in editable PPT text boxes or supporting cards, not inside `visual_spec`. When using `addVisualAnchorContentSlide`, put the editable figure-legend text in `visualAnchorCaption` or `visual_anchor_caption` beside `visual_anchor`, not under `visual_spec`.
@@ -224,6 +231,12 @@ Use the same fields as the existing rough SVG implementations:
 
 - `quadrant_matrix`: `x_axis`, `y_axis`, `items`, optional `highlight`. `x_axis` requires `left`, `right`, and `label`; `y_axis` requires `bottom`, `top`, and `label`.
 - `capability_matrix`: `rows`, `columns`, `values`, optional `highlight`.
+
+Rules:
+
+- Use `capability_matrix` for sourced measurements, normalized indices with a documented method, or explicit scoring rubrics.
+- Do not use decimal values for risks, priorities, or maturity judgments unless `score_basis` states the method and the visible slide text makes the judgment nature clear.
+- For subjective risk/priority pages, prefer `Matrix / table` with qualitative labels, drivers, and observable signals.
 
 ## Network
 

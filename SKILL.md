@@ -28,7 +28,7 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    - Open the reference images and fill every `observations` and `applied_to_slides` entry in that JSON before writing generation code.
    - Use the notes to calibrate density, card shapes, grid proportions, red/gray usage, table treatment, chart treatment, and footer language.
    - Do not merely say the images were referenced; leave review evidence in `.tmp/<deck>/<deck>_reference_review.json`.
-5. Plan the deck slide by slide before coding. Save the plan as `.tmp/<deck>/<deck>_plan.json` or `.tmp/<deck>/<deck>_plan.md`. Keep the plan separate from visual construction:
+5. Plan the deck slide by slide before coding. Save the plan as `.tmp/<deck>/<deck>_plan.json`. Keep the plan separate from visual construction:
    - Define the deck outline once as `sections`, using the same top-level chapter names as the contents page. Use the real chapter names; do not shorten them just to fit the indicator.
    - Do not insert standalone chapter divider slides. The top-right chapter indicator on each正文内容页 is the only chapter/progress marker.
    - Every正文内容页 must show a compact top-right chapter indicator that mirrors the reference images: white tabs for sibling sections and a Huawei-red tab for the current section. Pass `sections` and `currentSection` to the helper for each content page so the reader can see where the page sits in the outline. The helper dynamically sizes each tab by label length, right-aligns the full indicator to the content edge, and caps total width so the indicator does not collide with the page title.
@@ -41,7 +41,11 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    - Record the source evidence for important claims and figures.
    - Every正文内容页 must plan one primary `visual_anchor` before rendering. The visual anchor is the page's main attention object and must use `kind`: `Evidence`, `Quantity`, `Sequence`, `Loop`, `Hierarchy`, `Matrix`, or `Network`. Text cards explain or interpret the visual anchor; they must not become a competing second anchor.
    - Choose `Evidence` when a source figure, source table, source screenshot, or source chart directly supports the slide claim. Otherwise choose the single dominant information relationship from the six conceptual kinds.
-   - For each content slide, record `visual_anchor.kind`, `template`, source/data basis, and `why_this_visual`. Never put `renderer`, `visual_strategy`, or old `intent` fields in the model-facing plan; rendering is controlled globally by `HW_VISUAL_ANCHOR_RENDERER=rough_svg|ppt_native`.
+   - For each content slide, record `visual_anchor.kind`, `template`, source/data basis, `why_this_visual`, `layout_reference`, and `relationship_test`. `relationship_test` must prove the selected visual relationship is real, not decorative: for example, `Hierarchy` requires containment, decomposition, layered dependency, or bottom-to-top support; parallel mechanisms, parallel risks, or unrelated indicators must use `Matrix`, `Sequence`, `Network`, `Quantity`, or `Evidence` instead.
+   - `layout_reference` is the visual composition choice, separate from `visual_anchor.kind`. For important source figures/charts/tables, default to `10 内容 图文并茂2`: one framed visual-anchor region plus 1-3 side interpretation cards connected by proximity or red arrows. Use `09 内容 图文并茂1` when two balanced modules share the detail band. Do not let semantic checks turn a content page into a plain full-width picture plus caption.
+   - Only use `visual_spec.highlight` when the highlighted item is the argument's focus. If used, record a `highlight_reason` outside `visual_spec` and echo that reason in `分析总结`, `visualAnchorCaption`, or a supporting card. If you cannot write a specific reason for why this item matters more than the alternatives, omit `highlight`.
+   - For risk, priority, capability, maturity, or importance matrices, do not invent decimal scores. Use qualitative labels such as `高 / 中 / 低` in a native table unless the source provides numeric values or the plan records a clear `score_basis` / scoring method. Never make a subjective judgment look like sourced measurement.
+   - Never put `renderer`, `visual_strategy`, or old `intent` fields in the model-facing plan; rendering is controlled globally by `HW_VISUAL_ANCHOR_RENDERER=rough_svg|ppt_native`.
    - When a slide needs a visual anchor beyond ordinary cards, load `references/visual_diagram_rules.md`. Load `references/visual_diagram_spec_schema.md` before writing a structured `visual_anchor`. Do not load the diagram rules for simple text-card-only pages.
    - Every embedded source figure or table must be treated as an evidence module, not a picture-only box. Prefer `visual + Chinese figure legend + 1-3 short interpretation lines` inside the same module when space permits. If the module would otherwise look empty, add source-grounded observations, conclusions, or reading guidance instead of leaving blank space.
    - Every embedded source figure or table must have a Chinese figure-legend description tightly attached below the visual, not pinned to the bottom of the card. By default, center the visual within its available visual area; the legend follows the visual's actual bottom edge. Use 12 pt, bold, italic text for the legend, for example `semi-PD 实验结果：Llama3-8B / 70B 的实验结果`. Keep the smaller source/caption note directly below the legend at 6 pt, then place optional interpretation lines below the source note. Leave extra whitespace beneath the interpretation, not between the visual and legend.
@@ -52,7 +56,7 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 9. Run hard style QA:
 
    ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json
+   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-plan .tmp/<deck>/<deck>_plan.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json
    ```
 
 10. Export slide images with the target PPT renderer:
@@ -73,7 +77,7 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 11. Re-run hard QA with render evidence:
 
    ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>/slides
+   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-plan .tmp/<deck>/<deck>_plan.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>/slides
    ```
 
 12. Triage hard-QA output. Treat errors as blockers. For every warning, either fix it or record why it is accepted in the QA note. Re-run hard QA after fixes.
@@ -91,6 +95,7 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 ## Output Rules
 
 - Save each generated deck and every deck-specific temporary artifact under `.tmp/<deck>/`.
+- Save the plan as `.tmp/<deck>/<deck>_plan.json` whenever the deck has正文内容页, so hard QA can compare planned visual-anchor kind/template against the rendered manifest.
 - Save generated decks to `.tmp/<deck>/<deck>.pptx`.
 - Save generated plans, deck-specific scripts, intermediate JSON, screenshots, extracted images, slide exports, and QA reports inside `.tmp/<deck>/` or its child directories.
 - Keep reusable skill files in `scripts/`, `references/`, and `assets/`; keep run-specific artifacts out of those folders.
@@ -171,16 +176,16 @@ When embedding rough SVG output in PPT, preserve the SVG aspect ratio with propo
 - Do not add standalone chapter divider pages; begin each chapter with a normal content slide whose top-right indicator highlights the current chapter.
 - Use `Quantity` anchors for KPI summaries, quantitative comparisons, scorecards, and compact performance views.
 - Use `Sequence` anchors for workflows, timelines, delivery plans, and operating mechanisms.
-- Use `Hierarchy` anchors for architectures, capability stacks, classification trees, and layered systems.
+- Use `Hierarchy` anchors only for architectures, capability stacks, classification trees, and layered systems with explicit hierarchy. Do not use a pyramid/stack merely because there are several mechanisms or takeaways.
 - Use `Matrix` anchors for comparisons, heatmaps, prioritization quadrants, and structured tables.
 - Use `Loop` anchors for feedback cycles, iteration mechanisms, flywheels, and closed-loop governance.
 - Use `Network` anchors for dependencies, module relationships, stakeholder maps, and causal influence graphs.
 - Use native PPT tables for generated or transcribed structured comparisons. Only embed a table as an image when preserving the original paper table as source evidence is the point of the slide.
 - Merge related content when one dense slide can carry it cleanly.
 - For paper or technical-report inputs, default to this story arc unless the user asks otherwise: problem and trade-off, key insight, architecture/mechanism, algorithm or workflow, evaluation setup, key results, implementation or deployment notes, conclusion.
-- For every正文内容页, choose the page's `visual_anchor.kind` and `template` before choosing text card geometry. Use `Evidence` when source figures/tables/screenshots carry the claim; otherwise choose the dominant relationship kind and let code apply the global renderer.
+- For every正文内容页, choose the page's `visual_anchor.kind` and `template` before choosing text card geometry. Use `Evidence` when source figures/tables/screenshots carry the claim; otherwise choose the dominant relationship kind and let code apply the global renderer. Before coding, run a quick rejection check: if the chosen template's required relationship is not stated in the source, summary, or `relationship_test`, change the template.
 - Use the 图文并茂 reference layouts when the visual anchor is important: reference 09 for two balanced content modules with one embedded visual, and reference 10 for one large visual region plus side interpretation cards linked by red arrows or proximity. Keep the visual framed and explained; do not let the diagram float without a red title bar or nearby reading guidance.
-- Use original figures/tables as evidence when they carry important technical details; pair them with a short interpretation card rather than retyping every label.
+- Use original figures/tables as evidence when they carry important technical details; pair them with short interpretation cards rather than retyping every label. When using `addVisualAnchorContentSlide`, pass those cards through `supportingCards` / `supporting_cards`; this is how the helper produces the reference 10 large-visual-plus-side-cards layout.
 - Avoid using source figures as decoration. Each embedded figure must support a slide message and have a short caption or source note.
 - Every embedded source figure/table must be an evidence module, not a picture-only box. Include a figure-legend description directly below the visual: 12 pt, bold, italic, Chinese, with a meaning-specific prefix such as `semi-PD 实验结果：` or `semi-PD 架构图：`. The legend should sit close to the image/table bottom edge; do not place it at the bottom of a large empty image card. Put original figure/table number and source notes immediately below it in 6 pt. When the module has visible empty space, add 1-3 concise Chinese interpretation lines in the same module.
 - Prefer compact cards plus a chart/table/diagram/evidence region over full-height empty cards. If a card contains fewer than three substantive lines, do not stretch it to fill a column.
@@ -196,7 +201,12 @@ Content QA:
 - Verify正文内容页 proceed monotonically through the contents outline: chapter 1 pages, then chapter 2 pages, then chapter 3 pages. Do not bounce between sections.
 - Verify every正文内容页 has the top `分析总结` block, and verify cover and contents slides do not have it.
 - Verify every正文内容页 records exactly one primary `visual_anchor` in the plan. If a slide has no visual anchor, justify why the page is not a正文内容页 or redesign it. If a slide has several competing visual regions, choose one as the anchor and demote the others to supporting evidence or text.
+- Verify every正文内容页 records a `layout_reference` in the plan. For source-figure/source-chart Evidence slides, prefer `10 内容 图文并茂2` and ensure the implementation includes side interpretation cards via `supportingCards`.
+- Verify the implemented `visual_anchor.kind` and `template` match the plan before running QA. If the implementation changes a visual anchor, update the plan first and keep the reason fields aligned.
 - Verify every `visual_anchor` uses the new `kind`/`template` contract and does not include `renderer`, `visual_strategy`, or `intent`. Verify `Evidence` is used whenever source figure/table/screenshot evidence is the anchor.
+- Verify every conceptual `visual_anchor` has a `relationship_test`, and reject `Hierarchy/capability_stack` when the elements are merely parallel mechanisms, risks, factors, or metrics.
+- Verify every `visual_spec.highlight` has `highlight_reason` and that visible slide text tells the reader why that item is highlighted. Remove highlight when the reason is generic or absent.
+- Verify numeric matrix/heatmap scores are sourced or method-defined. If the values are subjective, convert them to a native table with qualitative labels and observable signals.
 - Verify all generated visible text is Chinese, with only necessary technical acronyms/model names/source identifiers left in English.
 - Compare slide titles and key claims against the source material.
 - Verify numeric claims in titles, data cards, and conclusion slides against the source inventory.
@@ -239,6 +249,9 @@ Hard QA:
 - Treat `section_indicator_alignment` as a blocker; keep the chapter indicator right-aligned to the title/content edge.
 - Treat `section_order_regression` as a blocker; reorder slides so content follows the contents-page chapter sequence without jumping backward.
 - Treat `content_visual_anchor_manifest_missing`, `content_visual_anchor_missing`, `content_visual_anchor_unrendered`, `content_visual_anchor_template_invalid`, and `content_visual_anchor_manifest_invalid` as blockers; every正文内容页 must have exactly one manifest-backed, rendered, schema-valid visual anchor.
+- Treat `content_visual_anchor_plan_missing`, `content_visual_anchor_plan_invalid`, and `content_visual_anchor_plan_mismatch` as blockers; the saved plan and rendered manifest must agree on visual-anchor kind/template.
+- Treat `content_visual_anchor_highlight_unexplained`, `content_visual_anchor_subjective_scores`, and `content_visual_anchor_relationship_unproven` as blockers; every highlight, score, and diagram relationship must have a recorded semantic basis.
+- Treat `content_visual_anchor_layout_unintegrated` as a blocker; source-figure/source-chart Evidence slides must remain 图文并茂 pages with adjacent interpretation cards, not plain full-width images with a caption.
 - Fix warnings when they indicate visible drift from the Huawei style contract.
 - Record accepted warnings with a concrete reason. Common accepted warnings include helper-generated font-size variety caused by a page title, card title, body, footer, and labels coexisting on a dense page; do not accept warnings that mask low contrast, tiny text, off-palette colors, or animation.
 - Run hard QA with `--require-reference-review`, `--require-visual-anchor-manifest`, and `--require-render-dir` before final delivery so missing reference-image review, missing visual-anchor evidence, and missing exported PNGs fail the workflow.

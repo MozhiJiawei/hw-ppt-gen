@@ -64,11 +64,11 @@ const LANGUAGE_ALLOWLIST = new Set([
 ]);
 
 function usage() {
-  console.error("Usage: node scripts/qa/check_huawei_pptx.js <deck.pptx> [--out .tmp/report.json] [--require-visual-anchor-manifest .tmp/deck_visual_anchor_manifest.json]");
+  console.error("Usage: node scripts/qa/check_huawei_pptx.js <deck.pptx> [--out .tmp/report.json] [--require-plan .tmp/deck_plan.json] [--require-visual-anchor-manifest .tmp/deck_visual_anchor_manifest.json]");
 }
 
 function parseArgs(argv) {
-  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null, requireVisualAnchorManifest: null };
+  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null, requireVisualAnchorManifest: null, requirePlan: null };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--out") {
       args.out = argv[i + 1];
@@ -81,6 +81,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (argv[i] === "--require-visual-anchor-manifest") {
       args.requireVisualAnchorManifest = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--require-plan") {
+      args.requirePlan = argv[i + 1];
       i += 1;
     }
   }
@@ -112,6 +115,10 @@ function decodeXmlText(text) {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'");
+}
+
+function safeText(value) {
+  return String(value ?? "").trim();
 }
 
 function emuToIn(value) {
@@ -675,7 +682,7 @@ function contentSlideNumbers(slideEntries) {
     .filter((slide) => slide !== null);
 }
 
-function checkVisualAnchorManifest(fileName, slideEntries) {
+function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) {
   const contentSlides = contentSlideNumbers(slideEntries);
   if (!fileName) return [];
   if (!fs.existsSync(fileName)) {
@@ -695,6 +702,7 @@ function checkVisualAnchorManifest(fileName, slideEntries) {
   }
 
   const issues = [];
+  issues.push(...checkVisualAnchorPlanAlignment(planFileName, entries, contentSlides));
   const byPage = new Map();
   for (const entry of entries) {
     const page = Number(entry.page);
@@ -707,15 +715,17 @@ function checkVisualAnchorManifest(fileName, slideEntries) {
   }
 
   for (const slide of contentSlides) {
-    const slideEntries = byPage.get(slide) || [];
-    if (slideEntries.length !== 1) {
+    const slideXml = slideEntries.find((item) => slideNumber(item.name) === slide)?.xml || "";
+    const visibleText = extractShapes(slideXml).map((shape) => shape.text).filter(Boolean).join("\n");
+    const pageEntries = byPage.get(slide) || [];
+    if (pageEntries.length !== 1) {
       issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have exactly one manifest-backed visual anchor.", {
-        manifest_entries: slideEntries.length,
+        manifest_entries: pageEntries.length,
       }));
       continue;
     }
 
-    const entry = slideEntries[0];
+    const entry = pageEntries[0];
     if (entry.rendered !== true) {
       issues.push(issue(slide, "content_visual_anchor_unrendered", "error", "Content slide visual anchor exists in the manifest but is not marked rendered."));
     }
@@ -738,6 +748,8 @@ function checkVisualAnchorManifest(fileName, slideEntries) {
         spec_template: entry.visual_anchor.template,
       }));
     }
+    issues.push(...checkVisualAnchorSemantics(slide, entry, visibleText));
+    issues.push(...checkVisualAnchorLayout(slide, entry));
     if (entry.renderer === "rough_svg") {
       const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
         && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
@@ -761,6 +773,144 @@ function checkVisualAnchorManifest(fileName, slideEntries) {
   }
 
   return issues;
+}
+
+function checkVisualAnchorLayout(slide, entry) {
+  const spec = entry.visual_anchor || {};
+  const template = safeText(spec.template);
+  const hasSideCards = Number(entry.supporting_cards_count || 0) > 0;
+  const layoutReference = safeText(entry.layout_reference || spec.layout_reference || "");
+  const isEvidenceFigure = spec.kind === "Evidence" && /source_(figure|chart)/.test(template);
+  const explicitlyFullWidth = /全宽|full[-_ ]?width/i.test(layoutReference);
+  if (isEvidenceFigure && !hasSideCards && !explicitlyFullWidth) {
+    return [issue(slide, "content_visual_anchor_layout_unintegrated", "error", "Evidence source figures/charts should use 图文并茂 composition with side interpretation cards, not a plain full-width image plus caption.", {
+      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      template,
+      layout_reference: layoutReference,
+    })];
+  }
+  return [];
+}
+
+function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides = []) {
+  if (!fileName) return [];
+  if (!fs.existsSync(fileName)) {
+    return [issue(null, "content_visual_anchor_plan_missing", "error", `Required deck plan not found: ${fileName}`)];
+  }
+  let plan;
+  try {
+    plan = JSON.parse(fs.readFileSync(fileName, "utf8"));
+  } catch (error) {
+    return [issue(null, "content_visual_anchor_plan_invalid", "error", `Could not parse deck plan JSON for visual-anchor alignment: ${error.message}`)];
+  }
+
+  const plannedSlides = Array.isArray(plan.slides) ? plan.slides : [];
+  if (!Array.isArray(plan.slides)) {
+    return [issue(null, "content_visual_anchor_plan_invalid", "error", "Deck plan must contain a slides array for visual-anchor alignment.")];
+  }
+  const manifestByPage = new Map((manifestEntries || []).map((entry) => [Number(entry.page), entry]));
+  const planByPage = new Map(plannedSlides
+    .filter((slide) => slide && Number.isFinite(Number(slide.page)))
+    .map((slide) => [Number(slide.page), slide]));
+  const issues = [];
+  for (const page of contentSlides) {
+    const plannedSlide = planByPage.get(page);
+    if (!plannedSlide) {
+      issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide is missing from the deck plan.", { page }));
+      continue;
+    }
+    const planned = plannedSlide.visual_anchor || {};
+    if (!planned.kind || !planned.template) {
+      issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchor.kind and visual_anchor.template.", {
+        planned_kind: planned.kind || "",
+        planned_template: planned.template || "",
+      }));
+      continue;
+    }
+    const actual = manifestByPage.get(page)?.visual_anchor || {};
+    if (!actual.kind || !actual.template) continue;
+    if (planned.kind !== actual.kind) {
+      issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.kind does not match the rendered manifest.", {
+        planned_kind: planned.kind,
+        actual_kind: actual.kind,
+      }));
+    }
+    if (planned.template !== actual.template) {
+      issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.template does not match the rendered manifest.", {
+        planned_template: planned.template,
+        actual_template: actual.template,
+      }));
+    }
+  }
+  return issues;
+}
+
+function checkVisualAnchorSemantics(slide, entry, visibleText) {
+  const issues = [];
+  const spec = entry.visual_anchor || {};
+  const visual = spec.visual_spec || {};
+  const highlight = visual.highlight;
+  if (highlight !== undefined && highlight !== null && JSON.stringify(highlight) !== "{}") {
+    const reason = safeText(entry.highlight_reason || spec.highlight_reason || spec.why_highlight || "");
+    if (reason.length < 12 || !hasCjk(reason)) {
+      issues.push(issue(slide, "content_visual_anchor_highlight_unexplained", "error", "visual_spec.highlight requires a specific Chinese highlight_reason recorded outside visual_spec.", {
+        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        highlight,
+      }));
+    }
+    if (!textExplainsHighlight(visibleText, reason)) {
+      issues.push(issue(slide, "content_visual_anchor_highlight_unexplained", "error", "The visible slide text should explain why the highlighted visual item matters.", {
+        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        highlight_reason: reason,
+      }));
+    }
+  }
+
+  if (spec.kind === "Hierarchy" && spec.template === "capability_stack") {
+    const relation = safeText(entry.relationship_test || spec.relationship_test || "");
+    if (!/(支撑|包含|分层|层级|依赖|构成|自下而上|底层|上层|抽象|拆解)/.test(relation)) {
+      issues.push(issue(slide, "content_visual_anchor_relationship_unproven", "error", "Hierarchy/capability_stack requires a relationship_test proving a real layered, containment, dependency, or support relationship.", {
+        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        relationship_test: relation,
+      }));
+    }
+  }
+
+  if ((spec.template === "capability_matrix" || spec.template === "heatmap") && hasSubjectiveDecimalGrid(visual)) {
+    const scoreBasis = safeText(entry.score_basis || spec.score_basis || "");
+    if (scoreBasis.length < 12 || !hasCjk(scoreBasis)) {
+      issues.push(issue(slide, "content_visual_anchor_subjective_scores", "error", "Decimal matrix/heatmap values that look like subjective scores require score_basis or should be converted to qualitative labels.", {
+        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        template: spec.template,
+      }));
+    }
+  }
+  return issues;
+}
+
+function textExplainsHighlight(visibleText, reason) {
+  if (!reason) return false;
+  const text = safeText(visibleText);
+  if (!text) return false;
+  const markerOk = /(因为|关键|拐点|优先|瓶颈|支撑|说明|意味着|所以|核心|最|主线|读法|高亮)/.test(text);
+  const reasonTokens = chineseBigrams(reason);
+  const overlap = reasonTokens.filter((token) => text.includes(token)).length;
+  return markerOk && overlap >= 1;
+}
+
+function chineseBigrams(value) {
+  const cjk = String(value || "").replace(/[^\u3400-\u9fff]/g, "");
+  const tokens = new Set();
+  for (let idx = 0; idx < cjk.length - 1; idx += 1) tokens.add(cjk.slice(idx, idx + 2));
+  return [...tokens];
+}
+
+function hasSubjectiveDecimalGrid(visual) {
+  if (!Array.isArray(visual?.values)) return false;
+  const values = visual.values.flatMap((row) => Array.isArray(row) ? row : []);
+  if (!values.length) return false;
+  return values.every((value) => typeof value === "number" && value >= 0 && value <= 1)
+    && values.some((value) => !Number.isInteger(value));
 }
 
 function isRectLike(value) {
@@ -828,7 +978,7 @@ async function main() {
   issues.push(...checkSectionOrder(slides));
   issues.push(...checkRenderEvidence(args.requireRenderDir, slides.length));
   issues.push(...checkReferenceReviewEvidence(args.requireReferenceReview));
-  issues.push(...checkVisualAnchorManifest(args.requireVisualAnchorManifest, slides));
+  issues.push(...checkVisualAnchorManifest(args.requireVisualAnchorManifest, slides, args.requirePlan));
 
   const presentationXml = presentationFiles.find((file) => file.name === "ppt/presentation.xml");
   if (presentationXml && /<p:transition\b|<p:timing\b/.test(presentationXml.xml)) {

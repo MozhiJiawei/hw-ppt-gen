@@ -51,8 +51,16 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_highlight_unexplained",
   "content_visual_anchor_subjective_scores",
   "content_visual_anchor_relationship_unproven",
+  "content_visual_anchor_plan_reason_missing",
   "content_visual_anchor_plan_mismatch",
   "content_visual_anchor_layout_unintegrated",
+  "content_visual_anchor_layout_missing",
+  "content_visual_anchor_layout_invalid",
+  "content_visual_anchor_renderer_config_missing",
+  "content_visual_anchor_renderer_scope_invalid",
+  "content_visual_anchor_table_not_native",
+  "content_layout_schema_invalid",
+  "content_layout_schema_anchor_missing",
 ];
 
 const roughSvgSpec = {
@@ -98,8 +106,6 @@ function assertVisualAnchorSlideSurface() {
 function assertContentSlideHonorsDefaultRenderer() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
-  const previousRenderer = process.env.HW_VISUAL_ANCHOR_RENDERER;
-  delete process.env.HW_VISUAL_ANCHOR_RENDERER;
   const pptx = createHuaweiDeck({ title: "renderer contract" });
   addVisualAnchorContentSlide(pptx, {
     title: "默认渲染器",
@@ -110,8 +116,7 @@ function assertContentSlideHonorsDefaultRenderer() {
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_renderer_manifest.json"));
-  if (previousRenderer === undefined) delete process.env.HW_VISUAL_ANCHOR_RENDERER;
-  else process.env.HW_VISUAL_ANCHOR_RENDERER = previousRenderer;
+  assert.equal(manifest.visual_anchor_renderer, "rough_svg", "manifest should record the deck-level renderer");
   assert.equal(manifest.slides[0].renderer, "rough_svg", "default content-slide renderer should be rough_svg");
   assert.equal(manifest.slides[0].image_format, "svg", "default content-slide renderer should embed SVG image output");
 }
@@ -119,8 +124,6 @@ function assertContentSlideHonorsDefaultRenderer() {
 function assertContentSlideUsesProportionalImagePlacement() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
-  const previousRenderer = process.env.HW_VISUAL_ANCHOR_RENDERER;
-  delete process.env.HW_VISUAL_ANCHOR_RENDERER;
   const pptx = createHuaweiDeck({ title: "image placement contract" });
   addVisualAnchorContentSlide(pptx, {
     title: "图片等比缩放",
@@ -143,8 +146,6 @@ function assertContentSlideUsesProportionalImagePlacement() {
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_image_placement_manifest.json"));
-  if (previousRenderer === undefined) delete process.env.HW_VISUAL_ANCHOR_RENDERER;
-  else process.env.HW_VISUAL_ANCHOR_RENDERER = previousRenderer;
 
   const slide = manifest.slides[0];
   assert(slide.image_area, "rough_svg manifest should record the actual image placement area");
@@ -162,8 +163,6 @@ function assertContentSlideUsesProportionalImagePlacement() {
 function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
-  const previousRenderer = process.env.HW_VISUAL_ANCHOR_RENDERER;
-  delete process.env.HW_VISUAL_ANCHOR_RENDERER;
   const pptx = createHuaweiDeck({ title: "caption contract" });
   addVisualAnchorContentSlide(pptx, {
     title: "图注渲染",
@@ -178,7 +177,7 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
     supportingCards: [
       { title: "解读", body: ["侧边卡用于形成图文并茂阅读路径。"] },
     ],
-    layoutReference: "10 内容 图文并茂2",
+    layoutReference: "06 内容 偏分栏",
     visual_anchor: {
       ...roughSvgSpec,
       id: "caption_outside_visual_spec",
@@ -186,13 +185,11 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_caption_manifest.json"));
-  if (previousRenderer === undefined) delete process.env.HW_VISUAL_ANCHOR_RENDERER;
-  else process.env.HW_VISUAL_ANCHOR_RENDERER = previousRenderer;
 
   const slide = manifest.slides[0];
   assert(slide.visual_anchor_caption, "manifest should record PPT-layer visual anchor caption placement");
   assert.equal(slide.supporting_cards_count, 1, "manifest should record side interpretation cards for 图文并茂 layouts");
-  assert.equal(slide.layout_reference, "10 内容 图文并茂2", "manifest should record the intended content layout reference");
+  assert.equal(slide.layout_reference, "06 内容 偏分栏", "manifest should record the intended content layout reference");
   assert.equal(slide.visual_anchor_caption.text, "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。");
   assert(!slide.visual_anchor.visual_spec.caption, "caption must stay outside visual_spec");
   assert(!slide.visual_anchor.visual_spec.figure_legend, "figure legend must stay outside visual_spec");
@@ -218,6 +215,7 @@ function assertHardQaKnowsVisualAnchorContract() {
   for (const rule of expectedVisualAnchorQaRules) {
     assert(qa.includes(rule), `hard QA should emit ${rule}`);
   }
+  assert(qa.includes("at least one manifest-backed visual anchor"), "hard QA should allow one or more anchors per content slide");
 }
 
 function assertSkillDocumentsCurrentPath() {
@@ -225,13 +223,16 @@ function assertSkillDocumentsCurrentPath() {
   assert(skill.includes("addVisualAnchorContentSlide"), "SKILL should document the unified content-slide entrypoint");
   assert(skill.includes("--require-visual-anchor-manifest"), "SKILL should require manifest-backed visual-anchor QA");
   assert(skill.includes("--require-plan"), "SKILL should require plan-backed visual-anchor alignment QA");
-  assert(skill.includes("10 内容 图文并茂2"), "SKILL should preserve the large-visual-plus-side-cards reference layout");
+  assert(skill.includes("05 内容 二分栏"), "SKILL should document the fixed content-layout references");
+  assert(skill.includes("至少一个"), "SKILL should document that content pages may have one or more visual anchors");
+  assert(skill.includes("visual_anchor_renderer"), "SKILL should document deck-level renderer configuration");
 }
 
 function assertPackageScriptsRunContractBeforeSmoke() {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.scripts["test:visual-anchor-contract"], "node scripts/smoke/test_visual_anchor_content_contract.js");
   assert(pkg.scripts.smoke.includes("test:visual-anchor-contract"), "npm run smoke should include visual-anchor contract tests");
+  assert(pkg.scripts.smoke.includes("content-layout-smoke"), "npm run smoke should include content layout schema smoke tests");
   assert(pkg.scripts["check-sample"].includes("--require-visual-anchor-manifest"), "sample QA should require visual-anchor manifest evidence");
 }
 

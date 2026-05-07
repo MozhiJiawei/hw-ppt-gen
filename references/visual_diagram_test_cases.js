@@ -351,14 +351,16 @@ function buildTemplateCases() {
     },
   });
 
-  cases.push(withMeta("matrix_table_1", "Matrix", "table", "生成或转写表格作为视觉锚点时固定使用 PPT 原生表格。", {
-    rows: [
-      ["能力", "当前状态", "统一后规则"],
-      ["原始表格", "散落在页面逻辑中", "Matrix/table 固定 native"],
-      ["概念图", "由模板分别处理", "统一 visual anchor"],
-      ["原图索引", "证据引用", "Evidence 固定证据模块"],
-    ],
-  }, DEFAULT_LAYOUT));
+  for (let idx = 0; idx < 10; idx += 1) {
+    cases.push(withMeta(`matrix_table_${idx + 1}`, "Matrix", "table", "生成或转写表格作为视觉锚点时跟随全局 renderer。", {
+      rows: [
+        ["能力", "当前状态", "统一后规则"],
+        [variedText("原始表格", idx, 0), "散落在页面逻辑中", "Matrix/table 跟随全局 renderer"],
+        [variedText("概念图", idx, 2), "由模板分别处理", "统一 visual anchor"],
+        [variedText("原图索引", idx, 4), "证据引用", "Evidence 固定证据模块"],
+      ],
+    }, DEFAULT_LAYOUT));
+  }
 
   return cases;
 }

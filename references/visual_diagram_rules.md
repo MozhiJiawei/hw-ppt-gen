@@ -14,7 +14,7 @@ Use this reference when planning or implementing the primary visual anchor for a
 
 ## Contract
 
-Every正文内容页 has exactly one primary `visual_anchor`. Text cards, captions, legends, side explanations, and micro-cards may support it, but they must not become competing anchors.
+Every正文内容页 has at least one primary `visual_anchor`. Rich content-layout pages may contain multiple visual anchors when the reference layout needs multiple visual/text panels; each rendered anchor must be recorded in the manifest.
 
 The model-facing visual anchor spec has no renderer field:
 
@@ -40,12 +40,13 @@ Required fields:
 
 Recommended semantic fields outside `visual_spec`:
 
-- `layout_reference`: composition reference such as `09 内容 图文并茂1` or `10 内容 图文并茂2`; this controls how the visual anchor is integrated with interpretation text.
+- `layout_reference`: required composition reference, exactly one of `05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, or `08 内容 四分栏`; this controls how visual anchors are integrated with interpretation text.
+- `why_this_visual`: required one-sentence reason why this visual relationship is the right one for the slide claim.
 - `relationship_test`: a one-sentence check that the chosen kind/template matches the slide's real information relationship.
 - `highlight_reason`: required whenever `visual_spec.highlight` is present; this must also be reflected in visible slide text.
 - `score_basis`: required when matrix/heatmap values are subjective scores rather than sourced measurements.
 
-Never include `renderer`, `visual_strategy`, or the old `intent` field. Rendering is a runtime policy controlled by code.
+Never include `renderer`, `expected_renderer`, `visual_strategy`, or the old `intent` field on a slide, content layout, or individual visual anchor. Rendering is a deck-level policy recorded once as top-level `visual_anchor_renderer` and passed once to `createHuaweiDeck({ visualAnchorRenderer })`.
 
 Do not put slide-level wording inside SVG data. `title` and `claim` are planning/manifest metadata, not image text. Do not include standalone explanation fields anywhere under `visual_spec`, such as `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards. For conceptual visual anchors, use `visualAnchorCaption` / `visual_anchor_caption` on `addVisualAnchorContentSlide` to render the editable figure-legend text below the visual anchor.
 
@@ -77,7 +78,7 @@ Rejection checks:
 - Do not choose `capability_stack` unless each level clearly supports, contains, depends on, or abstracts the adjacent levels. If the relationship is "A, B, and C all matter", it is not a stack.
 - Do not choose `capability_matrix` or `heatmap` for subjective risks, priorities, or maturity unless there is a source value or an explicit scoring method. Prefer qualitative tables with `高 / 中 / 低`, drivers, and observable signals.
 - Do not add `highlight` just to make the visual look designed. A highlight must identify the slide's decisive evidence, bottleneck, inflection point, or action priority.
-- Do not treat an `Evidence` anchor as permission to make a picture-only slide. Important source figures/charts should normally use `10 内容 图文并茂2`: a framed evidence region plus side interpretation cards in PPT text.
+- Do not treat an `Evidence` anchor as permission to make a picture-only slide. Important source figures/charts should normally use a `contentLayout` module from `05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, or `08 内容 四分栏`, with nearby PPT text explaining how to read the evidence.
 
 ## Templates
 
@@ -91,25 +92,18 @@ Supported model-facing templates:
 - Matrix: `table`, `quadrant_matrix`, `capability_matrix`, `heatmap`.
 - Network: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`.
 
-These names are semantic templates, not renderer names. For example, `bar_chart` may render through rough SVG or PPT native code depending on the global runtime mode.
+These names are semantic templates, not renderer names. For example, `bar_chart` may render through rough SVG or PPT native code depending on the deck-level renderer.
 
 ## Runtime Rendering Policy
 
-The model does not choose rendering. Code reads:
-
-```text
-HW_VISUAL_ANCHOR_RENDERER=rough_svg
-HW_VISUAL_ANCHOR_RENDERER=ppt_native
-```
-
-Default is `rough_svg`.
+The model chooses rendering once per deck, not per slide or per anchor. Record the choice as top-level `visual_anchor_renderer: "rough_svg"` or `"ppt_native"` in the plan, and pass the same value to `createHuaweiDeck({ visualAnchorRenderer })`. Default is `rough_svg`.
 
 Rough SVG output is an image of the visual relationship only. It may contain node labels, axis labels, values, and time labels, but it must not render page titles, slide claims, figure legends, source notes, standalone interpretation callouts, node notes, bottom slogans, side explanations, or decorative empty placeholders.
 
 Fixed overrides:
 
 - `Evidence` ignores the global renderer and is handled as an evidence module.
-- `Matrix` + `template: "table"` ignores the global renderer and is always a native PPT table.
+- `Matrix` + `template: "table"` is always a native PPT table, independent of the deck-level renderer.
 - All other conceptual anchors use the configured global renderer.
 
 ## Evidence
@@ -136,16 +130,18 @@ Evidence modules must include a nearby Chinese figure/table legend, source note,
 
 ## Layout Rule
 
-A visual anchor lives inside the normal Huawei content page structure: title, top-right section tabs, `分析总结`, red first-level bars, thin gray frames, interpretation text, and footer. Use the 图文并茂 references:
+A visual anchor lives inside the normal Huawei content page structure: title, top-right section tabs, `分析总结`, red first-level bars, thin gray frames, interpretation text, and footer. Use the content layout references:
 
-- `assets/slides_ref/09 内容 图文并茂1.png`: balanced mixed modules.
-- `assets/slides_ref/10 内容 图文并茂2.png`: large visual region plus side interpretation.
+- `assets/slides_ref/05 内容 二分栏.png`: equal two-column modules.
+- `assets/slides_ref/06 内容 偏分栏.png`: biased wide-visual plus narrow-interpretation columns.
+- `assets/slides_ref/07 内容 三分栏.png`: three equal columns.
+- `assets/slides_ref/08 内容 四分栏.png`: four 2x2 panels.
 
 Do not make a visual anchor a full-slide poster.
 
 ## Quality Gates
 
-- Confirm each正文内容页 declares exactly one primary `visual_anchor`.
+- Confirm each正文内容页 declares at least one primary `visual_anchor`.
 - Confirm source evidence was considered before choosing a conceptual anchor.
 - Confirm the selected `kind` matches the slide's central question.
 - Confirm important `Evidence/source_figure` and `Evidence/source_chart` slides include side interpretation cards or another explicit 图文并茂 layout reference.

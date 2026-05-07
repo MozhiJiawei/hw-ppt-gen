@@ -2,7 +2,7 @@
 
 Use this reference after `references/visual_diagram_rules.md` has selected a `visual_anchor.kind` and `visual_anchor.template`.
 
-The renderer is not part of the spec. Code chooses rough SVG or PPT native from `HW_VISUAL_ANCHOR_RENDERER`, with fixed overrides for `Evidence` and native tables.
+The renderer is not part of the spec. The deck plan records one top-level `visual_anchor_renderer`, and code receives it through `createHuaweiDeck({ visualAnchorRenderer })`. `Evidence` and `Matrix/table` are fixed overrides: Evidence renders as an evidence module, and Matrix/table always renders as a native PPT table.
 
 ## Contents
 
@@ -40,7 +40,8 @@ For all conceptual anchors except `Evidence`, include `visual_spec`. For `Eviden
 
 Recommended semantic fields outside `visual_spec`:
 
-- `layout_reference`: required by the skill workflow for正文内容页. Use values like `09 内容 图文并茂1`, `10 内容 图文并茂2`, `二分栏`, `三分栏`, or `四分栏` to keep semantic anchor choice separate from page composition.
+- `layout_reference`: required by the skill workflow for正文内容页. Use values like `05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, or `08 内容 四分栏` to keep semantic anchor choice separate from page composition.
+- `why_this_visual`: required by hard QA. Explain why this visual relationship, not only this text layout, supports the slide claim.
 - `relationship_test`: required by the skill workflow for conceptual anchors. It explains why the selected kind/template is semantically valid.
 - `highlight_reason`: required whenever `visual_spec.highlight` is present. It is manifest/QA metadata and must be echoed in visible slide text.
 - `score_basis`: required when matrix/heatmap values are subjective scores, model judgments, or normalized indices rather than directly sourced measurements.
@@ -210,7 +211,7 @@ Edges must reference known node/item ids. Unknown endpoints are validation error
 
 ### `table`
 
-Tables are always native PPT tables. Use for generated or transcribed structured comparisons.
+Tables always render as native PPT tables. Use for generated or transcribed structured comparisons that must remain editable.
 
 ```json
 {

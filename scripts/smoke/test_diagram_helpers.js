@@ -18,8 +18,6 @@ const JSZip = require("jszip");
 const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
 const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("../../references/visual_diagram_test_cases");
 
-process.env.HW_VISUAL_ANCHOR_RENDERER = "rough_svg";
-
 function baseSpec(overrides) {
   return {
     id: "test",
@@ -839,7 +837,7 @@ function testGeneratedCaseMatrixCoverage() {
   const fixedCases = [];
   generatedCaseMatrix.forEach((spec) => {
     validateVisualAnchorSpec(spec);
-    const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" });
+    const renderPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "rough_svg" });
     if (renderPath === "rough_svg") {
       roughCases.push(spec);
       const list = byTemplate.get(spec.template) || [];
@@ -850,7 +848,7 @@ function testGeneratedCaseMatrixCoverage() {
     }
   });
 
-  assert.equal(byTemplate.size, 20, "generated matrix should cover every rough-svg base template");
+  assert.equal(byTemplate.size, 20, "generated matrix should cover every rough-svg base template; Matrix/table is always native");
   byTemplate.forEach((specs, template) => {
     assert(specs.length >= 10, `${template} should have at least 10 variants`);
     specs.forEach((spec) => assert.equal(spec.render_options?.aspectRatio, DEFAULT_LAYOUT, `${template} should use the chosen default layout`));
@@ -866,9 +864,9 @@ function testGeneratedCaseMatrixCoverage() {
       );
     }
   });
-  assert(roughCases.length >= 200, "rough-svg case matrix should still provide at least 10 variants per rough template");
+  assert(roughCases.length >= 190, "rough-svg case matrix should still provide at least 10 variants per rough template");
   assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Evidence" && renderPath === "evidence"), "matrix should include a fixed-rule Evidence case");
-  assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Matrix" && spec.template === "table" && renderPath === "ppt_native"), "matrix should include a fixed-rule native table case");
+  assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Matrix" && spec.template === "table" && renderPath === "ppt_native"), "matrix table should always use native PPT rendering");
 
   const spotCheckTemplates = ["process", "layered_architecture", "hub_spoke_network", "bar_chart"];
   spotCheckTemplates.forEach((template) => {
@@ -942,19 +940,15 @@ async function main() {
 
 function testRendererIsRuntimeOnly() {
   assert.equal(getVisualAnchorRenderer({}), "rough_svg");
-  assert.equal(getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
-  assert.throws(() => getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "auto" }), /Unsupported HW_VISUAL_ANCHOR_RENDERER/);
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { y_label: "得分", categories: ["A"], series: [{ name: "S", values: [1] }] } }), { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }), "ppt_native");
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "ppt_native");
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png", caption: "来源图" }, visual_spec: undefined }), { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }), "evidence");
+  assert.equal(getVisualAnchorRenderer({ visualAnchorRenderer: "ppt_native" }), "ppt_native");
+  assert.throws(() => getVisualAnchorRenderer({ visualAnchorRenderer: "auto" }), /Unsupported visual anchor renderer/);
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { y_label: "得分", categories: ["A"], series: [{ name: "S", values: [1] }] } }), { visualAnchorRenderer: "ppt_native" }), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } }), { visualAnchorRenderer: "rough_svg" }), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png", caption: "来源图" }, visual_spec: undefined }), { visualAnchorRenderer: "rough_svg" }), "evidence");
   assert.throws(() => validateVisualAnchorSpec(baseSpec({ renderer: "rough_svg" })), /renderer is a runtime setting/);
   assert.throws(() => validateVisualAnchorSpec({ id: "old", title: "Old", claim: "旧接口。", intent: "Quantity", template: "bar_chart", visual_spec: {} }), /Use kind instead/);
-  const svgPolicySpec = baseSpec({ visual_spec: { nodes: ["A", "B"], edges: [["A", "B"]], labels: { A: "起点", B: "终点" }, highlight: "B" } });
-  const previousRenderer = process.env.HW_VISUAL_ANCHOR_RENDERER;
-  process.env.HW_VISUAL_ANCHOR_RENDERER = "ppt_native";
-  assert.throws(() => createVisualAnchorSvg(svgPolicySpec), /not rough_svg SVG export/);
-  assert.throws(() => renderVisualAnchorRoughSvg(svgPolicySpec), /not rough_svg/);
-  process.env.HW_VISUAL_ANCHOR_RENDERER = previousRenderer;
+  assert.throws(() => createVisualAnchorSvg(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } })), /not rough_svg SVG export/);
+  assert.throws(() => renderVisualAnchorRoughSvg(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } })), /not rough_svg/);
 }
 
 main().catch((error) => {

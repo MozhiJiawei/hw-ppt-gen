@@ -131,6 +131,11 @@ async function repairPptxForPowerPointCom(fileName) {
 
 function createHuaweiDeck(metadata = {}) {
   const pptx = new pptxgen();
+  const renderer = metadata.visualAnchorRenderer || metadata.visual_anchor_renderer || "rough_svg";
+  if (!["rough_svg", "ppt_native"].includes(renderer)) {
+    throw new Error(`Unsupported visualAnchorRenderer: ${renderer}. Use rough_svg or ppt_native.`);
+  }
+  pptx._hwVisualAnchorRenderer = renderer;
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = metadata.author || "Huawei PPTX Generator";
   pptx.company = metadata.company || "Huawei";

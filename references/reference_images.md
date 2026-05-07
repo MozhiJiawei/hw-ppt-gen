@@ -19,6 +19,4 @@ Reference set:
 - `05 内容 二分栏.png`: equal two-column content page.
 - `06 内容 偏分栏.png`: biased column layout with top analysis summary.
 - `07 内容 三分栏.png`: three-column content page with top analysis summary.
-- `08 内容 四分栏.png`: four-column content page with top analysis summary.
-- `09 内容 图文并茂1.png`: balanced mixed modules where text and an embedded visual share the detail band under the top analysis summary.
-- `10 内容 图文并茂2.png`: large visual-anchor region plus side interpretation cards under the top analysis summary.
+- `08 内容 四分栏.png`: four-panel 2x2 content page with top analysis summary.

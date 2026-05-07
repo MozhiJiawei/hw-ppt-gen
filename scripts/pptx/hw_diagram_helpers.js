@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
 const rough = require("roughjs");
+const { addHuaweiTable } = require("./hw_pptx_helpers");
 
 const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 
@@ -1452,15 +1453,23 @@ function drawMatrixGrid(spec) {
   const { rc } = roughSvg(506);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
-  const rows = visual.rows || [];
-  const columns = visual.columns || [];
-  const values = visual.values || [];
-  const grid = { x: 310, y: 220, w: 900, h: 500 };
+  const tableRows = spec.template === "table" ? (visual.rows || []) : [];
+  const rows = spec.template === "table" ? tableRows.slice(1).map((row) => row[0]) : (visual.rows || []);
+  const columns = spec.template === "table" ? (tableRows[0] || []).slice(1) : (visual.columns || []);
+  const values = spec.template === "table" ? tableRows.slice(1).map((row) => row.slice(1)) : (visual.values || []);
+  const hasRowLabels = rows.some((row) => safeText(row));
+  const hasColumnLabels = columns.some((column) => safeText(column));
+  const grid = {
+    x: hasRowLabels ? 310 : 100,
+    y: hasColumnLabels ? 220 : 110,
+    w: hasRowLabels ? 900 : 1400,
+    h: hasColumnLabels ? 500 : 680,
+  };
   const cellW = grid.w / Math.max(1, columns.length);
   const cellH = grid.h / Math.max(1, rows.length);
-  columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, column, { size: 22, weight: 850, fill: colors.red, lineHeight: 24, maxWidth: cellW - 14, maxLines: 2 })));
+  if (hasColumnLabels) columns.forEach((column, idx) => canvas.add(svgText(grid.x + idx * cellW + cellW / 2, grid.y - 30, column, { size: 22, weight: 850, fill: colors.red, lineHeight: 24, maxWidth: cellW - 14, maxLines: 2 })));
   rows.forEach((row, rowIdx) => {
-    canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, row, { size: 22, weight: 850, anchor: "end", fill: colors.ink, lineHeight: 24, maxWidth: 210, maxLines: 2 }));
+    if (hasRowLabels) canvas.add(svgText(grid.x - 28, grid.y + rowIdx * cellH + cellH / 2 + 8, row, { size: 22, weight: 850, anchor: "end", fill: colors.ink, lineHeight: 24, maxWidth: 210, maxLines: 2 }));
     columns.forEach((column, colIdx) => {
       const value = values[rowIdx]?.[colIdx] ?? "";
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
@@ -1605,19 +1614,21 @@ function drawHubSpokeNetwork(spec) {
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
-function getVisualAnchorRenderer(env = process.env) {
-  const renderer = env.HW_VISUAL_ANCHOR_RENDERER || "rough_svg";
+function getVisualAnchorRenderer(config = {}) {
+  const renderer = typeof config === "string"
+    ? config
+    : (config.visualAnchorRenderer || config.visual_anchor_renderer || "rough_svg");
   if (!["rough_svg", "ppt_native"].includes(renderer)) {
-    throw new Error(`Unsupported HW_VISUAL_ANCHOR_RENDERER: ${renderer}. Use rough_svg or ppt_native.`);
+    throw new Error(`Unsupported visual anchor renderer: ${renderer}. Use rough_svg or ppt_native.`);
   }
   return renderer;
 }
 
-function resolveVisualAnchorRenderPath(spec, env = process.env) {
+function resolveVisualAnchorRenderPath(spec, config = {}) {
   validateVisualAnchorSpec(spec);
   if (spec.kind === "Evidence") return "evidence";
   if (spec.kind === "Matrix" && spec.template === "table") return "ppt_native";
-  return getVisualAnchorRenderer(env);
+  return getVisualAnchorRenderer(config);
 }
 
 function renderVisualAnchorRoughSvg(spec, options = {}) {
@@ -1645,6 +1656,7 @@ function renderVisualAnchorRoughSvg(spec, options = {}) {
   if (template === "process") return drawHorizontalSequence(renderSpec);
   if (template === "timeline") return drawTimeline(renderSpec);
   if (template === "swimlane") return drawSwimlane(renderSpec);
+  if (template === "table") return drawMatrixGrid(renderSpec);
   if (template === "quadrant_matrix") return drawQuadrantMatrix(renderSpec);
   if (template === "capability_matrix") return drawMatrixGrid(renderSpec);
   if (template === "hub_spoke_network") return drawHubSpokeNetwork(renderSpec);
@@ -1779,6 +1791,9 @@ function nativeText(slide, text, options = {}) {
 }
 
 function nativeRect(slide, x, y, w, h, options = {}) {
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+    throw new Error(`ppt_native rectangle requires positive dimensions: ${w}x${h}`);
+  }
   slide.addShape(ShapeType.rect, {
     x,
     y,
@@ -1810,28 +1825,13 @@ function nativeLine(slide, x1, y1, x2, y2, options = {}) {
 function drawNativeTable(slide, visual, area) {
   const rows = visual.rows || [];
   if (!rows.length) throw new Error("Matrix/table native render requires visual_spec.rows.");
-  const colCount = Math.max(...rows.map((row) => row.length), 1);
-  const rowH = Math.min(0.42, area.h / Math.max(rows.length, 1));
-  const colW = area.w / colCount;
-  rows.forEach((row, rowIdx) => {
-    row.forEach((cell, colIdx) => {
-      const x = area.x + colIdx * colW;
-      const y = area.y + rowIdx * rowH;
-      nativeRect(slide, x, y, colW, rowH, {
-        fill: rowIdx === 0 ? "C00000" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"),
-        stroke: "D9D9D9",
-      });
-      nativeText(slide, cell, {
-        x: x + 0.04,
-        y: y + 0.1,
-        w: colW - 0.08,
-        h: rowH - 0.12,
-        fontSize: rowIdx === 0 ? 9 : 8,
-        bold: rowIdx === 0 || colIdx === 0,
-        color: rowIdx === 0 ? "FFFFFF" : "333333",
-        align: "center",
-      });
-    });
+  addHuaweiTable(slide, rows, {
+    x: area.x,
+    y: area.y,
+    w: area.w,
+    h: area.h,
+    fontSize: area.h / Math.max(rows.length, 1) < 0.32 ? 8 : 10,
+    boldFirstColumn: true,
   });
 }
 
@@ -1888,13 +1888,29 @@ function drawNativeDataCards(slide, visual, area) {
   const cards = visual.cards || [];
   const gap = 0.14;
   const cardW = (area.w - gap * Math.max(0, cards.length - 1)) / Math.max(1, cards.length);
+  const compact = area.h < 1.3 || cardW < 1.2;
+  const valueFontSize = compact ? 12 : 26;
+  const unitFontSize = compact ? 6 : 9;
+  const labelFontSize = compact ? 7 : 12;
   cards.forEach((card, idx) => {
     const x = area.x + idx * (cardW + gap);
     const highlighted = card.id === visual.highlight || card.label === visual.highlight;
     nativeRect(slide, x, area.y, cardW, area.h, { fill: highlighted ? "FFF1EF" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF", strokeWidth: highlighted ? 1 : 0.5 });
-    nativeText(slide, card.value, { x: x + 0.08, y: area.y + 0.34, w: cardW - 0.16, h: 0.42, fontFace: "Impact", fontSize: 26, color: highlighted ? "C00000" : "333333", align: "center" });
-    nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + 0.8, w: cardW - 0.16, h: 0.18, fontSize: 9, color: "595959", align: "center" });
-    nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + 1.15, w: cardW - 0.16, h: 0.22, fontSize: 12, bold: true, align: "center" });
+    if (compact) {
+      const valueH = Math.min(0.22, area.h * 0.32);
+      const unitH = Math.min(0.14, area.h * 0.2);
+      const labelH = Math.min(0.18, area.h * 0.26);
+      const valueY = area.y + Math.max(0.04, area.h * 0.18);
+      const unitY = Math.min(area.y + area.h - unitH - labelH - 0.04, valueY + valueH + 0.02);
+      const labelY = Math.min(area.y + area.h - labelH - 0.04, unitY + unitH + 0.02);
+      nativeText(slide, card.value, { x: x + 0.04, y: valueY, w: cardW - 0.08, h: valueH, fontFace: "Impact", fontSize: valueFontSize, color: highlighted ? "C00000" : "333333", align: "center" });
+      nativeText(slide, card.unit || "", { x: x + 0.04, y: unitY, w: cardW - 0.08, h: unitH, fontSize: unitFontSize, color: "595959", align: "center" });
+      nativeText(slide, card.label || "", { x: x + 0.04, y: labelY, w: cardW - 0.08, h: labelH, fontSize: labelFontSize, bold: true, align: "center" });
+      return;
+    }
+    nativeText(slide, card.value, { x: x + 0.08, y: area.y + (compact ? 0.2 : 0.34), w: cardW - 0.16, h: compact ? 0.24 : 0.42, fontFace: "Impact", fontSize: valueFontSize, color: highlighted ? "C00000" : "333333", align: "center" });
+    nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + (compact ? 0.48 : 0.8), w: cardW - 0.16, h: 0.18, fontSize: unitFontSize, color: "595959", align: "center" });
+    nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + (compact ? 0.68 : 1.15), w: cardW - 0.16, h: compact ? 0.18 : 0.22, fontSize: labelFontSize, bold: true, align: "center" });
   });
 }
 
@@ -1948,15 +1964,17 @@ function drawNativeGrid(slide, visual, area) {
   const columns = visual.columns || [];
   const cellW = area.w / Math.max(1, columns.length);
   const cellH = area.h / Math.max(1, rows.length);
+  const cellFontSize = cellW < 1 || cellH < 0.35 ? 6 : 9;
+  const labelFontSize = cellW < 1 || cellH < 0.35 ? 6 : 8;
   rows.forEach((row, rowIdx) => {
     columns.forEach((column, colIdx) => {
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
       nativeRect(slide, area.x + colIdx * cellW, area.y + rowIdx * cellH, cellW - 0.03, cellH - 0.03, { fill: highlighted ? "FFF1EF" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"), stroke: highlighted ? "C00000" : "D9D9D9" });
-      nativeText(slide, String(valueAt(visual.values, rowIdx, colIdx)), { x: area.x + colIdx * cellW + 0.04, y: area.y + rowIdx * cellH + 0.08, w: cellW - 0.08, h: 0.18, fontSize: 9, align: "center" });
+      nativeText(slide, String(valueAt(visual.values, rowIdx, colIdx)), { x: area.x + colIdx * cellW + 0.04, y: area.y + rowIdx * cellH + 0.06, w: cellW - 0.08, h: Math.max(0.14, cellH - 0.08), fontSize: cellFontSize, align: "center" });
     });
-    nativeText(slide, row, { x: area.x - 0.62, y: area.y + rowIdx * cellH + 0.08, w: 0.55, h: 0.18, fontSize: 8, align: "right" });
+    nativeText(slide, row, { x: area.x - 0.62, y: area.y + rowIdx * cellH + 0.08, w: 0.55, h: 0.18, fontSize: labelFontSize, align: "right" });
   });
-  columns.forEach((column, colIdx) => nativeText(slide, column, { x: area.x + colIdx * cellW, y: area.y - 0.22, w: cellW, h: 0.16, fontSize: 8, bold: true, align: "center", color: "C00000" }));
+  columns.forEach((column, colIdx) => nativeText(slide, column, { x: area.x + colIdx * cellW, y: area.y - 0.22, w: cellW, h: 0.16, fontSize: labelFontSize, bold: true, align: "center", color: "C00000" }));
 }
 
 function drawNativeProcess(slide, visual, area) {
@@ -2026,13 +2044,20 @@ function drawNativeNetwork(slide, visual, area) {
 
 function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 11.65, h: 5.25 }) {
   validateVisualAnchorSpec(spec);
-  const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" });
+  const renderPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "ppt_native" });
   const visual = spec.visual_spec || {};
 
   if (renderPath === "evidence") return drawNativeEvidence(slide, spec, area);
 
   nativeRect(slide, area.x, area.y, area.w, area.h, { fill: "FFFFFF", stroke: "D9D9D9" });
-  const inner = { x: area.x + 0.55, y: area.y + 0.58, w: area.w - 1.1, h: area.h - 1.15 };
+  const padX = Math.min(0.55, Math.max(0.04, area.w * 0.08));
+  const padY = Math.min(0.58, Math.max(0.04, area.h * 0.12));
+  const inner = {
+    x: area.x + padX,
+    y: area.y + padY,
+    w: Math.max(0.12, area.w - padX * 2),
+    h: Math.max(0.12, area.h - padY * 2),
+  };
 
   if (spec.kind === "Matrix" && spec.template === "table") return drawNativeTable(slide, visual, inner);
   if (renderPath !== "ppt_native") throw new Error(`Visual anchor ${spec.kind}/${spec.template} is configured for ${renderPath}, not ppt_native.`);

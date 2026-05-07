@@ -59,6 +59,7 @@ function escapePowerShellSingleQuoted(value) {
 
 function powerpointAvailable() {
   if (process.platform !== "win32") return false;
+  cleanupPowerPointProcesses();
   const ps = spawnSync(
     "powershell",
     [
@@ -71,6 +72,21 @@ function powerpointAvailable() {
     { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
   );
   return ps.status === 0 && /\d/.test(ps.stdout || "");
+}
+
+function cleanupPowerPointProcesses() {
+  if (process.platform !== "win32") return;
+  spawnSync(
+    "powershell",
+    [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-Command",
+      "Get-Process POWERPNT -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
+    ],
+    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
+  );
 }
 
 function refreshWindowsPathFromRegistry() {
@@ -174,6 +190,7 @@ function exportWithLibreOffice(inputPath, outDir, dpi) {
 
 function exportWithPowerPoint(inputPath, outDir) {
   if (process.platform !== "win32") throw new Error("PowerPoint rendering is only available on Windows.");
+  cleanupPowerPointProcesses();
   const scriptPath = path.join(os.tmpdir(), `hw-ppt-render-${Date.now()}-${Math.random().toString(16).slice(2)}.ps1`);
   const inputPs = escapePowerShellSingleQuoted(inputPath);
   const outPs = escapePowerShellSingleQuoted(outDir);
@@ -185,7 +202,16 @@ New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $app = $null
 $presentation = $null
 try {
-  $app = New-Object -ComObject PowerPoint.Application
+  for ($attempt = 1; $attempt -le 3; $attempt++) {
+    try {
+      $app = New-Object -ComObject PowerPoint.Application
+      if ($app -ne $null) { break }
+    } catch {
+      if ($attempt -eq 3) { throw }
+      Start-Sleep -Milliseconds 800
+    }
+  }
+  if ($app -eq $null) { throw "PowerPoint COM application could not be created." }
   $presentation = $app.Presentations.Open($inputPath, $true, $false, $false)
   $count = $presentation.Slides.Count
   for ($i = 1; $i -le $count; $i++) {

@@ -271,8 +271,8 @@ function exerciseDiagramInterfaces(specs) {
   assert(DIAGRAM_STYLE.color.red === "#C00000", "DIAGRAM_STYLE should expose Huawei red");
   assert(TEMPLATE_LAYOUTS.bar_chart === "16:9", "TEMPLATE_LAYOUTS should expose fixed layouts");
   assert(chooseTemplateLayout(roughSpec) === "16:9", "chooseTemplateLayout should return 16:9");
-  assert(getVisualAnchorRenderer({ HW_VISUAL_ANCHOR_RENDERER: "ppt_native" }) === "ppt_native", "getVisualAnchorRenderer should read runtime policy");
-  assert(resolveVisualAnchorRenderPath(roughSpec, { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" }) === "rough_svg", "resolveVisualAnchorRenderPath should resolve rough SVG");
+  assert(getVisualAnchorRenderer({ visualAnchorRenderer: "ppt_native" }) === "ppt_native", "getVisualAnchorRenderer should read runtime policy");
+  assert(resolveVisualAnchorRenderPath(roughSpec, { visualAnchorRenderer: "rough_svg" }) === "rough_svg", "resolveVisualAnchorRenderPath should resolve rough SVG");
   assert(renderVisualAnchorRoughSvg(roughSpec).svg.includes("<svg"), "renderVisualAnchorRoughSvg should return SVG");
   assert(createVisualAnchorSvg(roughSpec).includes("<svg"), "createVisualAnchorSvg should return SVG markup");
   assert(createVisualAnchorImage(roughSpec, { width: 720 }).format === "svg", "createVisualAnchorImage should return SVG image metadata");

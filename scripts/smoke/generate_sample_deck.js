@@ -16,7 +16,8 @@ async function main() {
   const output = ensureTmpPath(process.argv[2] || path.join(".tmp", "sample_huawei_deck.pptx"));
   const manifestPath = ensureTmpPath(output.replace(/\.pptx$/i, "_visual_anchor_manifest.json"));
   const planPath = ensureTmpPath(output.replace(/\.pptx$/i, "_plan.json"));
-  const pptx = createHuaweiDeck({ title: "Huawei-style visual anchor sample" });
+  const visualAnchorRenderer = "rough_svg";
+  const pptx = createHuaweiDeck({ title: "Huawei-style visual anchor sample", visualAnchorRenderer });
   const sections = ["生成工作流", "视觉锚点", "质量检查"];
   const source = "来源：Huawei PPTX Generator 示例";
   const planSlides = [];
@@ -26,10 +27,14 @@ async function main() {
       page: Number(data.page),
       title: data.title,
       visual_anchor: {
+        id: data.visual_anchor.id,
         kind: data.visual_anchor.kind,
         template: data.visual_anchor.template,
+        why_this_visual: data.visual_anchor.why_this_visual || `${data.visual_anchor.title}承载本页核心信息关系。`,
+        layout_reference: data.layoutReference || data.layout_reference || "05 内容 二分栏",
+        relationship_test: data.visual_anchor.relationship_test || `${data.visual_anchor.kind}/${data.visual_anchor.template}与本页总结中的信息关系一致。`,
       },
-      layout_reference: data.layoutReference || data.layout_reference || "三分栏",
+      layout_reference: data.layoutReference || data.layout_reference || "05 内容 二分栏",
     });
     addVisualAnchorContentSlide(pptx, data);
   }
@@ -63,6 +68,7 @@ async function main() {
         { label: "入口统一", text: "页面骨架、分析总结、主视觉和页脚由同一个正文页入口组合。" },
       ],
     },
+    layoutReference: "06 内容 偏分栏",
     visual_anchor: {
       id: "sample_generation_flow",
       title: "Generation Flow",
@@ -98,6 +104,7 @@ async function main() {
         { label: "红色克制", text: "红色只标注主要指标，其他数据保持灰阶呈现。" },
       ],
     },
+    layoutReference: "05 内容 二分栏",
     visual_anchor: {
       id: "sample_quantity_cards",
       title: "Quantity Cards",
@@ -129,6 +136,7 @@ async function main() {
         { label: "结构清晰", text: "能力栈帮助读者理解各层职责，视觉锚点是关键，因为它承接骨架并支撑解释模块。" },
       ],
     },
+    layoutReference: "05 内容 二分栏",
     visual_anchor: {
       id: "sample_capability_stack",
       title: "Capability Stack",
@@ -161,6 +169,7 @@ async function main() {
         { label: "检查闭环", text: "硬规则检查读取 manifest，检查步骤是关键，因为缺失或未渲染都作为阻塞项。" },
       ],
     },
+    layoutReference: "05 内容 二分栏",
     visual_anchor: {
       id: "sample_qa_loop",
       title: "QA Loop",
@@ -184,7 +193,7 @@ async function main() {
   });
 
   writeVisualAnchorManifest(pptx, manifestPath);
-  fs.writeFileSync(planPath, JSON.stringify({ slides: planSlides }, null, 2), "utf8");
+  fs.writeFileSync(planPath, JSON.stringify({ visual_anchor_renderer: visualAnchorRenderer, slides: planSlides }, null, 2), "utf8");
   await pptx.writeFile({ fileName: output });
   await repairPptxForPowerPointCom(output);
   console.log(`Wrote ${output}`);

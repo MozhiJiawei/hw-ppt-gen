@@ -51,7 +51,6 @@ function isTextCapacityError(error) {
 }
 
 async function writeDiagramAssets(spec, outRoot) {
-  process.env.HW_VISUAL_ANCHOR_RENDERER = "rough_svg";
   const kindDir = safePathPart(spec.kind);
   const templateDir = safePathPart(spec.template);
   const caseDir = path.join(outRoot, kindDir, templateDir);
@@ -297,14 +296,13 @@ async function writeRoughReviewDeck(assets, outRoot, manifest) {
 }
 
 async function writeNativeReviewDeck(cases, outRoot, manifest) {
-  process.env.HW_VISUAL_ANCHOR_RENDERER = "ppt_native";
   const reviewCases = sortReviewItems(cases);
   const renderableCases = [];
   const rejectedCases = [];
   for (const spec of reviewCases) {
     try {
       validateVisualAnchorSpec(spec);
-      const renderPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "ppt_native" });
+      const renderPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "ppt_native" });
       if (!["ppt_native", "evidence"].includes(renderPath)) throw new Error(`Expected ppt_native/evidence render path for ${spec.id}, got ${renderPath}`);
       renderableCases.push({ spec, renderPath });
     } catch (error) {
@@ -406,7 +404,7 @@ async function main() {
   const rejectedCases = [];
   for (const spec of cases) {
     validateVisualAnchorSpec(spec);
-    const roughPath = resolveVisualAnchorRenderPath(spec, { HW_VISUAL_ANCHOR_RENDERER: "rough_svg" });
+    const roughPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "rough_svg" });
     if (roughPath === "rough_svg") {
       try {
         assets.push(await writeDiagramAssets(spec, args.out));

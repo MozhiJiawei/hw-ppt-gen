@@ -36,6 +36,13 @@ const ALLOWED_COLORS = new Set([
 const STANDARD_LINE_WIDTH = 6350;
 const ALLOWED_FONT_SIZES = new Set([6, 8, 12, 14, 18, 24]);
 const CONTENT_CARD_FILLS = new Set(["F2F2F2", "F7F7F7", "FFF1EF", "FCE4E0"]);
+const CONTENT_LAYOUT_SCHEMA_RULES = Object.freeze({
+  two_column: { reference: "05 内容 二分栏", moduleCount: 2 },
+  biased_column: { reference: "06 内容 偏分栏", minModuleCount: 2, maxModuleCount: 4 },
+  three_column: { reference: "07 内容 三分栏", moduleCount: 3 },
+  four_column: { reference: "08 内容 四分栏", moduleCount: 4 },
+});
+const CONTENT_LAYOUT_REFERENCES = new Set(Object.values(CONTENT_LAYOUT_SCHEMA_RULES).map((rule) => rule.reference));
 const LANGUAGE_ALLOWLIST = new Set([
   "ai",
   "api",
@@ -149,6 +156,24 @@ function extractShapes(xml) {
       fill: fill ? fill.toUpperCase() : null,
     });
   }
+  for (const match of xml.matchAll(/<p:pic\b[\s\S]*?<\/p:pic>/g)) {
+    const block = match[0];
+    const off = block.match(/<a:off\s+x="(-?\d+)"\s+y="(-?\d+)"/);
+    const ext = block.match(/<a:ext\s+cx="(\d+)"\s+cy="(\d+)"/);
+    shapes.push({
+      text: "",
+      x: off ? emuToIn(off[1]) : null,
+      y: off ? emuToIn(off[2]) : null,
+      w: ext ? emuToIn(ext[1]) : null,
+      h: ext ? emuToIn(ext[2]) : null,
+      area: ext ? emuToIn(ext[1]) * emuToIn(ext[2]) : 0,
+      fontSizes: [],
+      fonts: [],
+      colors: [],
+      fill: null,
+      kind: "picture",
+    });
+  }
   for (const match of xml.matchAll(/<p:graphicFrame\b[\s\S]*?<a:tbl\b[\s\S]*?<\/p:graphicFrame>/g)) {
     const block = match[0];
     const off = block.match(/<a:off\s+x="(-?\d+)"\s+y="(-?\d+)"/);
@@ -198,6 +223,38 @@ function extractShapes(xml) {
 function isInside(inner, outer) {
   if ([inner.x, inner.y, inner.w, inner.h, outer.x, outer.y, outer.w, outer.h].some((value) => value === null)) return false;
   return inner.x >= outer.x && inner.y >= outer.y && inner.x + inner.w <= outer.x + outer.w && inner.y + inner.h <= outer.y + outer.h;
+}
+
+function isInsideWithTolerance(inner, outer, tolerance = 0.06) {
+  if ([inner.x, inner.y, inner.w, inner.h, outer.x, outer.y, outer.w, outer.h].some((value) => value === null)) return false;
+  return inner.x >= outer.x - tolerance
+    && inner.y >= outer.y - tolerance
+    && inner.x + inner.w <= outer.x + outer.w + tolerance
+    && inner.y + inner.h <= outer.y + outer.h + tolerance;
+}
+
+function sameRect(a, b) {
+  return [a.x, a.y, a.w, a.h, b.x, b.y, b.w, b.h].every((value) => value !== null)
+    && Math.abs(a.x - b.x) < 0.01
+    && Math.abs(a.y - b.y) < 0.01
+    && Math.abs(a.w - b.w) < 0.01
+    && Math.abs(a.h - b.h) < 0.01;
+}
+
+function isIntentionalLabelOnShape(a, b) {
+  const textShape = a.text ? a : b.text ? b : null;
+  const container = textShape === a ? b : a;
+  return Boolean(textShape && !container.text && isInsideWithTolerance(textShape, container, 0.1));
+}
+
+function structuredObjectsInside(card, shapes) {
+  return shapes.filter((shape) =>
+    shape !== card
+    && !sameRect(shape, card)
+    && shape.area > 0.03
+    && isInsideWithTolerance(shape, card, 0.04)
+    && (shape.text || shape.fill || shape.kind === "picture" || (shape.w && shape.h))
+  );
 }
 
 function uniqueMatches(xml, regex) {
@@ -599,6 +656,9 @@ function checkSlideXml(name, xml) {
       const b = filledShapes[j];
       if (!overlaps(a, b, 0.02)) continue;
       if (isInside(a, b) || isInside(b, a)) continue;
+      if (isIntentionalLabelOnShape(a, b)) continue;
+      if (!a.text && !b.text) continue;
+      if ((a.text && !b.text) || (b.text && !a.text)) continue;
       issues.push(issue(slide, "filled_shape_overlap_estimate", "warning", "Filled layout elements appear to overlap in PPTX geometry; verify this is intentional and not a card/header collision.", {
         first_text: a.text.slice(0, 80),
         second_text: b.text.slice(0, 80),
@@ -613,12 +673,15 @@ function checkSlideXml(name, xml) {
       .map((shape) => shape.text)
       .join("");
     const textLen = containedText.replace(/\s/g, "").length;
+    const structuredCount = structuredObjectsInside(card, shapes).length;
     const density = textLen / Math.max(card.area, 0.1);
-    if (textLen < 120 || density < 18) {
+    if (structuredCount >= 2) continue;
+    if (textLen < 55 || density < 12) {
       issues.push(issue(slide, "sparse_large_card", "warning", "Large content card has too little text for its size; add appropriately sized explanation text or shrink the card.", {
         area: Math.round(card.area * 100) / 100,
         text_length: textLen,
         density: Math.round(density * 10) / 10,
+        structured_objects: structuredCount,
       }));
     }
   }
@@ -702,7 +765,7 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
   }
 
   const issues = [];
-  issues.push(...checkVisualAnchorPlanAlignment(planFileName, entries, contentSlides));
+  issues.push(...checkVisualAnchorPlanAlignment(planFileName, entries, contentSlides, manifest));
   const byPage = new Map();
   for (const entry of entries) {
     const page = Number(entry.page);
@@ -718,14 +781,15 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     const slideXml = slideEntries.find((item) => slideNumber(item.name) === slide)?.xml || "";
     const visibleText = extractShapes(slideXml).map((shape) => shape.text).filter(Boolean).join("\n");
     const pageEntries = byPage.get(slide) || [];
-    if (pageEntries.length !== 1) {
-      issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have exactly one manifest-backed visual anchor.", {
+    if (pageEntries.length < 1) {
+      issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have at least one manifest-backed visual anchor.", {
         manifest_entries: pageEntries.length,
       }));
       continue;
     }
 
-    const entry = pageEntries[0];
+    issues.push(...checkContentLayoutSchema(slide, pageEntries));
+    for (const entry of pageEntries) {
     if (entry.rendered !== true) {
       issues.push(issue(slide, "content_visual_anchor_unrendered", "error", "Content slide visual anchor exists in the manifest but is not marked rendered."));
     }
@@ -750,6 +814,7 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     }
     issues.push(...checkVisualAnchorSemantics(slide, entry, visibleText));
     issues.push(...checkVisualAnchorLayout(slide, entry));
+    issues.push(...checkVisualAnchorRendererPolicy(slide, entry, manifest));
     if (entry.renderer === "rough_svg") {
       const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
         && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
@@ -771,7 +836,55 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
       }
     }
   }
+  }
 
+  return issues;
+}
+
+function checkContentLayoutSchema(slide, entries) {
+  const schemas = entries.map((entry) => entry.content_layout_schema).filter(Boolean);
+  if (!schemas.length) return [];
+  const issues = [];
+  const schemaText = JSON.stringify(schemas);
+  const first = schemas[0];
+  const rule = CONTENT_LAYOUT_SCHEMA_RULES[first.type];
+  if (!rule) {
+    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema type is not supported.", {
+      type: first.type || "",
+    }));
+    return issues;
+  }
+  if (schemas.some((schema) => JSON.stringify(schema) !== JSON.stringify(first))) {
+    issues.push(issue(slide, "content_layout_schema_invalid", "error", "All visual-anchor entries for a slide must record the same content layout schema.", {
+      schemas,
+    }));
+  }
+  const actualModules = Number(first.modules_count);
+  const minModules = rule.minModuleCount || rule.moduleCount;
+  const maxModules = rule.maxModuleCount || rule.moduleCount;
+  if (actualModules < minModules || actualModules > maxModules) {
+    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema module count does not match the fixed reference layout.", {
+      type: first.type,
+      expected_modules: minModules === maxModules ? minModules : `${minModules}-${maxModules}`,
+      actual_modules: first.modules_count,
+    }));
+  }
+  if (!safeText(first.reference).includes(rule.reference)) {
+    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema must cite the matching bundled reference image.", {
+      type: first.type,
+      expected_reference: rule.reference,
+      actual_reference: first.reference || "",
+    }));
+  }
+  if (Number(first.visual_anchor_modules_count) < 1) {
+    issues.push(issue(slide, "content_layout_schema_anchor_missing", "error", "Content layout schema must include at least one visual-anchor block.", {
+      type: first.type,
+      visual_anchor_modules_count: first.visual_anchor_modules_count,
+    }));
+  }
+  if (!/(05 内容 二分栏|06 内容 偏分栏|07 内容 三分栏|08 内容 四分栏)/.test(schemaText)) {
+    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema must be grounded in one of the 05-08 content reference images."));
+  }
   return issues;
 }
 
@@ -781,9 +894,16 @@ function checkVisualAnchorLayout(slide, entry) {
   const hasSideCards = Number(entry.supporting_cards_count || 0) > 0;
   const layoutReference = safeText(entry.layout_reference || spec.layout_reference || "");
   const isEvidenceFigure = spec.kind === "Evidence" && /source_(figure|chart)/.test(template);
-  const explicitlyFullWidth = /全宽|full[-_ ]?width/i.test(layoutReference);
-  if (isEvidenceFigure && !hasSideCards && !explicitlyFullWidth) {
-    return [issue(slide, "content_visual_anchor_layout_unintegrated", "error", "Evidence source figures/charts should use 图文并茂 composition with side interpretation cards, not a plain full-width image plus caption.", {
+  if (layoutReference && !CONTENT_LAYOUT_REFERENCES.has(layoutReference)) {
+    return [issue(slide, "content_visual_anchor_layout_invalid", "error", "Visual-anchor layout_reference must be one of the four fixed Huawei content layouts.", {
+      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      layout_reference: layoutReference,
+      allowed_layout_references: [...CONTENT_LAYOUT_REFERENCES],
+    })];
+  }
+  const hasContentLayout = Boolean(entry.content_layout_schema);
+  if (isEvidenceFigure && (!CONTENT_LAYOUT_REFERENCES.has(layoutReference) || (!hasSideCards && !hasContentLayout))) {
+    return [issue(slide, "content_visual_anchor_layout_unintegrated", "error", "Evidence source figures/charts must use one of the four fixed 图文并茂 layouts with adjacent interpretation, not a picture-only composition.", {
       visual_anchor_id: entry.visual_anchor_id || spec.id || "",
       template,
       layout_reference: layoutReference,
@@ -792,7 +912,7 @@ function checkVisualAnchorLayout(slide, entry) {
   return [];
 }
 
-function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides = []) {
+function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides = [], manifest = {}) {
   if (!fileName) return [];
   if (!fs.existsSync(fileName)) {
     return [issue(null, "content_visual_anchor_plan_missing", "error", `Required deck plan not found: ${fileName}`)];
@@ -808,39 +928,159 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
   if (!Array.isArray(plan.slides)) {
     return [issue(null, "content_visual_anchor_plan_invalid", "error", "Deck plan must contain a slides array for visual-anchor alignment.")];
   }
-  const manifestByPage = new Map((manifestEntries || []).map((entry) => [Number(entry.page), entry]));
+  const issues = [];
+  const plannedRenderer = safeText(plan.visual_anchor_renderer || plan.visualAnchorRenderer || "");
+  if (!["rough_svg", "ppt_native"].includes(plannedRenderer)) {
+    issues.push(issue(null, "content_visual_anchor_renderer_config_missing", "error", "Deck plan must declare one top-level visual_anchor_renderer: rough_svg or ppt_native."));
+  } else if (safeText(manifest.visual_anchor_renderer || "") && safeText(manifest.visual_anchor_renderer) !== plannedRenderer) {
+    issues.push(issue(null, "content_visual_anchor_renderer_mismatch", "error", "Visual-anchor manifest renderer does not match the deck-level plan renderer.", {
+      planned_renderer: plannedRenderer,
+      manifest_renderer: manifest.visual_anchor_renderer,
+    }));
+  }
+  const manifestByPage = new Map();
+  for (const entry of manifestEntries || []) {
+    const page = Number(entry.page);
+    if (!manifestByPage.has(page)) manifestByPage.set(page, []);
+    manifestByPage.get(page).push(entry);
+  }
   const planByPage = new Map(plannedSlides
     .filter((slide) => slide && Number.isFinite(Number(slide.page)))
     .map((slide) => [Number(slide.page), slide]));
-  const issues = [];
   for (const page of contentSlides) {
     const plannedSlide = planByPage.get(page);
     if (!plannedSlide) {
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide is missing from the deck plan.", { page }));
       continue;
     }
-    const planned = plannedSlide.visual_anchor || {};
-    if (!planned.kind || !planned.template) {
-      issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchor.kind and visual_anchor.template.", {
-        planned_kind: planned.kind || "",
-        planned_template: planned.template || "",
-      }));
+    const plannedAnchors = Array.isArray(plannedSlide.visual_anchors) && plannedSlide.visual_anchors.length
+      ? plannedSlide.visual_anchors
+      : (plannedSlide.visual_anchor ? [plannedSlide.visual_anchor] : []);
+    if (plannedSlide.renderer || plannedSlide.expected_renderer || plannedSlide.content_layout?.renderer || plannedSlide.content_layout?.expected_renderer) {
+      issues.push(issue(page, "content_visual_anchor_renderer_scope_invalid", "error", "Renderer selection is deck-level only; do not put renderer fields on slides or content_layout."));
+    }
+    if (!plannedAnchors.length) {
+      issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchors[].kind and visual_anchors[].template."));
       continue;
     }
-    const actual = manifestByPage.get(page)?.visual_anchor || {};
-    if (!actual.kind || !actual.template) continue;
-    if (planned.kind !== actual.kind) {
-      issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.kind does not match the rendered manifest.", {
-        planned_kind: planned.kind,
-        actual_kind: actual.kind,
+    const actualEntries = manifestByPage.get(page) || [];
+    if (actualEntries.length < plannedAnchors.length) {
+      issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Rendered manifest has fewer visual anchors than the deck plan.", {
+        planned_count: plannedAnchors.length,
+        actual_count: actualEntries.length,
       }));
     }
-    if (planned.template !== actual.template) {
-      issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.template does not match the rendered manifest.", {
-        planned_template: planned.template,
-        actual_template: actual.template,
-      }));
+    const actualById = new Map(actualEntries
+      .filter((entry) => entry?.visual_anchor?.id)
+      .map((entry) => [entry.visual_anchor.id, entry]));
+    plannedAnchors.forEach((planned, idx) => {
+      if (!planned.kind || !planned.template) {
+        issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Each planned visual anchor must declare kind and template.", {
+          planned_index: idx,
+          planned_id: planned.id || "",
+          planned_kind: planned.kind || "",
+          planned_template: planned.template || "",
+        }));
+        return;
+      }
+      if (planned.renderer || planned.expected_renderer) {
+        issues.push(issue(page, "content_visual_anchor_renderer_scope_invalid", "error", "Renderer selection is deck-level only; do not put renderer fields on individual visual anchors.", {
+          planned_index: idx,
+          planned_id: planned.id || "",
+        }));
+      }
+      for (const [field, type] of [
+        ["why_this_visual", "content_visual_anchor_plan_reason_missing"],
+        ["layout_reference", "content_visual_anchor_layout_missing"],
+        ["relationship_test", "content_visual_anchor_relationship_unproven"],
+      ]) {
+        if (!safeText(planned[field])) {
+          issues.push(issue(page, type, "error", `Planned visual anchor must declare ${field}.`, {
+            planned_index: idx,
+            planned_id: planned.id || "",
+          }));
+        }
+      }
+      if (safeText(planned.layout_reference) && !CONTENT_LAYOUT_REFERENCES.has(safeText(planned.layout_reference))) {
+        issues.push(issue(page, "content_visual_anchor_layout_invalid", "error", "Planned layout_reference must be one of the four fixed Huawei content layouts.", {
+          planned_index: idx,
+          planned_id: planned.id || "",
+          layout_reference: planned.layout_reference,
+          allowed_layout_references: [...CONTENT_LAYOUT_REFERENCES],
+        }));
+      }
+      const actualEntry = planned.id && actualById.has(planned.id) ? actualById.get(planned.id) : actualEntries[idx];
+      const actual = actualEntry?.visual_anchor || {};
+      if (!actual.kind || !actual.template) {
+        issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Planned visual anchor is missing from the rendered manifest.", {
+          planned_index: idx,
+          planned_id: planned.id || "",
+          planned_kind: planned.kind,
+          planned_template: planned.template,
+        }));
+        return;
+      }
+      if (planned.id && actual.id && planned.id !== actual.id) {
+        issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.id does not match the rendered manifest.", {
+          planned_id: planned.id,
+          actual_id: actual.id,
+        }));
+      }
+      if (planned.kind !== actual.kind) {
+        issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.kind does not match the rendered manifest.", {
+          planned_id: planned.id || "",
+          planned_kind: planned.kind,
+          actual_kind: actual.kind,
+        }));
+      }
+      if (planned.template !== actual.template) {
+        issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned visual_anchor.template does not match the rendered manifest.", {
+          planned_id: planned.id || "",
+          planned_template: planned.template,
+          actual_template: actual.template,
+        }));
+      }
+    });
+
+    if (["rough_svg", "ppt_native"].includes(plannedRenderer)) {
+      for (const entry of actualEntries) {
+        const spec = entry.visual_anchor || {};
+        const expectedEntryRenderer = spec.kind === "Evidence"
+          ? "evidence"
+          : (spec.kind === "Matrix" && spec.template === "table" ? "ppt_native" : plannedRenderer);
+        if (entry.renderer !== expectedEntryRenderer) {
+          issues.push(issue(page, "content_visual_anchor_renderer_mismatch", "error", "Visual anchor renderer does not match the deck plan renderer.", {
+            visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+            expected_deck_renderer: expectedEntryRenderer,
+            actual_renderer: entry.renderer || "",
+          }));
+        }
+        if (expectedEntryRenderer === "rough_svg" && entry.image_format !== "svg") {
+          issues.push(issue(page, "content_visual_anchor_renderer_mismatch", "error", "rough_svg visual anchors must be recorded as SVG images in the manifest.", {
+            visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+            image_format: entry.image_format || "",
+          }));
+        }
+      }
     }
+  }
+  return issues;
+}
+
+function checkVisualAnchorRendererPolicy(slide, entry, manifest = {}) {
+  const issues = [];
+  const spec = entry.visual_anchor || {};
+  const deckRenderer = safeText(manifest.visual_anchor_renderer || "");
+  if (deckRenderer && !["rough_svg", "ppt_native"].includes(deckRenderer)) {
+    issues.push(issue(slide, "content_visual_anchor_renderer_config_invalid", "error", "Visual-anchor manifest must record a deck-level renderer of rough_svg or ppt_native.", {
+      visual_anchor_renderer: deckRenderer,
+    }));
+  }
+  if (spec.kind === "Matrix" && spec.template === "table" && entry.renderer !== "ppt_native") {
+    issues.push(issue(slide, "content_visual_anchor_table_not_native", "error", "Matrix/table visual anchors must always render as native PowerPoint tables.", {
+      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      actual_renderer: entry.renderer || "",
+    }));
   }
   return issues;
 }

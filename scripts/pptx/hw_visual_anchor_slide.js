@@ -4,7 +4,6 @@ const {
   HW_STYLE,
   addAnalysisSummary,
   addFooter,
-  addHuaweiTable,
   addPageTitle,
   cloneOptions,
   grayCard,
@@ -329,32 +328,6 @@ function addTextModule(slide, module, area) {
   addModuleBodyText(slide, normalizeModuleBody(module), bodyArea, module);
 }
 
-function addTableModule(slide, module, area) {
-  const bodyArea = addContentModuleFrame(slide, module, area);
-  const rows = module.rows || module.table || [];
-  if (!Array.isArray(rows) || rows.length === 0) {
-    throw new Error(`table module "${module.title || module.label || ""}" requires rows.`);
-  }
-  const note = normalizeModuleBody(module);
-  const tableH = note ? Math.min(bodyArea.h * 0.5, 1.25) : bodyArea.h;
-  addHuaweiTable(slide, rows, {
-    x: bodyArea.x,
-    y: bodyArea.y,
-    w: bodyArea.w,
-    h: tableH,
-    fontSize: 12,
-    boldFirstColumn: true,
-  });
-  if (note) {
-    addModuleBodyText(slide, note, {
-      x: bodyArea.x,
-      y: bodyArea.y + tableH + 0.16,
-      w: bodyArea.w,
-      h: bodyArea.h - tableH - 0.16,
-    }, module);
-  }
-}
-
 function normalizeModuleBlocks(module, data = {}) {
   const rawBlocks = module.blocks || module.children;
   if (Array.isArray(rawBlocks) && rawBlocks.length) return rawBlocks.filter(Boolean);
@@ -367,13 +340,6 @@ function normalizeModuleBlocks(module, data = {}) {
       body: module.body,
       flow: module.flow,
     }].filter((block) => block.visual_anchor);
-  }
-  if (role === "table") {
-    return [{
-      type: "table",
-      rows: module.rows || module.table || [],
-      body: module.body,
-    }];
   }
   return [{ type: "text", body: normalizeModuleBody(module), fontSize: module.fontSize }];
 }
@@ -422,15 +388,7 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
     throw new Error("contentLayout image blocks were removed; use visual_anchor kind=Evidence/template=source_figure with text annotations.");
   }
   if (type === "table") {
-    addHuaweiTable(slide, block.rows || block.table || [], {
-      x: area.x,
-      y: area.y,
-      w: area.w,
-      h: area.h,
-      fontSize: block.fontSize || 10,
-      boldFirstColumn: true,
-    });
-    return null;
+    throw new Error("contentLayout table blocks were removed; use visual_anchor kind=Matrix/template=table with text annotations.");
   }
   addModuleBodyText(slide, normalizeModuleBody(block), area, { ...module, fontSize: block.fontSize || module.fontSize });
   return null;
@@ -607,8 +565,6 @@ function renderContentLayout(slide, data, layout, visualCaption) {
     const role = module.role || module.kind || "text";
     if (module.blocks || module.children || role === "content_panel" || role === "visual_anchor") {
       anchorResults.push(...addContentPanelModule(slide, module, data, area, visualCaption));
-    } else if (role === "table") {
-      addTableModule(slide, module, area);
     } else {
       addTextModule(slide, module, area);
     }
@@ -621,8 +577,8 @@ function renderContentLayout(slide, data, layout, visualCaption) {
       reference: layout.reference,
       modules_count: layout.modules.length,
       image_modules_count: 0,
-      table_modules_count: layout.modules.filter((module) => (module.role || module.kind) === "table").length,
-      text_modules_count: layout.modules.filter((module) => !countModuleVisualAnchors(module) && (module.role || module.kind) !== "table").length,
+      table_modules_count: 0,
+      text_modules_count: layout.modules.filter((module) => !countModuleVisualAnchors(module)).length,
       visual_anchor_modules_count: anchorResults.length,
       visual_anchor_blocks_count: anchorResults.length,
     },

@@ -12,7 +12,6 @@ const {
   addAnalysisSummary,
   addCoverSlide,
   addFooter,
-  addHuaweiTable,
   addPageTitle,
   addSectionTabs,
   addTocSlide,
@@ -302,7 +301,7 @@ function addPrimitiveSlide(pptx) {
   redTitleCard(slide, "primitive 区域", 0.7, 2.05, 3.6);
   grayCard(slide, { x: 0.7, y: 2.39, w: 3.6, h: 1.3, title: "灰卡", body: ["redTitleCard", "grayCard", "textBox"] });
   textBox(slide, `主题色 ${HW_STYLE.color.red}`, { x: 4.6, y: 2.28, w: 3.2, h: 0.35, fontSize: 14, bold: true, color: HW_STYLE.color.red });
-  addHuaweiTable(slide, [["接口", "状态"], ["addHuaweiTable", "已调用"], ["addFooter", "已调用"]], { x: 4.6, y: 2.8, w: 3.6, h: 1.2 });
+  textBox(slide, "表格能力由 Matrix/table 视觉锚点覆盖，不作为页面 primitive 暴露。", { x: 4.6, y: 2.8, w: 3.6, h: 0.55, fontSize: 12, color: HW_STYLE.color.text });
   addSupportingCards(slide, [{ title: "辅卡接口", body: ["addSupportingCards 已调用", "不作为主视觉"] }], { x: 8.5, y: 2.05, w: 3.7, h: 1.8 });
   addFooter(slide, { source: "开发测试", page: "03" });
 }

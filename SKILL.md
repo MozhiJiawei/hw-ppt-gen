@@ -45,14 +45,14 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
    - For each content slide, record `visual_anchor.kind`, `template`, source/data basis, `why_this_visual`, `layout_reference`, and `relationship_test`. `relationship_test` must prove the selected visual relationship is real, not decorative: for example, `Hierarchy` requires containment, decomposition, layered dependency, or bottom-to-top support; parallel mechanisms, parallel risks, or unrelated indicators must use `Matrix`, `Sequence`, `Network`, `Quantity`, or `Evidence` instead.
    - `layout_reference` is the visual composition choice, separate from `visual_anchor.kind`. For important source figures/charts/tables, use `05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, or `08 内容 四分栏` through `contentLayout` when the page needs multiple 图文 modules. Load `references/content_layout_schema.md` before writing that schema. Do not let semantic checks turn a content page into a picture-only composition.
    - Only use `visual_spec.highlight` when the highlighted item is the argument's focus. If used, record a `highlight_reason` outside `visual_spec` and echo that reason in `分析总结`, `visualAnchorCaption`, or a supporting card. If you cannot write a specific reason for why this item matters more than the alternatives, omit `highlight`.
-   - For risk, priority, capability, maturity, or importance matrices, do not invent decimal scores. Use qualitative labels such as `高 / 中 / 低` in a native table unless the source provides numeric values or the plan records a clear `score_basis` / scoring method. Never make a subjective judgment look like sourced measurement.
+   - For risk, priority, capability, maturity, or importance matrices, do not invent decimal scores. Use qualitative labels such as `高 / 中 / 低` in a `Matrix/table` visual anchor unless the source provides numeric values or the plan records a clear `score_basis` / scoring method. Never make a subjective judgment look like sourced measurement.
    - Never put `renderer`, `expected_renderer`, `visual_strategy`, or old `intent` fields on slides, `contentLayout`, or individual visual anchors. Rendering is a deck-level decision controlled only by top-level `visual_anchor_renderer`.
    - When a slide needs a visual anchor beyond ordinary cards, load `references/visual_diagram_rules.md`. Load `references/visual_diagram_spec_schema.md` before writing a structured `visual_anchor`. Do not load the diagram rules for simple text-card-only pages.
    - Every embedded source figure or table must be treated as an evidence module, not a picture-only box. Prefer `visual + Chinese figure legend + 1-3 short interpretation lines` inside the same module when space permits. If the module would otherwise look empty, add source-grounded observations, conclusions, or reading guidance instead of leaving blank space.
    - Every embedded source figure or table must have a Chinese figure-legend description tightly attached below the visual, not pinned to the bottom of the card. By default, center the visual within its available visual area; the legend follows the visual's actual bottom edge. Use 12 pt, bold, italic text for the legend, for example `semi-PD 实验结果：Llama3-8B / 70B 的实验结果`. Keep the smaller source/caption note directly below the legend at 6 pt, then place optional interpretation lines below the source note. Leave extra whitespace beneath the interpretation, not between the visual and legend.
-   - For tables that you create or transcribe, always use native PowerPoint tables via `slide.addTable` / `addHuaweiTable`, including `Matrix/table` visual anchors. Do not simulate a table by stacking rectangles, text boxes, SVG, or image output. Use source table screenshots only when the table is being cited as visual evidence from the paper.
+   - For tables that you create or transcribe on正文内容页, always use a `Matrix/table` visual anchor so the table enters the plan, manifest, and QA. Do not call `slide.addTable` or a table helper directly from deck-specific scripts or `contentLayout`. Do not simulate a table by stacking rectangles, text boxes, SVG, or image output. Use source table screenshots only when the table is being cited as visual evidence from the paper.
 6. Create deck-specific generation scripts and all generated files under `.tmp/<deck>/`. Do not write generated `.pptx`, deck-specific scripts, images, extracted text, QA reports, or scratch JSON outside that deck workspace.
-7. Generate the PPTX with `pptxgenjs`. Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, footer, and table primitives; use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页 so the visual anchor, supporting cards, and manifest evidence stay on one path.
+7. Generate the PPTX with `pptxgenjs`. Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, and footer primitives; use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页 so the visual anchor, supporting cards, and manifest evidence stay on one path.
 8. Run content QA manually against the source material: missing text, ordering mistakes, placeholders, stale examples, unsourced numeric claims, and obvious wording errors. Save a concise QA note to `.tmp/<deck>/<deck>_content_qa.json` or `.tmp/<deck>/<deck>_content_qa.md`.
 9. Run hard style QA:
 
@@ -141,7 +141,6 @@ Use `scripts/pptx/hw_pptx_helpers.js` only for stable page primitives:
 - `createHuaweiDeck(metadata)` creates a 16:9 deck.
 - `addCoverSlide(pptx, data)` creates a red-band cover.
 - `addTocSlide(pptx, data)` creates a numbered contents page.
-- `addHuaweiTable(slide, rows, options)` inserts a reusable native PPT table inside visual-anchor modules or local layouts.
 - `addPageTitle`, `addAnalysisSummary`, `addSectionTabs`, `addFooter`, `redTitleCard`, `grayCard`, `textBox`, and `safeText` are low-level building blocks for the unified content-slide path.
 
 Use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页:
@@ -171,7 +170,7 @@ When embedding rough SVG output in PPT, preserve the SVG aspect ratio with propo
 - Do not reuse an options object after passing it to `pptxgenjs`; clone or create a fresh object each time.
 - Prefer explicit `x`, `y`, `w`, `h`, `fontFace`, `fontSize`, `color`, `margin`, and `fit` values.
 - Prefer `fit: "shrink"` only for source images and dense figure/table evidence. Do not rely on text autofit or shrink-to-fit to make prose fit; shorten, split, or resize text boxes instead.
-- Use helper functions for cards, titles, tables, charts, and footers so mechanical style rules remain enforceable.
+- Use helper functions for cards, titles, charts, and footers so mechanical style rules remain enforceable. Tables on正文内容页 must be expressed as `Matrix/table` visual anchors, not direct helper calls.
 
 ## Planning Heuristics
 
@@ -183,7 +182,7 @@ When embedding rough SVG output in PPT, preserve the SVG aspect ratio with propo
 - Use `Matrix` anchors for comparisons, heatmaps, prioritization quadrants, and structured tables.
 - Use `Loop` anchors for feedback cycles, iteration mechanisms, flywheels, and closed-loop governance.
 - Use `Network` anchors for dependencies, module relationships, stakeholder maps, and causal influence graphs.
-- Use native PPT tables for generated or transcribed structured comparisons. Only embed a table as an image when preserving the original paper table as source evidence is the point of the slide.
+- Use `Matrix/table` visual anchors for generated or transcribed structured comparisons. Only embed a table as an image when preserving the original paper table as source evidence is the point of the slide.
 - Merge related content when one dense slide can carry it cleanly.
 - For paper or technical-report inputs, default to this story arc unless the user asks otherwise: problem and trade-off, key insight, architecture/mechanism, algorithm or workflow, evaluation setup, key results, implementation or deployment notes, conclusion.
 - For every正文内容页, choose the page's `visual_anchor.kind` and `template` before choosing text card geometry. Use `Evidence` when source figures/tables/screenshots carry the claim; otherwise choose the dominant relationship kind and let code apply the global renderer. Before coding, run a quick rejection check: if the chosen template's required relationship is not stated in the source, summary, or `relationship_test`, change the template.
@@ -210,7 +209,7 @@ Content QA:
 - Verify every `visual_anchor` uses the new `kind`/`template` contract and does not include `renderer`, `expected_renderer`, `visual_strategy`, or `intent`. Verify `Evidence` is used whenever source figure/table/screenshot evidence is the anchor.
 - Verify every conceptual `visual_anchor` has a `relationship_test`, and reject `Hierarchy/capability_stack` when the elements are merely parallel mechanisms, risks, factors, or metrics.
 - Verify every `visual_spec.highlight` has `highlight_reason` and that visible slide text tells the reader why that item is highlighted. Remove highlight when the reason is generic or absent.
-- Verify numeric matrix/heatmap scores are sourced or method-defined. If the values are subjective, convert them to a native table with qualitative labels and observable signals.
+- Verify numeric matrix/heatmap scores are sourced or method-defined. If the values are subjective, convert them to a `Matrix/table` visual anchor with qualitative labels and observable signals.
 - Verify all generated visible text is Chinese, with only necessary technical acronyms/model names/source identifiers left in English.
 - Compare slide titles and key claims against the source material.
 - Verify numeric claims in titles, data cards, and conclusion slides against the source inventory.

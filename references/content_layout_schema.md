@@ -8,7 +8,7 @@ The schema follows a strict three-step contract:
 2. Each module `blocks` list declares visual rendering blocks.
 3. Text blocks, captions, legends, and interpretation stay as editable PPT annotations outside `visual_anchor.visual_spec`.
 
-The schema is renderer-neutral. It must not contain `renderer` or `expected_renderer` fields. The deck plan records one top-level `visual_anchor_renderer`, and `createHuaweiDeck({ visualAnchorRenderer })` applies it globally. When `visual_anchor_renderer` is `rough_svg`, every conceptual `visual_anchor` block except `Matrix/table` renders through the SVG visual-anchor path and is recorded in the manifest. `Matrix/table` and PPT text annotations always remain native PPT objects.
+The schema is renderer-neutral. It must not contain `renderer` or `expected_renderer` fields. The deck plan records one top-level `visual_anchor_renderer`, and `createHuaweiDeck({ visualAnchorRenderer })` applies it globally. When `visual_anchor_renderer` is `rough_svg`, every conceptual `visual_anchor` block except `Matrix/table` renders through the SVG visual-anchor path and is recorded in the manifest. `Matrix/table` is still a visual anchor and uses an internal native PPT table renderer; PPT text annotations remain native PPT objects.
 
 ## Page Shape
 
@@ -75,13 +75,13 @@ Block sizing uses `height` / `width` in inches for fixed blocks and `weight` for
 Use existing visual-anchor semantics before creating new categories:
 
 - KPI strips: `Quantity / data_cards`.
-- Dense small-box grids: `Matrix / capability_matrix` or `Matrix / table`.
+- Dense small-box grids: `Matrix / capability_matrix` or, for true tables, `Matrix / table`.
 - Sectioned grids: multiple `Matrix` visual blocks separated by short `text` annotation blocks.
 - Process/flow evidence: `Sequence / process` or `Quantity / data_cards` when the object is a compact numbered card sequence.
-- Generated/transcribed tables: `Matrix / table`, always native PPT.
+- Generated/transcribed tables: `Matrix / table`, always a manifest-backed visual anchor with an internal native PPT table renderer.
 - Source figures/tables/screenshots: `Evidence`.
 
-When SVG rendering is selected, all conceptual visual blocks except `Matrix/table` use the SVG renderer. `Matrix/table` always renders as a native PPT table so generated and transcribed tables remain editable.
+When SVG rendering is selected, all conceptual visual blocks except `Matrix/table` use the SVG renderer. `Matrix/table` always renders through its visual-anchor path with an internal native PPT table renderer so generated and transcribed tables remain editable. Do not add `type: "table"` or `role: "table"` blocks to `contentLayout`; use a `type: "visual_anchor"` block whose anchor is `Matrix/table`.
 
 ## Text Annotations
 

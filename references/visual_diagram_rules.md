@@ -59,7 +59,7 @@ Do not put slide-level wording inside SVG data. `title` and `claim` are planning
 - `Sequence`: processes, stages, timelines, swimlanes, delivery flows.
 - `Loop`: feedback cycles, dual loops, iteration ladders, flywheels.
 - `Hierarchy`: trees, layered architectures, capability stacks, taxonomies.
-- `Matrix`: native tables, quadrant maps, capability matrices, two-dimensional comparisons.
+- `Matrix`: tables, quadrant maps, capability matrices, two-dimensional comparisons.
 - `Network`: hub-spoke maps, dependency graphs, module interaction maps, causal influence graphs.
 
 Decision priority:
@@ -103,7 +103,7 @@ Rough SVG output is an image of the visual relationship only. It may contain nod
 Fixed overrides:
 
 - `Evidence` ignores the global renderer and is handled as an evidence module.
-- `Matrix` + `template: "table"` is always a native PPT table, independent of the deck-level renderer.
+- `Matrix` + `template: "table"` is always rendered by the visual-anchor table path with an internal native PPT table, independent of the deck-level renderer.
 - All other conceptual anchors use the configured global renderer.
 
 ## Evidence
@@ -127,6 +127,12 @@ Use `Evidence` when the source visual is the anchor:
 ```
 
 Evidence modules must include a nearby Chinese figure/table legend, source note, and short interpretation text when space permits.
+
+## Tables
+
+Generated or transcribed tables on正文内容页 must be `Matrix/table` visual anchors. They are not page-level helper calls and they are not `contentLayout` table blocks.
+
+This keeps tables inside the plan, manifest, and QA path while still producing editable native PPT tables internally.
 
 ## Layout Rule
 

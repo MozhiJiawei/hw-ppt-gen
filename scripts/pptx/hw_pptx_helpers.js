@@ -614,46 +614,10 @@ function addTocSlide(pptx, data = {}) {
   return slide;
 }
 
-function addHuaweiTable(slide, rows, options = {}) {
-  const dataRows = rows || [];
-  const tableData = dataRows.map((row, rIdx) =>
-    row.map((cell, cIdx) => {
-      const cellText = typeof cell === "object" && cell !== null ? cell.text : cell;
-      const cellOptions = typeof cell === "object" && cell !== null ? (cell.options || {}) : {};
-      return {
-        text: safeText(cellText),
-        options: cloneOptions({
-          fontFace: HW_STYLE.font.cn,
-          fontSize: options.fontSize || HW_STYLE.size.body,
-          color: rIdx === 0 ? HW_STYLE.color.white : HW_STYLE.color.text,
-          bold: rIdx === 0 || (options.boldFirstColumn && cIdx === 0),
-          fill: { color: rIdx === 0 ? HW_STYLE.color.red : (rIdx % 2 ? HW_STYLE.color.white : HW_STYLE.color.pale) },
-          margin: options.margin ?? 0.06,
-          align: "left",
-          border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
-          ...cellOptions,
-        }),
-      };
-    })
-  );
-  const tableOptions = {
-    x: options.x ?? HW_STYLE.slide.marginX,
-    y: options.y ?? HW_STYLE.summary.contentTop,
-    w: options.w ?? 12.23,
-    border: { type: "solid", color: HW_STYLE.color.line, pt: 0.5 },
-    margin: options.margin ?? 0.06,
-  };
-  if (options.h !== undefined) tableOptions.h = options.h;
-  if (options.colW !== undefined) tableOptions.colW = options.colW;
-  if (options.rowH !== undefined) tableOptions.rowH = options.rowH;
-  slide.addTable(tableData, tableOptions);
-}
-
 module.exports = {
   HW_STYLE,
   addCoverSlide,
   addFooter,
-  addHuaweiTable,
   addAnalysisSummary,
   addPageTitle,
   addSectionTabs,

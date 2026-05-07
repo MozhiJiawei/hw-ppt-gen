@@ -9,7 +9,6 @@ const expectedPagePrimitiveExports = [
   "addAnalysisSummary",
   "addCoverSlide",
   "addFooter",
-  "addHuaweiTable",
   "addPageTitle",
   "addSectionTabs",
   "addTocSlide",
@@ -218,6 +217,15 @@ function assertHardQaKnowsVisualAnchorContract() {
   assert(qa.includes("at least one manifest-backed visual anchor"), "hard QA should allow one or more anchors per content slide");
 }
 
+function assertTableHelperIsNotPublicSchemaEscapeHatch() {
+  const helpers = require("../pptx/hw_pptx_helpers");
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  assert.equal(Object.prototype.hasOwnProperty.call(helpers, "addHuaweiTable"), false, "addHuaweiTable must not be exported as a page-level helper");
+  assert(!contentSlide.includes("role === \"table\""), "contentLayout must not accept role=table as a direct native table path");
+  assert(contentSlide.includes("contentLayout table blocks were removed"), "contentLayout table blocks should fail instead of drawing a native table directly");
+  assert(contentSlide.includes("kind=Matrix/template=table"), "table block rejection should direct callers to Matrix/table visual anchors");
+}
+
 function assertSkillDocumentsCurrentPath() {
   const skill = read("SKILL.md");
   assert(skill.includes("addVisualAnchorContentSlide"), "SKILL should document the unified content-slide entrypoint");
@@ -246,6 +254,7 @@ function main() {
   collect("diagram renderer exports remain available", assertDiagramExportsStayAvailable, failures);
   collect("sample deck uses the visual-anchor path", assertSampleDeckUsesVisualAnchorContentSlides, failures);
   collect("hard QA validates rendered visual anchors", assertHardQaKnowsVisualAnchorContract, failures);
+  collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicSchemaEscapeHatch, failures);
   collect("SKILL documents the current path", assertSkillDocumentsCurrentPath, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 

@@ -2,7 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
 const rough = require("roughjs");
-const { addHuaweiTable } = require("./hw_pptx_helpers");
 
 const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 
@@ -1825,7 +1824,7 @@ function nativeLine(slide, x1, y1, x2, y2, options = {}) {
 function drawNativeTable(slide, visual, area) {
   const rows = visual.rows || [];
   if (!rows.length) throw new Error("Matrix/table native render requires visual_spec.rows.");
-  addHuaweiTable(slide, rows, {
+  addMatrixTable(slide, rows, {
     x: area.x,
     y: area.y,
     w: area.w,
@@ -1833,6 +1832,40 @@ function drawNativeTable(slide, visual, area) {
     fontSize: area.h / Math.max(rows.length, 1) < 0.32 ? 8 : 10,
     boldFirstColumn: true,
   });
+}
+
+function addMatrixTable(slide, rows, options = {}) {
+  const tableData = rows.map((row, rIdx) =>
+    row.map((cell, cIdx) => {
+      const cellText = typeof cell === "object" && cell !== null ? cell.text : cell;
+      const cellOptions = typeof cell === "object" && cell !== null ? (cell.options || {}) : {};
+      return {
+        text: safeText(cellText),
+        options: {
+          fontFace: "Microsoft YaHei",
+          fontSize: options.fontSize || 10,
+          color: rIdx === 0 ? "FFFFFF" : "333333",
+          bold: rIdx === 0 || (options.boldFirstColumn && cIdx === 0),
+          fill: { color: rIdx === 0 ? "C00000" : (rIdx % 2 ? "FFFFFF" : "F7F7F7") },
+          margin: options.margin ?? 0.06,
+          align: "left",
+          border: { type: "solid", color: "BFBFBF", pt: 0.5 },
+          ...cellOptions,
+        },
+      };
+    })
+  );
+  const tableOptions = {
+    x: options.x,
+    y: options.y,
+    w: options.w,
+    border: { type: "solid", color: "BFBFBF", pt: 0.5 },
+    margin: options.margin ?? 0.06,
+  };
+  if (options.h !== undefined) tableOptions.h = options.h;
+  if (options.colW !== undefined) tableOptions.colW = options.colW;
+  if (options.rowH !== undefined) tableOptions.rowH = options.rowH;
+  slide.addTable(tableData, tableOptions);
 }
 
 function drawNativeEvidence(slide, spec, area) {

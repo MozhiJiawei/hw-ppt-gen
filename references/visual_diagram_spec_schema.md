@@ -2,7 +2,7 @@
 
 Use this reference after `references/visual_diagram_rules.md` has selected a `visual_anchor.kind` and `visual_anchor.template`.
 
-The renderer is not part of the spec. The deck plan records one top-level `visual_anchor_renderer`, and code receives it through `createHuaweiDeck({ visualAnchorRenderer })`. `Evidence` and `Matrix/table` are fixed overrides: Evidence renders as an evidence module, and Matrix/table always renders as a native PPT table.
+The renderer is not part of the spec. The deck plan records one top-level `visual_anchor_renderer`, and code receives it through `createHuaweiDeck({ visualAnchorRenderer })`. `Evidence` and `Matrix/table` are fixed overrides: Evidence renders as an evidence module, and Matrix/table always renders through the visual-anchor table path with an internal native PPT table.
 
 ## Contents
 
@@ -211,7 +211,7 @@ Edges must reference known node/item ids. Unknown endpoints are validation error
 
 ### `table`
 
-Tables always render as native PPT tables. Use for generated or transcribed structured comparisons that must remain editable.
+Tables always render through the `Matrix/table` visual-anchor path with an internal native PPT table. Use for generated or transcribed structured comparisons that must remain editable and tracked by plan, manifest, and QA. Do not draw正文内容页 tables through a page-level helper.
 
 ```json
 {

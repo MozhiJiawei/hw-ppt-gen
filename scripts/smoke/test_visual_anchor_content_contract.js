@@ -58,6 +58,7 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_renderer_config_missing",
   "content_visual_anchor_renderer_scope_invalid",
   "content_visual_anchor_table_not_native",
+  "content_visual_anchor_table_overflow",
   "content_layout_schema_invalid",
   "content_layout_schema_anchor_missing",
 ];

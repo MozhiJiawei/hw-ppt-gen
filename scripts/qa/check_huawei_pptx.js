@@ -257,6 +257,36 @@ function structuredObjectsInside(card, shapes) {
   );
 }
 
+function hasPairedRedTitleBar(card, shapes) {
+  return shapes.some((shape) =>
+    shape.fill === "C00000" &&
+    shape.x !== null &&
+    shape.y !== null &&
+    shape.w !== null &&
+    shape.h !== null &&
+    card.x !== null &&
+    card.y !== null &&
+    card.w !== null &&
+    Math.abs(shape.x - card.x) < 0.08 &&
+    Math.abs(shape.w - card.w) < 0.12 &&
+    shape.y + shape.h <= card.y + 0.08 &&
+    card.y - (shape.y + shape.h) <= 0.08
+  );
+}
+
+function isBiasedColumnInterpretationCard(card, shapes, containedText) {
+  if (!hasPairedRedTitleBar(card, shapes)) return false;
+  if (card.x === null || card.w === null || card.h === null || card.area <= 0) return false;
+  const textLen = safeText(containedText).replace(/\s/g, "").length;
+  const sentenceCount = (safeText(containedText).match(/[。；;.!?？]/g) || []).length;
+  return card.x >= 7.2
+    && card.w >= 3.4
+    && card.w <= 5.3
+    && card.h <= 2.1
+    && textLen >= 10
+    && sentenceCount >= 2;
+}
+
 function uniqueMatches(xml, regex) {
   const values = new Set();
   for (const match of xml.matchAll(regex)) values.add(match[1]);
@@ -374,7 +404,7 @@ function hasAnalysisSummary(shapes) {
     shape.y <= 1.8
   );
   const hasSemanticSummary = shapes.some((shape) =>
-    /[\u3400-\u9fff]{2,10}[：:][\u3400-\u9fff]/.test(shape.text) &&
+    /[\u3400-\u9fff]{2,10}[：:]\s*\S+/.test(shape.text) &&
     shape.y !== null &&
     shape.y >= 0.9 &&
     shape.y <= 1.9
@@ -676,6 +706,7 @@ function checkSlideXml(name, xml) {
     const structuredCount = structuredObjectsInside(card, shapes).length;
     const density = textLen / Math.max(card.area, 0.1);
     if (structuredCount >= 2) continue;
+    if (isBiasedColumnInterpretationCard(card, shapes, containedText)) continue;
     if (textLen < 55 || density < 12) {
       issues.push(issue(slide, "sparse_large_card", "warning", "Large content card has too little text for its size; add appropriately sized explanation text or shrink the card.", {
         area: Math.round(card.area * 100) / 100,
@@ -815,6 +846,7 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     issues.push(...checkVisualAnchorSemantics(slide, entry, visibleText));
     issues.push(...checkVisualAnchorLayout(slide, entry));
     issues.push(...checkVisualAnchorRendererPolicy(slide, entry, manifest));
+    issues.push(...checkVisualAnchorTableCapacity(slide, entry));
     if (entry.renderer === "rough_svg") {
       const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
         && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
@@ -1083,6 +1115,24 @@ function checkVisualAnchorRendererPolicy(slide, entry, manifest = {}) {
     }));
   }
   return issues;
+}
+
+function checkVisualAnchorTableCapacity(slide, entry) {
+  const spec = entry.visual_anchor || {};
+  if (spec.kind !== "Matrix" || spec.template !== "table") return [];
+  const layout = entry.content_layout_schema || {};
+  if (layout.type !== "four_column") return [];
+  const rows = Array.isArray(spec.visual_spec?.rows) ? spec.visual_spec.rows : [];
+  const rowCount = rows.length;
+  const visualArea = entry.visual_area || entry.anchor_area || {};
+  const estimatedRowHeight = Number(visualArea.h) > 0 && rowCount > 0 ? Number(visualArea.h) / rowCount : null;
+  if (rowCount <= 4 && (estimatedRowHeight === null || estimatedRowHeight >= 0.3)) return [];
+  return [issue(slide, "content_visual_anchor_table_overflow", "error", "Matrix/table anchors in four-column modules are too dense; use at most four rows in small modules, split the content, enlarge the area, or switch to Quantity/data_cards.", {
+    visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+    layout_type: layout.type,
+    row_count: rowCount,
+    estimated_row_height: estimatedRowHeight === null ? null : Math.round(estimatedRowHeight * 100) / 100,
+  })];
 }
 
 function checkVisualAnchorSemantics(slide, entry, visibleText) {

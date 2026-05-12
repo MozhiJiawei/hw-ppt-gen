@@ -624,10 +624,12 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   const layoutReference = safeText(data.layoutReference ?? data.layout_reference ?? data.visual_anchor?.layout_reference ?? "");
   let anchorResults = [];
   let layoutInfo = null;
+  let resolvedLayoutType = null;
   if (contentLayout) {
     const result = renderContentLayout(slide, data, contentLayout, visualCaption);
     anchorResults = result.anchorResults;
     layoutInfo = result.layoutInfo;
+    resolvedLayoutType = layoutInfo?.type || null;
   } else {
     const anchorArea = cloneOptions(data.anchorArea || {
       x: HW_STYLE.slide.marginX,
@@ -649,6 +651,19 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
         w: 12.78 - (anchorArea.x + anchorArea.w + 0.18),
         h: anchorArea.h,
       });
+      const layoutReferenceForCards = layoutReference || "06 内容 偏分栏";
+      resolvedLayoutType = "biased_column";
+      layoutInfo = {
+        type: "biased_column",
+        reference: layoutReferenceForCards,
+        modules_count: Math.min(4, supportingCards.length + 1),
+        image_modules_count: 0,
+        table_modules_count: 0,
+        text_modules_count: supportingCards.length,
+        visual_anchor_modules_count: 1,
+        visual_anchor_blocks_count: 1,
+        variant: "visual_anchor_with_supporting_cards",
+      };
     }
   }
   addFooter(slide, { source: data.source, page: data.page });
@@ -669,6 +684,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     visual_area: anchorResult.visualArea,
     visual_anchor_caption: anchorResult.captionResult,
     supporting_cards_count: supportingCards.length,
+    resolved_layout_type: resolvedLayoutType || undefined,
     layout_reference: layoutReference || undefined,
     highlight_reason: highlightReason || undefined,
     relationship_test: relationshipTest || undefined,

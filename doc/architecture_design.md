@@ -49,8 +49,8 @@ This view lists the architectural elements only. It intentionally does not draw 
 | L4 Visual Rendering / 视觉渲染层                                                   |
 |                                                                                  |
 | +-------------------+ +-------------------+ +-------------------+ +-------------+ |
-| | Renderer policy   | | hw_diagram_helpers| | Matrix/table      | | Evidence    | |
-| | deck-level policy | | conceptual visual | | internal renderer | | source image| |
+| | Template contract | | hw_diagram_helpers| | Matrix/table      | | Evidence    | |
+| | fixed mapping     | | conceptual visual | | editable table    | | source image| |
 | +-------------------+ +-------------------+ +-------------------+ +-------------+ |
 +----------------------------------------------------------------------------------+
 
@@ -78,7 +78,7 @@ The system is intentionally layered:
 - L1 tells the agent how to work at runtime.
 - L2 defines the schemas and records planned intent.
 - L3 composes Huawei pages and keeps layout, visual anchors, and text outline separate.
-- L4 owns visual rendering and renderer policy.
+- L4 owns visual-anchor validation and implementation-owned output handling.
 - L5 stores generated artifacts and render evidence.
 - L6 verifies that the artifacts match the plan and contracts.
 
@@ -95,7 +95,7 @@ flowchart LR
   plan["plan.json"]
   schema["slide schema"]
   compose["addVisualAnchorContentSlide"]
-  render["visual renderer"]
+  render["visual output"]
   artifacts["PPTX + manifest + PNG"]
   qa["hard QA + smoke"]
 
@@ -163,12 +163,11 @@ Owned by:
 Responsibility:
 
 - record what the agent intended to render;
-- record one deck-level `visual_anchor_renderer`;
 - record every content slide's visual anchors and relevant semantic reasons.
 
 Constraints:
 
-- renderer selection is deck-level only;
+- output handling is implementation-owned and must not be recorded as plan configuration;
 - plan must record all visual anchors on a slide, not only the first;
 - plan and manifest must be comparable by `id`, `kind`, and `template`.
 
@@ -219,7 +218,7 @@ Constraints:
 - if a module needs multiple visuals and text fragments, represent them as multiple `visual_anchor` and `text` blocks;
 - source images must enter through `Evidence`, not a direct image block.
 
-### Visual Renderer
+### Visual Output
 
 Owned by:
 
@@ -228,18 +227,17 @@ Owned by:
 Responsibility:
 
 - validate visual-anchor specs;
-- resolve renderer path from deck-level policy and fixed overrides;
-- render conceptual anchors as rough SVG or PPT native visuals;
-- render evidence anchors and table anchors through their fixed handling.
+- route each semantic template through its fixed implementation;
+- render conceptual anchors, evidence anchors, and table anchors through their fixed handling.
 
 Constraints:
 
-- renderer policy is not part of the model-facing visual spec;
-- never accept slide-level, module-level, or anchor-level renderer overrides;
-- rough SVG images must contain only diagram-native content such as labels, axes, values, nodes, and edges;
-- page-level prose remains outside SVG;
-- SVG placement preserves aspect ratio and uses contain placement;
-- do not silently switch renderer paths to pass PowerPoint export.
+- implementation routing is not part of the model-facing visual spec;
+- never accept slide-level, module-level, or anchor-level output overrides;
+- generated visuals must contain only relationship-native content such as labels, axes, values, nodes, and edges;
+- page-level prose remains outside `visual_spec`;
+- generated image placement preserves aspect ratio and uses contain placement;
+- do not silently substitute one template implementation for another to pass PowerPoint export.
 
 ### PPT Text Layer
 
@@ -286,14 +284,14 @@ Responsibility:
 
 - check PPTX style and structure;
 - compare plan and manifest;
-- validate visual-anchor schema and renderer policy;
+- validate visual-anchor schema and implementation contract;
 - check exported render evidence when available.
 
 Constraints:
 
 - QA is part of the architecture;
 - multi-anchor slides must validate every planned anchor;
-- QA must fail renderer drift, missing anchors, unrendered anchors, invalid schema, and plan/manifest mismatch;
+- QA must fail implementation drift, missing anchors, unrendered anchors, invalid schema, and plan/manifest mismatch;
 - QA must protect "at least one anchor" without regressing into "exactly one anchor";
 - QA should distinguish accepted architecture exceptions from accidental bypass paths.
 
@@ -307,15 +305,15 @@ Owned by:
 Responsibility:
 
 - preserve architecture contracts during development;
-- generate regression decks for native and SVG renderers;
+- generate regression decks for visual-anchor templates;
 - exercise PowerPoint COM export;
 - verify helper export surfaces and QA rule coverage.
 
 Constraints:
 
-- when a schema or renderer rule changes, smoke tests must change in the same commit;
-- both `ppt_native` and `rough_svg` paths need coverage when renderer behavior changes;
-- PowerPoint COM failures should reveal implementation or environment problems, not trigger silent renderer substitution.
+- when a schema or visual-anchor rule changes, smoke tests must change in the same commit;
+- template output paths need coverage when visual-anchor behavior changes;
+- PowerPoint COM failures should reveal implementation or environment problems, not trigger silent output substitution.
 
 ## Core Data Flow
 
@@ -344,37 +342,37 @@ The three inputs are independent:
 - `visual_anchor` must not carry page explanation prose.
 - text outline must not bypass visual-anchor evidence.
 
-## Renderer Flow
+## Visual Output Flow
 
 ```mermaid
 flowchart TB
-  DeckRenderer["Deck-level visual_anchor_renderer"]
   Anchor["visual_anchor"]
   Evidence["Evidence"]
   Table["Matrix/table"]
-  Conceptual["Other conceptual anchors"]
-  Svg["rough_svg renderer"]
-  Native["ppt_native renderer"]
+  EditableTemplates["Editable-output templates"]
+  ImageTemplates["Image-output templates"]
+  ImageOutput["image output"]
+  EditableOutput["editable PPT output"]
   Manifest["manifest"]
 
-  DeckRenderer --> Conceptual
   Anchor --> Evidence
   Anchor --> Table
-  Anchor --> Conceptual
+  Anchor --> EditableTemplates
+  Anchor --> ImageTemplates
   Evidence --> Manifest
   Table --> Manifest
-  Conceptual --> Svg
-  Conceptual --> Native
-  Svg --> Manifest
-  Native --> Manifest
+  EditableTemplates --> EditableOutput
+  ImageTemplates --> ImageOutput
+  ImageOutput --> Manifest
+  EditableOutput --> Manifest
 ```
 
-Renderer constraints attach to this flow:
+Output constraints attach to this flow:
 
 - `Evidence` is source-backed evidence handling.
 - `Matrix/table` is a fixed table handling path and must still be represented as a visual anchor.
-- all other anchors follow the deck-level renderer.
-- no slide, layout, or anchor can override renderer policy.
+- all other anchors follow the fixed output path mapped from their semantic template.
+- no slide, layout, or anchor can override output handling.
 
 ## Table Boundary
 
@@ -395,7 +393,7 @@ Images are not a general page-level helper.
 Architecture rule:
 
 - source figures, screenshots, and charts must be `Evidence` anchors;
-- rough SVG output may be inserted as an image only as the final artifact of the SVG renderer;
+- generated diagram output may be inserted as an image only as the final artifact of a visual anchor;
 - direct image roles such as `image_text` are not allowed in content layout.
 
 This prevents image placement from bypassing semantic anchors and source tracking.
@@ -423,17 +421,17 @@ Do not merge changes where only the script works but the skill still asks for ol
 These are concrete drift patterns this repository should avoid:
 
 - layout shortcut becomes visual semantics: `image_text`, `metric_row`, or mini-grid roles in `contentLayout`;
-- renderer bypass: SVG path renders part of the visual through untracked PPT-native shapes;
-- silent fallback: native renderer quietly swaps to SVG to pass PowerPoint export;
+- visual-anchor bypass: part of the visual is drawn through untracked helper calls;
+- silent fallback: one template implementation quietly substitutes another to pass PowerPoint export;
 - first-anchor-only QA: multi-anchor pages validate only the first manifest entry;
 - unbounded helper exposure: low-level drawing helper becomes a schema-level escape hatch;
 - runtime doc carries development principles while `AGENTS.md` and `doc/` stay silent.
 
 ## Known Enhancement
 
-Issue [#2](https://github.com/MozhiJiawei/hw-ppt-gen/issues/2) tracks SVG density problems in small two-column and four-column anchors. This should be fixed inside the visual renderer through compact layouts, viewBox trimming, padding reduction, or target-size-aware template choices.
+Issue [#2](https://github.com/MozhiJiawei/hw-ppt-gen/issues/2) tracks diagram density problems in small two-column and four-column anchors. This should be fixed inside the visual-anchor implementation through compact layouts, padding reduction, or target-size-aware template choices.
 
-It must not be fixed by stretching SVG images or bypassing the renderer with PPT-native visual fragments.
+It must not be fixed by stretching generated images or bypassing visual anchors with untracked helper fragments.
 
 ## Change Checklist
 
@@ -444,10 +442,10 @@ Before merging architecture-sensitive changes, verify:
 - new visual needs use existing `kind` / `template` semantics unless a new semantic template is truly required;
 - source images use `Evidence`;
 - tables on content pages use `Matrix/table` visual anchors;
-- renderer selection remains deck-level;
-- SVG and PPT-native paths do not silently substitute for each other;
+- visual output handling remains implementation-owned;
+- fixed template implementations do not silently substitute for each other;
 - plan and manifest cover every visual anchor;
 - QA checks the behavior being introduced;
-- smoke tests cover both renderer paths when relevant;
+- smoke tests cover affected visual-anchor templates when relevant;
 - PowerPoint COM export remains part of the quality bar;
 - `SKILL.md`, references, scripts, QA, and smoke tests agree.

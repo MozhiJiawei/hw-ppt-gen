@@ -13,11 +13,10 @@
     "test:qa-rules": "node scripts/smoke/test_qa_rule_regressions.js",
     "test:visual-anchor-contract": "node scripts/smoke/test_visual_anchor_content_contract.js",
     "content-layout-smoke": "node scripts/smoke/generate_content_layout_schema_smoke.js && node scripts/qa/check_huawei_pptx.js .tmp/content_layout_schema_smoke/content_layout_schema_smoke.pptx --out .tmp/content_layout_schema_smoke/content_layout_schema_smoke.qa.json --require-plan .tmp/content_layout_schema_smoke/content_layout_schema_smoke_plan.json --require-visual-anchor-manifest .tmp/content_layout_schema_smoke/content_layout_schema_smoke_visual_anchor_manifest.json",
-    "content-layout-svg-smoke": "node scripts/smoke/generate_content_layout_schema_smoke.js --renderer rough_svg && node scripts/qa/check_huawei_pptx.js .tmp/content_layout_schema_svg_smoke/content_layout_schema_svg_smoke.pptx --out .tmp/content_layout_schema_svg_smoke/content_layout_schema_svg_smoke.qa.json --require-plan .tmp/content_layout_schema_svg_smoke/content_layout_schema_svg_smoke_plan.json --require-visual-anchor-manifest .tmp/content_layout_schema_svg_smoke/content_layout_schema_svg_smoke_visual_anchor_manifest.json",
     "test:powerpoint-com": "node scripts/smoke/test_powerpoint_com_export.js",
     "diagram-smoke": "node scripts/smoke/verify_diagram_components.js",
     "reference-review-template": "node scripts/pptx/prepare_reference_review.js --out .tmp/reference_review.json",
-    "smoke": "npm run test:visual-anchor-contract && npm run test:qa-rules && npm run content-layout-smoke && npm run content-layout-svg-smoke && npm run sample && npm run check-sample && npm run diagram-smoke && npm run test:powerpoint-com"
+    "smoke": "npm run test:visual-anchor-contract && npm run test:qa-rules && npm run content-layout-smoke && npm run sample && npm run check-sample && npm run diagram-smoke && npm run test:powerpoint-com"
   },
   "dependencies": {
     "jszip": "^3.10.1",

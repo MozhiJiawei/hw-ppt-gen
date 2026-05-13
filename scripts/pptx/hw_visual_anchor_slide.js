@@ -73,9 +73,7 @@ function addSvgVisualAnchorImage(slide, visualAnchor, area) {
 }
 
 function renderVisualAnchor(slide, visualAnchor, area) {
-  const renderPath = resolveVisualAnchorRenderPath(visualAnchor, {
-    visualAnchorRenderer: slide._hwVisualAnchorRenderer || "rough_svg",
-  });
+  const renderPath = resolveVisualAnchorRenderPath(visualAnchor);
   if (renderPath === "rough_svg") {
     const image = addSvgVisualAnchorImage(slide, visualAnchor, area);
     return {
@@ -150,8 +148,8 @@ function addVisualAnchorCaption(slide, caption, renderResult, anchorArea, visual
       x: anchorArea.x + 0.12,
       y: captionY + 0.36,
       w: anchorArea.w - 0.24,
-      h: 0.14,
-      fontSize: 6,
+      h: 0.2,
+      fontSize: HW_STYLE.size.min,
       color: HW_STYLE.color.gray,
       align: caption.align || "center",
       valign: "mid",
@@ -499,8 +497,8 @@ function addBiasedVisualOnlyModule(slide, module, data, area) {
         x: area.x,
         y: captionY + 0.25,
         w: area.w,
-        h: 0.14,
-        fontSize: 6,
+        h: 0.2,
+        fontSize: HW_STYLE.size.min,
         color: HW_STYLE.color.gray,
         align: "center",
         lineSpacingMultiple: 1,
@@ -603,10 +601,8 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   const contentLayout = normalizeContentLayout(data.contentLayout || data.content_layout || data.layout_schema);
   if (!data.visual_anchor && !contentLayout) throw new Error("Content slide requires visual_anchor or contentLayout visual_anchor modules.");
   if (data.visual_anchor) validateVisualAnchorSpec(data.visual_anchor);
-  const renderer = pptx._hwVisualAnchorRenderer || "rough_svg";
 
   const slide = pptx.addSlide();
-  slide._hwVisualAnchorRenderer = renderer;
   addPageTitle(slide, data.title || "页面标题", {
     kicker: data.kicker || "",
     subtitle: data.titleNote || data.titleSubtitle || "",
@@ -702,7 +698,6 @@ function writeVisualAnchorManifest(pptx, fileName) {
   }
   const manifest = {
     generated_at: new Date().toISOString(),
-    visual_anchor_renderer: pptx._hwVisualAnchorRenderer || "rough_svg",
     slides: ensureManifest(pptx),
   };
   fs.mkdirSync(path.dirname(fileName), { recursive: true });

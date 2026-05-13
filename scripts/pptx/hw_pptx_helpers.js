@@ -39,7 +39,7 @@ const HW_STYLE = Object.freeze({
     body: 12,
     bodyLarge: 14,
     label: 12,
-    min: 6,
+    min: 10,
     data: 18,
   },
   line: { normal: 0.5 },
@@ -131,11 +131,6 @@ async function repairPptxForPowerPointCom(fileName) {
 
 function createHuaweiDeck(metadata = {}) {
   const pptx = new pptxgen();
-  const renderer = metadata.visualAnchorRenderer || metadata.visual_anchor_renderer || "rough_svg";
-  if (!["rough_svg", "ppt_native"].includes(renderer)) {
-    throw new Error(`Unsupported visualAnchorRenderer: ${renderer}. Use rough_svg or ppt_native.`);
-  }
-  pptx._hwVisualAnchorRenderer = renderer;
   pptx.layout = "LAYOUT_WIDE";
   pptx.author = metadata.author || "Huawei PPTX Generator";
   pptx.company = metadata.company || "Huawei";
@@ -270,7 +265,7 @@ function addSectionTabs(slide, sections, currentSection, options = {}) {
   const minTabW = options.minTabW ?? 0.88;
   const maxTabW = options.maxTabW ?? 1.55;
   const maxW = options.maxW ?? 5.25;
-  const naturalWidths = titles.map((title) => Math.max(minTabW, Math.min(maxTabW, estimateTextWidth(title, 8) + 0.38)));
+  const naturalWidths = titles.map((title) => Math.max(minTabW, Math.min(maxTabW, estimateTextWidth(title, 10) + 0.38)));
   const naturalTotal = naturalWidths.reduce((sum, value) => sum + value, 0);
   const scale = naturalTotal > maxW ? maxW / naturalTotal : 1;
   const widths = naturalWidths.map((value) => value * scale);
@@ -285,7 +280,7 @@ function addSectionTabs(slide, sections, currentSection, options = {}) {
         text: title,
         options: {
           fontFace: HW_STYLE.font.cn,
-          fontSize: 8,
+          fontSize: HW_STYLE.size.min,
           bold: true,
           color: active ? HW_STYLE.color.white : HW_STYLE.color.black,
           fill: { color: active ? HW_STYLE.color.red : HW_STYLE.color.white },

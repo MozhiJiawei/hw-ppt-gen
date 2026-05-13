@@ -2,7 +2,7 @@
 
 Use this reference after `references/visual_diagram_rules.md` has selected a `visual_anchor.kind` and `visual_anchor.template`.
 
-The renderer is not part of the spec. The deck plan records one top-level `visual_anchor_renderer`, and code receives it through `createHuaweiDeck({ visualAnchorRenderer })`. `Evidence` and `Matrix/table` are fixed overrides: Evidence renders as an evidence module, and Matrix/table always renders through the visual-anchor table path with an internal native PPT table.
+The spec is semantic: choose `kind`, choose `template`, then provide the required `visual_spec` data. Evidence templates carry source metadata; `Matrix/table` carries editable table data.
 
 ## Contents
 
@@ -46,7 +46,7 @@ Recommended semantic fields outside `visual_spec`:
 - `highlight_reason`: required whenever `visual_spec.highlight` is present. It is manifest/QA metadata and must be echoed in visible slide text.
 - `score_basis`: required when matrix/heatmap values are subjective scores, model judgments, or normalized indices rather than directly sourced measurements.
 
-Do not output `renderer`, `visual_strategy`, `intent`, or standalone text fields anywhere under `visual_spec`, including `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, and `conclusion`.
+Do not output implementation-control fields such as `visual_strategy` or `intent`, or standalone text fields anywhere under `visual_spec`, including `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, and `conclusion`.
 
 `title` and `claim` are metadata for planning, manifest review, and PPT composition. They are not rendered inside generated SVG images. Standalone captions, figure legends, source notes, explanatory paragraphs, side callouts, and bottom slogans belong in editable PPT text boxes or supporting cards, not inside `visual_spec`. When using `addVisualAnchorContentSlide`, put the editable figure-legend text in `visualAnchorCaption` or `visual_anchor_caption` beside `visual_anchor`, not under `visual_spec`.
 
@@ -91,7 +91,7 @@ Do not output `renderer`, `visual_strategy`, `intent`, or standalone text fields
 Rules:
 
 - All series must match category count.
-- `y_label` is required; do not rely on renderer defaults.
+- `y_label` is required; do not rely on implicit defaults.
 - Use `highlight` for the main value, not every improved value.
 
 ### `proportion_chart`
@@ -114,7 +114,7 @@ Rules:
 
 Rules:
 
-- `total_label` is required; do not rely on renderer defaults.
+- `total_label` is required; do not rely on implicit defaults.
 
 ### `heatmap`
 
@@ -211,7 +211,7 @@ Edges must reference known node/item ids. Unknown endpoints are validation error
 
 ### `table`
 
-Tables always render through the `Matrix/table` visual-anchor path with an internal native PPT table. Use for generated or transcribed structured comparisons that must remain editable and tracked by plan, manifest, and QA. Do not draw正文内容页 tables through a page-level helper.
+Tables always use the `Matrix/table` visual-anchor template. Use it for generated or transcribed structured comparisons that must remain editable and tracked by plan, manifest, and QA. Do not draw正文内容页 tables through a page-level helper.
 
 ```json
 {
@@ -228,7 +228,7 @@ Tables always render through the `Matrix/table` visual-anchor path with an inter
 
 ### `quadrant_matrix` / `capability_matrix`
 
-Use the same fields as the existing rough SVG implementations:
+Use these fields:
 
 - `quadrant_matrix`: `x_axis`, `y_axis`, `items`, optional `highlight`. `x_axis` requires `left`, `right`, and `label`; `y_axis` requires `bottom`, `top`, and `label`.
 - `capability_matrix`: `rows`, `columns`, `values`, optional `highlight`.
@@ -269,4 +269,4 @@ Evidence has no `visual_spec` requirement:
 }
 ```
 
-`source.caption` is required for Evidence modules; the renderer will not invent fallback explanation text.
+`source.caption` is required for Evidence modules; the helper will not invent fallback explanation text.

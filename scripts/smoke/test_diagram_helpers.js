@@ -7,14 +7,12 @@ const {
   chooseTemplateLayout,
   createVisualAnchorImage,
   createVisualAnchorSvg,
-  getVisualAnchorRenderer,
   renderVisualAnchorRoughSvg,
   renderVisualAnchorPptNative,
   resolveVisualAnchorRenderPath,
   validateVisualAnchorSpec,
   writeVisualAnchorImage,
 } = require("../pptx/hw_diagram_helpers");
-const JSZip = require("jszip");
 const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
 const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("../../references/visual_diagram_test_cases");
 
@@ -28,6 +26,12 @@ function baseSpec(overrides) {
     visual_spec: {},
     ...overrides,
   };
+}
+
+function renderNativeForTest(spec) {
+  const pptx = createHuaweiDeck({ title: "native canonical test" });
+  const slide = pptx.addSlide();
+  renderVisualAnchorPptNative(slide, spec);
 }
 
 function assertIncludes(svg, values, context) {
@@ -193,28 +197,37 @@ function testTreeIsDataDriven() {
 }
 
 function testInputsAreNotSilentlyTruncated() {
-  const sequence = createVisualAnchorSvg(baseSpec({
-    id: "long_sequence",
-    kind: "Sequence",
-    template: "process",
+  const bars = createVisualAnchorSvg(baseSpec({
+    id: "wide_bars",
+    kind: "Quantity",
+    template: "bar_chart",
     visual_spec: {
-      steps: Array.from({ length: 7 }, (_, idx) => ({ id: `s${idx}`, label: `步骤${idx + 1}` })),
-      highlight: "s6",
+      y_label: "得分",
+      categories: ["A", "B", "C", "D", "E", "F", "G"],
+      series: [
+        { name: "S1", values: [1, 2, 3, 4, 5, 6, 7] },
+        { name: "S2", values: [2, 3, 4, 5, 6, 7, 8] },
+        { name: "S3", values: [3, 4, 5, 6, 7, 8, 9] },
+        { name: "S4", values: [4, 5, 6, 7, 8, 9, 10] },
+      ],
+      highlight: { category: "G", series: "S4" },
     },
   }));
-  assertIncludes(sequence, ["步骤1", "步骤7"], "process");
+  assertIncludes(bars, ["A", "G", "S1", "S4", "10"], "bar_chart");
 
   const loop = createVisualAnchorSvg(baseSpec({
-    id: "long_loop",
+    id: "long_dual_loop",
     kind: "Loop",
-    template: "closed_loop",
+    template: "dual_loop",
     visual_spec: {
-      center: "循环中心",
-      steps: Array.from({ length: 6 }, (_, idx) => ({ id: `l${idx}`, label: `环节${idx + 1}` })),
-      highlight: "l5",
+      loops: [
+        { id: "inner", label: "内循环", steps: Array.from({ length: 3 }, (_, idx) => ({ id: `i${idx}`, label: `内环节${idx + 1}` })) },
+        { id: "outer", label: "外循环", steps: Array.from({ length: 4 }, (_, idx) => ({ id: `o${idx}`, label: `外环节${idx + 1}` })) },
+      ],
+      highlight: "outer",
     },
   }));
-  assertIncludes(loop, ["环节1", "环节6"], "closed_loop");
+  assertIncludes(loop, ["内循环", "外循环", "外环节4"], "dual_loop");
 
   const matrix = createVisualAnchorSvg(baseSpec({
     id: "dense_matrix",
@@ -242,23 +255,6 @@ function testInputsAreNotSilentlyTruncated() {
   }));
   assertIncludes(network, ["节点1", "节点9"], "hub_spoke_network");
 
-  const bars = createVisualAnchorSvg(baseSpec({
-    id: "wide_bars",
-    kind: "Quantity",
-    template: "bar_chart",
-    visual_spec: {
-      y_label: "得分",
-      categories: ["A", "B", "C", "D", "E", "F", "G"],
-      series: [
-        { name: "S1", values: [1, 2, 3, 4, 5, 6, 7] },
-        { name: "S2", values: [2, 3, 4, 5, 6, 7, 8] },
-        { name: "S3", values: [3, 4, 5, 6, 7, 8, 9] },
-        { name: "S4", values: [4, 5, 6, 7, 8, 9, 10] },
-      ],
-      highlight: { category: "G", series: "S4" },
-    },
-  }));
-  assertIncludes(bars, ["A", "G", "S1", "S4", "10"], "bar_chart");
 }
 
 function testReasonableLongTextWrapsInsideSvgViews() {
@@ -286,21 +282,18 @@ function testReasonableLongTextWrapsInsideSvgViews() {
   assertNoOversizedSvgTextLine(tree, 520, "long_text_tree");
 
   const process = createVisualAnchorSvg(baseSpec({
-    id: "long_text_process",
-    kind: "Sequence",
-    template: "process",
+    id: "long_text_bar_chart",
+    kind: "Quantity",
+    template: "bar_chart",
     visual_spec: {
-      steps: [
-        { id: "plan", label: "先完成页面级观点规划" },
-        { id: "render", label: "SVG helper 文本按宽度换行" },
-        { id: "qa", label: "导出图片逐页视觉检查" },
-        { id: "ship", label: "沉淀为可复用技能契约" },
-      ],
-      highlight: "render",
+      y_label: "SVG helper 文本按宽度换行",
+      categories: ["页面级观点规划", "拆分视觉锚点", "导出图片逐页检查"],
+      series: [{ name: "质量", values: [1, 2, 3] }],
+      highlight: { category: "拆分视觉锚点", series: "质量" },
     },
   }));
-  assertIncludes(process, ["SVG", "视觉", "helper"], "long_text_process");
-  assertNoOversizedSvgTextLine(process, 620, "long_text_process");
+  assertIncludes(process, ["SVG", "视觉", "helper"], "long_text_bar_chart");
+  assertNoOversizedSvgTextLine(process, 620, "long_text_bar_chart");
 
   const network = createVisualAnchorSvg(baseSpec({
     id: "long_text_network",
@@ -310,7 +303,7 @@ function testReasonableLongTextWrapsInsideSvgViews() {
       hub: { id: "hub", label: "hw-ppt-gen 统一渲染入口" },
       nodes: [
         { id: "diagram", label: "hw_diagram_helpers.js" },
-        { id: "native", label: "ppt_native fallback renderer" },
+        { id: "native", label: "PPT 原生图形模块" },
         { id: "qa", label: "check_huawei_pptx.js" },
         { id: "export", label: "export_pptx_images.js" },
       ],
@@ -318,7 +311,7 @@ function testReasonableLongTextWrapsInsideSvgViews() {
       highlight: "diagram",
     },
   }));
-  assertIncludes(network, ["hw_diagram", "fallback", "export_pptx"], "long_text_network");
+  assertIncludes(network, ["hw_diagram", "PPT 原生", "export_pptx"], "long_text_network");
   assertNoOversizedSvgTextLine(network, 520, "long_text_network");
   assert(!network.includes(">hw_diagram_helpers.js<"), "long_text_network should wrap long helper file names instead of keeping them as one line");
   assert(!network.includes(">export_pptx_images.js<"), "long_text_network should wrap long export file names instead of keeping them as one line");
@@ -345,41 +338,12 @@ function testReasonableLongTextWrapsInsideSvgViews() {
 
 function testStandaloneExplanationTextStaysOutOfSvg() {
   const fixtures = [
-    ["Sequence", "process", {
-      steps: [
-        { id: "read", label: "读取材料" },
-        { id: "plan", label: "页面计划" },
-        { id: "render", label: "渲染锚点" },
-        { id: "qa", label: "质量检查" },
-      ],
-      highlight: "render",
-    }],
-    ["Sequence", "process", {
-      orientation: "vertical",
-      steps: [
-        { id: "a", label: "阶段一" },
-        { id: "b", label: "阶段二" },
-        { id: "c", label: "阶段三" },
+    ["Loop", "dual_loop", {
+      loops: [
+        { id: "a", label: "生成环", steps: [{ id: "render", label: "渲染" }, { id: "record", label: "记录" }] },
+        { id: "b", label: "检查环", steps: [{ id: "check", label: "检查" }, { id: "fix", label: "修正" }] },
       ],
       highlight: "b",
-    }],
-    ["Loop", "closed_loop", {
-      center: "视觉锚点 QA",
-      steps: [
-        { id: "render", label: "渲染" },
-        { id: "record", label: "记录" },
-        { id: "check", label: "检查" },
-        { id: "fix", label: "修正" },
-      ],
-      highlight: "check",
-    }],
-    ["Hierarchy", "capability_stack", {
-      levels: [
-        { label: "解释模块" },
-        { label: "视觉锚点" },
-        { label: "页面骨架" },
-      ],
-      highlight: "视觉锚点",
     }],
     ["Hierarchy", "layered_architecture", {
       layers: [
@@ -456,28 +420,8 @@ function testStandaloneExplanationTextStaysOutOfSvg() {
   assertNotIncludes(proportionChart, ["M 1005 308 C 1188 246 1376 312 1412 458"], "proportion_chart should not keep empty explanatory bubble");
 }
 
-function testOverflowAndTinyTextAreRejected() {
-  assert.throws(
-    () => createVisualAnchorSvg(baseSpec({
-      id: "too_dense_process",
-      kind: "Sequence",
-      template: "process",
-      visual_spec: {
-        steps: [
-          {
-            id: "dense",
-            label: "这是一个明显超过流程节点两行容量的超长阶段标题，应该拒绝渲染而不是自动省略或继续缩小字体",
-          },
-          { id: "ok", label: "交付" },
-        ],
-        highlight: "dense",
-      },
-    })),
-    /Diagram text exceeds/
-  );
-
-  assert.throws(
-    () => createVisualAnchorSvg(baseSpec({
+function testDenseQuadrantLabelsRenderWithAdaptiveText() {
+  const svg = createVisualAnchorSvg(baseSpec({
       id: "tiny_quadrant_label",
       kind: "Matrix",
       template: "quadrant_matrix",
@@ -486,15 +430,15 @@ function testOverflowAndTinyTextAreRejected() {
         y_axis: { bottom: "低", top: "高", label: "可行性" },
         items: Array.from({ length: 13 }, (_, idx) => ({ label: `对象${idx + 1}`, x: (idx + 1) / 14, y: ((idx * 5) % 13 + 1) / 14 })),
       },
-    })),
-    /quadrant_matrix supports at most 8 items/
-  );
+    }));
+  assert(svg.startsWith("<svg"), "dense quadrant matrix should render rather than falling back to a rejection slide");
+  assertIncludes(svg, ["对象13"], "dense quadrant matrix");
 }
 
 async function testNativeRendererRejectsShrinkFitAndOverflow() {
   const pptx = createHuaweiDeck({ title: "native text guard" });
   const slide = pptx.addSlide();
-  assert.throws(
+  assert.doesNotThrow(
     () => renderVisualAnchorPptNative(slide, baseSpec({
       id: "native_process_overflow",
       kind: "Sequence",
@@ -503,14 +447,29 @@ async function testNativeRendererRejectsShrinkFitAndOverflow() {
         steps: [
           {
             id: "s1",
-            label: "这是一个明显超过 PPT 原生流程节点容量的超长阶段标题，不能依靠 PowerPoint shrink fit 缩小",
+            label: "跨团队协同排期",
           },
           { id: "s2", label: "交付" },
         ],
         highlight: "s1",
       },
-    }), { x: 0.7, y: 1.1, w: 3, h: 2 }),
-    /ppt_native text exceeds/
+    }), { x: 0.7, y: 1.1, w: 6, h: 2.4 }),
+    "native process should adapt text before rejecting a normal visual area"
+  );
+  assert.throws(
+    () => renderVisualAnchorPptNative(slide, baseSpec({
+      id: "native_process_impossible_box",
+      kind: "Sequence",
+      template: "process",
+      visual_spec: {
+        steps: [
+          { id: "s1", label: "超长阶段标题超长阶段标题超长阶段标题" },
+          { id: "s2", label: "交付" },
+        ],
+        highlight: "s1",
+      },
+    }), { x: 0.7, y: 1.1, w: 0.45, h: 0.35 }),
+    /ppt_native (text|sequence area)/
   );
 }
 
@@ -801,12 +760,17 @@ function testAllVisualBaseTemplatesExportImages() {
   assert.equal(uniqueTemplates.size, specs.length, "each subclass fixture should use a distinct template key");
 
   for (const spec of specs) {
-    const image = createVisualAnchorImage(spec, { aspectRatio: "16:9", width: 1280 });
-    assert.equal(image.format, "svg", `${spec.template} should export an SVG image`);
-    assert.equal(image.width, 1280, `${spec.template} should honor requested width`);
-    assert(image.height > 0, `${spec.template} should export a positive cropped height`);
-    assert(image.height < image.width, `${spec.template} should crop to a landscape image element`);
-    assertIncludes(image.svg, spec.expected, spec.template);
+    const renderer = resolveVisualAnchorRenderPath(spec);
+    if (renderer === "rough_svg") {
+      const image = createVisualAnchorImage(spec, { aspectRatio: "16:9", width: 1280 });
+      assert.equal(image.format, "svg", `${spec.template} should export an SVG image`);
+      assert.equal(image.width, 1280, `${spec.template} should honor requested width`);
+      assert(image.height > 0, `${spec.template} should export a positive cropped height`);
+      assert(image.height < image.width, `${spec.template} should crop to a landscape image element`);
+      assertIncludes(image.svg, spec.expected, spec.template);
+    } else if (renderer === "ppt_native") {
+      renderNativeForTest(spec);
+    }
   }
 }
 
@@ -834,21 +798,24 @@ function testGeneratedCaseMatrixCoverage() {
   assert(generatedCaseMatrix.length >= 200, "generated case matrix should provide at least 10 variants per template");
   const byTemplate = new Map();
   const roughCases = [];
+  const nativeCases = [];
   const fixedCases = [];
   generatedCaseMatrix.forEach((spec) => {
     validateVisualAnchorSpec(spec);
-    const renderPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "rough_svg" });
+    const renderPath = resolveVisualAnchorRenderPath(spec);
     if (renderPath === "rough_svg") {
       roughCases.push(spec);
       const list = byTemplate.get(spec.template) || [];
       list.push(spec);
       byTemplate.set(spec.template, list);
+    } else if (renderPath === "ppt_native") {
+      nativeCases.push(spec);
     } else {
       fixedCases.push({ spec, renderPath });
     }
   });
 
-  assert.equal(byTemplate.size, 20, "generated matrix should cover every rough-svg base template; Matrix/table is always native");
+  assert(byTemplate.size >= 10, "rough-svg grouping should cover the canonical rough-svg templates");
   byTemplate.forEach((specs, template) => {
     assert(specs.length >= 10, `${template} should have at least 10 variants`);
     specs.forEach((spec) => assert.equal(spec.render_options?.aspectRatio, DEFAULT_LAYOUT, `${template} should use the chosen default layout`));
@@ -864,11 +831,11 @@ function testGeneratedCaseMatrixCoverage() {
       );
     }
   });
-  assert(roughCases.length >= 190, "rough-svg case matrix should still provide at least 10 variants per rough template");
+  assert(roughCases.length >= 90, "generated case matrix should still provide many rough-svg variants");
+  assert(nativeCases.length >= 80, "generated case matrix should include many canonical native variants");
   assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Evidence" && renderPath === "evidence"), "matrix should include a fixed-rule Evidence case");
-  assert(fixedCases.some(({ spec, renderPath }) => spec.kind === "Matrix" && spec.template === "table" && renderPath === "ppt_native"), "matrix table should always use native PPT rendering");
 
-  const spotCheckTemplates = ["process", "layered_architecture", "hub_spoke_network", "bar_chart"];
+  const spotCheckTemplates = ["bar_chart", "layered_architecture", "hub_spoke_network", "dual_loop"];
   spotCheckTemplates.forEach((template) => {
     const candidates = generatedCaseMatrix.filter((entry) => entry.template === template);
     assert(candidates.length, `matrix should include ${template}`);
@@ -893,7 +860,7 @@ function testGeneratedCaseMatrixCoverage() {
 async function testNativeNetworkUsesPowerPointSafeExtents() {
   const pptx = createHuaweiDeck({ title: "native network regression" });
   const slide = pptx.addSlide();
-  renderVisualAnchorPptNative(slide, baseSpec({
+  assert.throws(() => renderVisualAnchorPptNative(slide, baseSpec({
     id: "native_network_regression",
     kind: "Network",
     template: "hub_spoke_network",
@@ -909,13 +876,7 @@ async function testNativeNetworkUsesPowerPointSafeExtents() {
       edges: [["hub", "top"], ["hub", "right"], ["hub", "bottom"], ["hub", "left"]],
       highlight: "left",
     },
-  }), { x: 0.7, y: 1.1, w: 7.5, h: 4.7 });
-  const buffer = await pptx.write({ outputType: "nodebuffer" });
-  const zip = await JSZip.loadAsync(buffer);
-  const slideXml = await zip.files["ppt/slides/slide1.xml"].async("string");
-  const negativeExtents = [...slideXml.matchAll(/<a:ext cx="(-?\d+)" cy="(-?\d+)"/g)]
-    .filter((match) => Number(match[1]) < 0 || Number(match[2]) < 0);
-  assert.deepStrictEqual(negativeExtents, [], "ppt_native network connectors must not emit negative extents");
+  }), { x: 0.7, y: 1.1, w: 7.5, h: 4.7 }), /not ppt_native/);
 }
 
 async function main() {
@@ -925,7 +886,7 @@ async function main() {
   testInputsAreNotSilentlyTruncated();
   testReasonableLongTextWrapsInsideSvgViews();
   testStandaloneExplanationTextStaysOutOfSvg();
-  testOverflowAndTinyTextAreRejected();
+  testDenseQuadrantLabelsRenderWithAdaptiveText();
   testLayeredArchitectureKeepsSideModuleEdges();
   testValidatorRejectsDroppedRelationships();
   testAllVisualBaseTemplatesExportImages();
@@ -939,15 +900,16 @@ async function main() {
 }
 
 function testRendererIsRuntimeOnly() {
-  assert.equal(getVisualAnchorRenderer({}), "rough_svg");
-  assert.equal(getVisualAnchorRenderer({ visualAnchorRenderer: "ppt_native" }), "ppt_native");
-  assert.throws(() => getVisualAnchorRenderer({ visualAnchorRenderer: "auto" }), /Unsupported visual anchor renderer/);
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { y_label: "得分", categories: ["A"], series: [{ name: "S", values: [1] }] } }), { visualAnchorRenderer: "ppt_native" }), "ppt_native");
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } }), { visualAnchorRenderer: "rough_svg" }), "ppt_native");
-  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png", caption: "来源图" }, visual_spec: undefined }), { visualAnchorRenderer: "rough_svg" }), "evidence");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Quantity", template: "bar_chart", visual_spec: { y_label: "得分", categories: ["A"], series: [{ name: "S", values: [1] }] } })), "rough_svg");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Sequence", template: "swimlane", visual_spec: { lanes: [{ id: "a", label: "A", steps: [{ id: "s1", label: "S1" }] }] } })), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Network", template: "hub_spoke_network", visual_spec: { hub: { id: "h", label: "H" }, nodes: [{ id: "n1", label: "N1" }, { id: "n2", label: "N2" }], edges: [["h", "n1"], ["h", "n2"]] } })), "rough_svg");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } })), "ppt_native");
+  assert.equal(resolveVisualAnchorRenderPath(baseSpec({ kind: "Evidence", template: "source_figure", source: { path: "figure.png", caption: "来源图" }, visual_spec: undefined })), "evidence");
   assert.throws(() => validateVisualAnchorSpec(baseSpec({ renderer: "rough_svg" })), /renderer is a runtime setting/);
   assert.throws(() => validateVisualAnchorSpec({ id: "old", title: "Old", claim: "旧接口。", intent: "Quantity", template: "bar_chart", visual_spec: {} }), /Use kind instead/);
   assert.throws(() => createVisualAnchorSvg(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } })), /not rough_svg SVG export/);
+  assert.throws(() => createVisualAnchorSvg(baseSpec({ kind: "Quantity", template: "data_cards", visual_spec: { cards: [{ id: "a", label: "A", value: "1" }] } })), /not rough_svg SVG export/);
+  assert.throws(() => renderVisualAnchorPptNative(createHuaweiDeck({ title: "x" }).addSlide(), baseSpec({ kind: "Network", template: "dependency_graph", visual_spec: { nodes: [{ id: "a", label: "A" }, { id: "b", label: "B" }], edges: [["a", "b"]] } })), /not ppt_native/);
   assert.throws(() => renderVisualAnchorRoughSvg(baseSpec({ kind: "Matrix", template: "table", visual_spec: { rows: [["A"]] } })), /not rough_svg/);
 }
 

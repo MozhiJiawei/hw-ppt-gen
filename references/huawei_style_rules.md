@@ -23,9 +23,9 @@ Use this reference after inspecting `assets/slides_ref/` and before writing gene
 | Body | 12 | Regular | Dense Chinese business prose |
 | Conclusion / interpretation body | 14 | Regular | Use only for larger conclusion or interpretation boxes |
 | KPI / data emphasis | 18 | Regular | Impact allowed for large numbers |
-| Footers and compact captions | 6 | Regular | Never below 6 |
+| Footers and compact captions | 10 | Regular | Minimum readable size |
 
-Use only 6, 12, 14, 18, and 24 pt. Use no more than five font sizes on one slide, and prefer fewer when the layout is not a dense table or data panel.
+Use only 10, 12, 14, 18, and 24 pt. Use no more than five font sizes on one slide, and prefer fewer when the layout is not a dense table or data panel.
 
 ## Layout Components
 
@@ -56,6 +56,6 @@ Use only 6, 12, 14, 18, and 24 pt. Use no more than five font sizes on one slide
 - No colors with `#` in generation code.
 - No 8-digit ARGB/RGBA hex colors.
 - No Unicode bullet glyphs.
-- Minimum font size is 6 pt.
+- Minimum font size is 10 pt. Font sizes outside 10/12/14/18/24 pt are hard QA errors.
 - Standard line width is 0.5 pt.
 - Every正文内容页 must include `分析总结`; cover, contents, and chapter divider slides must not include it.

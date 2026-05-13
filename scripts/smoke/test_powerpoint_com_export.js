@@ -39,7 +39,6 @@ const {
   chooseTemplateLayout,
   createVisualAnchorImage,
   createVisualAnchorSvg,
-  getVisualAnchorRenderer,
   renderVisualAnchorPptNative,
   renderVisualAnchorRoughSvg,
   resolveVisualAnchorRenderPath,
@@ -192,12 +191,12 @@ function visualSpecs() {
     baseSpec("Hierarchy", "layered_architecture", {
       layers: [
         { id: "prompt", label: "Prompt 层", items: ["visual_anchor"] },
-        { id: "script", label: "脚本层", items: ["content entry", "diagram renderer"] },
+        { id: "script", label: "脚本层", items: ["content entry", "diagram helper"] },
         { id: "export", label: "导出层", items: ["PowerPoint COM"] },
       ],
       side_label: "检查",
       side_modules: ["QA"],
-      edges: [["visual_anchor", "content entry"], ["diagram renderer", "PowerPoint COM"], ["QA", "content entry"]],
+      edges: [["visual_anchor", "content entry"], ["diagram helper", "PowerPoint COM"], ["QA", "content entry"]],
     }),
     baseSpec("Hierarchy", "capability_stack", {
       levels: [
@@ -265,13 +264,12 @@ function visualSpecs() {
 
 function exerciseDiagramInterfaces(specs) {
   fs.mkdirSync(ASSET_DIR, { recursive: true });
-  const roughSpec = specs.find((spec) => spec.kind === "Sequence" && spec.template === "process");
+  const roughSpec = specs.find((spec) => spec.kind === "Quantity" && spec.template === "line_chart");
   validateVisualAnchorSpec(roughSpec);
   assert(DIAGRAM_STYLE.color.red === "#C00000", "DIAGRAM_STYLE should expose Huawei red");
   assert(TEMPLATE_LAYOUTS.bar_chart === "16:9", "TEMPLATE_LAYOUTS should expose fixed layouts");
   assert(chooseTemplateLayout(roughSpec) === "16:9", "chooseTemplateLayout should return 16:9");
-  assert(getVisualAnchorRenderer({ visualAnchorRenderer: "ppt_native" }) === "ppt_native", "getVisualAnchorRenderer should read runtime policy");
-  assert(resolveVisualAnchorRenderPath(roughSpec, { visualAnchorRenderer: "rough_svg" }) === "rough_svg", "resolveVisualAnchorRenderPath should resolve rough SVG");
+  assert(resolveVisualAnchorRenderPath(roughSpec) === "rough_svg", "resolveVisualAnchorRenderPath should resolve the fixed output path");
   assert(renderVisualAnchorRoughSvg(roughSpec).svg.includes("<svg"), "renderVisualAnchorRoughSvg should return SVG");
   assert(createVisualAnchorSvg(roughSpec).includes("<svg"), "createVisualAnchorSvg should return SVG markup");
   assert(createVisualAnchorImage(roughSpec, { width: 720 }).format === "svg", "createVisualAnchorImage should return SVG image metadata");
@@ -306,14 +304,14 @@ function addPrimitiveSlide(pptx) {
   addFooter(slide, { source: "开发测试", page: "03" });
 }
 
-function addDirectRendererSlides(pptx, specs) {
+function addDirectHelperSlides(pptx, specs) {
   const slide = pptx.addSlide();
   addPageTitle(slide, "直接渲染接口", {
-    subtitle: "renderVisualAnchorPptNative 与 addEvidenceModule",
+    subtitle: "底层 helper 与 addEvidenceModule",
     sections: ["接口覆盖"],
     currentSection: "接口覆盖",
   });
-  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页绕过正文页入口，专门验证底层渲染接口。" }] });
+  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页绕过正文页入口，专门验证底层 helper。" }] });
   renderVisualAnchorPptNative(slide, specs.find((spec) => spec.template === "process"), { x: 0.7, y: 2.05, w: 5.7, h: 3.2 });
   addEvidenceModule(slide, specs.find((spec) => spec.kind === "Evidence"), { x: 6.75, y: 2.05, w: 5.7, h: 3.2 });
   addFooter(slide, { source: "开发测试", page: "04" });
@@ -347,7 +345,7 @@ async function buildDeck() {
   addTocSlide(pptx, {
     title: "目录 CONTENTS",
     items: [
-      { title: "接口覆盖", note: "页面 primitives 与底层渲染接口" },
+      { title: "接口覆盖", note: "页面 primitives 与底层 helper" },
       { title: "锚点覆盖", note: "Evidence + 六大能力全部进入 PPTX" },
       { title: "导出验证", note: "PowerPoint COM 打开并逐页导出" },
     ],
@@ -355,7 +353,7 @@ async function buildDeck() {
     page: "02",
   });
   addPrimitiveSlide(pptx);
-  addDirectRendererSlides(pptx, specs);
+  addDirectHelperSlides(pptx, specs);
 
   specs.forEach((spec, idx) => {
     addVisualAnchorContentSlide(pptx, {
@@ -401,13 +399,13 @@ async function main() {
 
    const visualManifest = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
    const roughEntries = visualManifest.slides.filter((entry) => entry.renderer === "rough_svg");
-   assert(roughEntries.length > 0, "interface test should include rough_svg content slides");
+   assert(roughEntries.length > 0, "interface test should include image-based content slides");
    roughEntries.forEach((entry) => {
-     assert(entry.image_area && entry.anchor_area, "rough_svg entries should record image_area and anchor_area");
-     assert(entry.image_width > 0 && entry.image_height > 0, "rough_svg entries should record image dimensions");
+     assert(entry.image_area && entry.anchor_area, "image-based entries should record image_area and anchor_area");
+     assert(entry.image_width > 0 && entry.image_height > 0, "image-based entries should record image dimensions");
      const imageRatio = entry.image_width / entry.image_height;
      const placedRatio = entry.image_area.w / entry.image_area.h;
-     assert(approxEqual(imageRatio, placedRatio), `rough_svg entry ${entry.visual_anchor_id} should preserve image aspect ratio`);
+     assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_anchor_id} should preserve image aspect ratio`);
    });
 
   console.log(`PowerPoint COM interface export test passed: ${OUT}`);

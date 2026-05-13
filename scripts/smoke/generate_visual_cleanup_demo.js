@@ -147,7 +147,7 @@ async function main() {
 
   addVisualAnchorContentSlide(pptx, {
     title: "网络关系",
-    titleNote: "节点说明和默认中心字样不再由渲染器发明",
+    titleNote: "节点说明和默认中心字样必须来自输入数据",
     sections,
     currentSection: "验证闭环",
     summary: {
@@ -176,7 +176,7 @@ async function main() {
     },
     visualAnchorCaption: "图 4：网络图只表达实体连接，节点说明和业务解释保留在 PPT 文本层。",
     supportingCards: [
-      { title: "同类清理", body: ["删除默认中文兜底", "渲染器不发明节点文字", "输入是什么就展示什么"] },
+      { title: "同类清理", body: ["删除默认中文兜底", "节点文字来自输入", "输入是什么就展示什么"] },
       { title: "生成物扫描", body: ["没有旧说明文字", "没有旧空框路径", "没有虚线说明路径"] },
     ],
     source,

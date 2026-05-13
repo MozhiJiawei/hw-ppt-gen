@@ -7,7 +7,7 @@ Use this reference when planning or implementing the primary visual anchor for a
 - [Contract](#contract)
 - [Top-Level Kinds](#top-level-kinds)
 - [Templates](#templates)
-- [Runtime Rendering Policy](#runtime-rendering-policy)
+- [Visual Output Boundary](#visual-output-boundary)
 - [Evidence](#evidence)
 - [Layout Rule](#layout-rule)
 - [Quality Gates](#quality-gates)
@@ -16,7 +16,7 @@ Use this reference when planning or implementing the primary visual anchor for a
 
 Every正文内容页 has at least one primary `visual_anchor`. Rich content-layout pages may contain multiple visual anchors when the reference layout needs multiple visual/text panels; each rendered anchor must be recorded in the manifest.
 
-The model-facing visual anchor spec has no renderer field:
+The model-facing visual anchor spec is semantic:
 
 ```json
 {
@@ -46,9 +46,9 @@ Recommended semantic fields outside `visual_spec`:
 - `highlight_reason`: required whenever `visual_spec.highlight` is present; this must also be reflected in visible slide text.
 - `score_basis`: required when matrix/heatmap values are subjective scores rather than sourced measurements.
 
-Never include `renderer`, `expected_renderer`, `visual_strategy`, or the old `intent` field on a slide, content layout, or individual visual anchor. Rendering is a deck-level policy recorded once as top-level `visual_anchor_renderer` and passed once to `createHuaweiDeck({ visualAnchorRenderer })`.
+Never include implementation-control fields such as `visual_strategy` or the old `intent` field on a slide, content layout, deck plan, manifest, or individual visual anchor.
 
-Do not put slide-level wording inside SVG data. `title` and `claim` are planning/manifest metadata, not image text. Do not include standalone explanation fields anywhere under `visual_spec`, such as `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards. For conceptual visual anchors, use `visualAnchorCaption` / `visual_anchor_caption` on `addVisualAnchorContentSlide` to render the editable figure-legend text below the visual anchor.
+Do not put slide-level wording inside visual-anchor data. `title` and `claim` are planning/manifest metadata, not visual text. Do not include standalone explanation fields anywhere under `visual_spec`, such as `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`; put captions, page claims, figure legends, source notes, and interpretation paragraphs in editable PPT text boxes or supporting cards. For conceptual visual anchors, use `visualAnchorCaption` / `visual_anchor_caption` on `addVisualAnchorContentSlide` to render the editable figure-legend text below the visual anchor.
 
 `visual_spec` is closed at the top level for each template. Do not add ad hoc keys to carry prose. If the slide needs prose, put it in `summary`, supporting cards, evidence legends, or other PPT text-layer fields outside the image spec.
 
@@ -92,19 +92,11 @@ Supported model-facing templates:
 - Matrix: `table`, `quadrant_matrix`, `capability_matrix`, `heatmap`.
 - Network: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`.
 
-These names are semantic templates, not renderer names. For example, `bar_chart` may render through rough SVG or PPT native code depending on the deck-level renderer.
+These names are semantic templates. The model selects the relationship template and supplies the structured data.
 
-## Runtime Rendering Policy
+## Visual Output Boundary
 
-The model chooses rendering once per deck, not per slide or per anchor. Record the choice as top-level `visual_anchor_renderer: "rough_svg"` or `"ppt_native"` in the plan, and pass the same value to `createHuaweiDeck({ visualAnchorRenderer })`. Default is `rough_svg`.
-
-Rough SVG output is an image of the visual relationship only. It may contain node labels, axis labels, values, and time labels, but it must not render page titles, slide claims, figure legends, source notes, standalone interpretation callouts, node notes, bottom slogans, side explanations, or decorative empty placeholders.
-
-Fixed overrides:
-
-- `Evidence` ignores the global renderer and is handled as an evidence module.
-- `Matrix` + `template: "table"` is always rendered by the visual-anchor table path with an internal native PPT table, independent of the deck-level renderer.
-- All other conceptual anchors use the configured global renderer.
+Visual anchors describe the visual relationship only. They may contain node labels, axis labels, values, and time labels, but they must not render page titles, slide claims, figure legends, source notes, standalone interpretation callouts, node notes, bottom slogans, side explanations, or decorative empty placeholders.
 
 ## Evidence
 
@@ -132,7 +124,7 @@ Evidence modules must include a nearby Chinese figure/table legend, source note,
 
 Generated or transcribed tables on正文内容页 must be `Matrix/table` visual anchors. They are not page-level helper calls and they are not `contentLayout` table blocks.
 
-This keeps tables inside the plan, manifest, and QA path while still producing editable native PPT tables internally.
+This keeps tables inside the plan, manifest, and QA path while still producing editable tables.
 
 ## Layout Rule
 
@@ -156,7 +148,7 @@ Do not make a visual anchor a full-slide poster.
 - Confirm every `highlight` has `highlight_reason`, and that the visible slide text explains the reason.
 - Confirm subjective risk/priority/capability judgments are not rendered as decimal scores without `score_basis`.
 - Confirm generated labels are readable and not clipped.
-- Confirm rough SVG images contain only diagram-native labels, values, axes, and time labels. Page-level explanations must remain editable PPT text. Fail any generated image that includes standalone explanatory phrases, captions, source notes, node notes, or empty red callout boxes.
-- Confirm rough SVG images are placed with proportional contain scaling; leave whitespace or redesign the layout rather than stretching the image to fill a region.
+- Confirm generated visual anchors contain only relationship-native labels, values, axes, and time labels. Page-level explanations must remain editable PPT text. Fail any generated visual output that includes standalone explanatory phrases, captions, source notes, node notes, or empty red callout boxes.
+- Confirm generated image output is placed with proportional contain scaling; leave whitespace or redesign the layout rather than stretching the image to fill a region.
 - Run `npm run test:diagram` after changing visual-anchor helpers.
-- Run `npm run diagram-smoke` for rough SVG template changes and inspect the generated review deck.
+- Run `npm run diagram-smoke` for visual-anchor template changes and inspect the generated review decks.

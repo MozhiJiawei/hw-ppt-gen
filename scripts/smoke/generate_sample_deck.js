@@ -16,8 +16,7 @@ async function main() {
   const output = ensureTmpPath(process.argv[2] || path.join(".tmp", "sample_huawei_deck.pptx"));
   const manifestPath = ensureTmpPath(output.replace(/\.pptx$/i, "_visual_anchor_manifest.json"));
   const planPath = ensureTmpPath(output.replace(/\.pptx$/i, "_plan.json"));
-  const visualAnchorRenderer = "rough_svg";
-  const pptx = createHuaweiDeck({ title: "Huawei-style visual anchor sample", visualAnchorRenderer });
+  const pptx = createHuaweiDeck({ title: "Huawei-style visual anchor sample" });
   const sections = ["生成工作流", "视觉锚点", "质量检查"];
   const source = "来源：Huawei PPTX Generator 示例";
   const planSlides = [];
@@ -132,7 +131,7 @@ async function main() {
     currentSection: "视觉锚点",
     summary: {
       body: [
-        { label: "职责分离", text: "页面骨架只处理标题、总结和页脚，主视觉交给锚点渲染器。" },
+        { label: "职责分离", text: "页面骨架只处理标题、总结和页脚，主视觉交给视觉锚点。" },
         { label: "结构清晰", text: "能力栈帮助读者理解各层职责，视觉锚点是关键，因为它承接骨架并支撑解释模块。" },
       ],
     },
@@ -193,7 +192,7 @@ async function main() {
   });
 
   writeVisualAnchorManifest(pptx, manifestPath);
-  fs.writeFileSync(planPath, JSON.stringify({ visual_anchor_renderer: visualAnchorRenderer, slides: planSlides }, null, 2), "utf8");
+  fs.writeFileSync(planPath, JSON.stringify({ slides: planSlides }, null, 2), "utf8");
   await pptx.writeFile({ fileName: output });
   await repairPptxForPowerPointCom(output);
   console.log(`Wrote ${output}`);

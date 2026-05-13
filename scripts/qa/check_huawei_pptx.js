@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
-const { validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
+const { resolveVisualAnchorRenderPath, validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
 
 const ALLOWED_FONTS = new Set([
   "Microsoft YaHei",
@@ -34,7 +34,7 @@ const ALLOWED_COLORS = new Set([
 ]);
 
 const STANDARD_LINE_WIDTH = 6350;
-const ALLOWED_FONT_SIZES = new Set([6, 8, 12, 14, 18, 24]);
+const ALLOWED_FONT_SIZES = new Set([10, 12, 14, 18, 24]);
 const CONTENT_CARD_FILLS = new Set(["F2F2F2", "F7F7F7", "FFF1EF", "FCE4E0"]);
 const CONTENT_LAYOUT_SCHEMA_RULES = Object.freeze({
   two_column: { reference: "05 内容 二分栏", moduleCount: 2 },
@@ -549,15 +549,12 @@ function checkSlideXml(name, xml) {
     if (!Number.isFinite(raw)) continue;
     const points = raw / 100;
     fontSizes.add(points);
-    if (points < 6) {
-      issues.push(issue(slide, "font_size_min", "error", `Font size ${points}pt is below 6pt.`, { value: points }));
-    }
   }
   const unexpectedFontSizes = [...fontSizes].filter((points) => !ALLOWED_FONT_SIZES.has(points));
   if (unexpectedFontSizes.length) {
-    issues.push(issue(slide, "font_size_unexpected", "warning", `Slide uses font sizes outside the Huawei size set 12/14/18/24pt plus 6pt footer/caption and 8pt section-tab exceptions.`, { values: unexpectedFontSizes.sort((a, b) => a - b) }));
+    issues.push(issue(slide, "font_size_unexpected", "error", `Slide uses font sizes outside the Huawei size set 10/12/14/18/24pt.`, { values: unexpectedFontSizes.sort((a, b) => a - b), allowed: [...ALLOWED_FONT_SIZES].sort((a, b) => a - b) }));
   }
-  if (fontSizes.size > 6) {
+  if (fontSizes.size > 5) {
     issues.push(issue(slide, "font_size_variety", "warning", `Slide uses ${fontSizes.size} font sizes; keep typography to the approved size set.`, { values: [...fontSizes].sort((a, b) => a - b) }));
   }
 
@@ -665,7 +662,7 @@ function checkSlideXml(name, xml) {
     }
 
     const maxSize = Math.max(...shape.fontSizes, 0) || 12;
-    if (maxSize >= 12 && shape.w && shape.h) {
+    if (maxSize >= 10 && shape.w && shape.h) {
       const estimatedLines = estimateWrappedLines(shape.text, maxSize, Math.max(shape.w - 0.08, 0.1));
       const availableLines = availableTextLines(shape, maxSize, maxSize >= 18 ? 1.15 : 1.5);
       if (estimatedLines > availableLines + 0.35) {
@@ -845,21 +842,21 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     }
     issues.push(...checkVisualAnchorSemantics(slide, entry, visibleText));
     issues.push(...checkVisualAnchorLayout(slide, entry));
-    issues.push(...checkVisualAnchorRendererPolicy(slide, entry, manifest));
+    issues.push(...checkVisualAnchorManifestContract(slide, entry, manifest));
     issues.push(...checkVisualAnchorTableCapacity(slide, entry));
     if (entry.renderer === "rough_svg") {
       const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
         && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
       const areaValid = isRectLike(entry.anchor_area) && isRectLike(entry.image_area);
       if (!dimValid || !areaValid) {
-        issues.push(issue(slide, "content_visual_anchor_image_missing", "error", "rough_svg visual anchors must record positive image dimensions and actual image placement.", {
+        issues.push(issue(slide, "content_visual_anchor_image_missing", "error", "Image-based visual anchors must record positive image dimensions and actual image placement.", {
           image_width: entry.image_width,
           image_height: entry.image_height,
           image_area: entry.image_area,
           anchor_area: entry.anchor_area,
         }));
       } else if (!isContained(entry.image_area, entry.anchor_area) || !hasMatchingAspectRatio(entry.image_area, entry.image_width, entry.image_height)) {
-        issues.push(issue(slide, "content_visual_anchor_image_invalid", "error", "rough_svg visual anchor image must stay inside the anchor area and preserve aspect ratio.", {
+        issues.push(issue(slide, "content_visual_anchor_image_invalid", "error", "Image-based visual anchor output must stay inside the anchor area and preserve aspect ratio.", {
           image_width: entry.image_width,
           image_height: entry.image_height,
           image_area: entry.image_area,
@@ -961,15 +958,6 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
     return [issue(null, "content_visual_anchor_plan_invalid", "error", "Deck plan must contain a slides array for visual-anchor alignment.")];
   }
   const issues = [];
-  const plannedRenderer = safeText(plan.visual_anchor_renderer || plan.visualAnchorRenderer || "");
-  if (!["rough_svg", "ppt_native"].includes(plannedRenderer)) {
-    issues.push(issue(null, "content_visual_anchor_renderer_config_missing", "error", "Deck plan must declare one top-level visual_anchor_renderer: rough_svg or ppt_native."));
-  } else if (safeText(manifest.visual_anchor_renderer || "") && safeText(manifest.visual_anchor_renderer) !== plannedRenderer) {
-    issues.push(issue(null, "content_visual_anchor_renderer_mismatch", "error", "Visual-anchor manifest renderer does not match the deck-level plan renderer.", {
-      planned_renderer: plannedRenderer,
-      manifest_renderer: manifest.visual_anchor_renderer,
-    }));
-  }
   const manifestByPage = new Map();
   for (const entry of manifestEntries || []) {
     const page = Number(entry.page);
@@ -988,9 +976,6 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
     const plannedAnchors = Array.isArray(plannedSlide.visual_anchors) && plannedSlide.visual_anchors.length
       ? plannedSlide.visual_anchors
       : (plannedSlide.visual_anchor ? [plannedSlide.visual_anchor] : []);
-    if (plannedSlide.renderer || plannedSlide.expected_renderer || plannedSlide.content_layout?.renderer || plannedSlide.content_layout?.expected_renderer) {
-      issues.push(issue(page, "content_visual_anchor_renderer_scope_invalid", "error", "Renderer selection is deck-level only; do not put renderer fields on slides or content_layout."));
-    }
     if (!plannedAnchors.length) {
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchors[].kind and visual_anchors[].template."));
       continue;
@@ -1014,12 +999,6 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
           planned_template: planned.template || "",
         }));
         return;
-      }
-      if (planned.renderer || planned.expected_renderer) {
-        issues.push(issue(page, "content_visual_anchor_renderer_scope_invalid", "error", "Renderer selection is deck-level only; do not put renderer fields on individual visual anchors.", {
-          planned_index: idx,
-          planned_id: planned.id || "",
-        }));
       }
       for (const [field, type] of [
         ["why_this_visual", "content_visual_anchor_plan_reason_missing"],
@@ -1074,44 +1053,42 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
       }
     });
 
-    if (["rough_svg", "ppt_native"].includes(plannedRenderer)) {
-      for (const entry of actualEntries) {
-        const spec = entry.visual_anchor || {};
-        const expectedEntryRenderer = spec.kind === "Evidence"
-          ? "evidence"
-          : (spec.kind === "Matrix" && spec.template === "table" ? "ppt_native" : plannedRenderer);
-        if (entry.renderer !== expectedEntryRenderer) {
-          issues.push(issue(page, "content_visual_anchor_renderer_mismatch", "error", "Visual anchor renderer does not match the deck plan renderer.", {
-            visual_anchor_id: entry.visual_anchor_id || spec.id || "",
-            expected_deck_renderer: expectedEntryRenderer,
-            actual_renderer: entry.renderer || "",
-          }));
-        }
-        if (expectedEntryRenderer === "rough_svg" && entry.image_format !== "svg") {
-          issues.push(issue(page, "content_visual_anchor_renderer_mismatch", "error", "rough_svg visual anchors must be recorded as SVG images in the manifest.", {
-            visual_anchor_id: entry.visual_anchor_id || spec.id || "",
-            image_format: entry.image_format || "",
-          }));
-        }
+    for (const entry of actualEntries) {
+      const spec = entry.visual_anchor || {};
+      const expectedEntryRenderer = resolveVisualAnchorRenderPath(spec);
+      if (entry.renderer !== expectedEntryRenderer) {
+        issues.push(issue(page, "content_visual_anchor_manifest_mismatch", "error", "Visual-anchor manifest output evidence does not match the fixed template contract.", {
+          visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+          expected_output: expectedEntryRenderer,
+          actual_output: entry.renderer || "",
+        }));
+      }
+      if (expectedEntryRenderer === "rough_svg" && entry.image_format !== "svg") {
+        issues.push(issue(page, "content_visual_anchor_manifest_mismatch", "error", "Image-based visual anchors must record their image format in the manifest.", {
+          visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+          image_format: entry.image_format || "",
+        }));
       }
     }
   }
   return issues;
 }
 
-function checkVisualAnchorRendererPolicy(slide, entry, manifest = {}) {
+function checkVisualAnchorManifestContract(slide, entry) {
   const issues = [];
   const spec = entry.visual_anchor || {};
-  const deckRenderer = safeText(manifest.visual_anchor_renderer || "");
-  if (deckRenderer && !["rough_svg", "ppt_native"].includes(deckRenderer)) {
-    issues.push(issue(slide, "content_visual_anchor_renderer_config_invalid", "error", "Visual-anchor manifest must record a deck-level renderer of rough_svg or ppt_native.", {
-      visual_anchor_renderer: deckRenderer,
+  const expectedRenderer = resolveVisualAnchorRenderPath(spec);
+  if (entry.renderer !== expectedRenderer) {
+    issues.push(issue(slide, "content_visual_anchor_manifest_mismatch", "error", "Visual-anchor manifest output evidence does not match the fixed template contract.", {
+      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      expected_output: expectedRenderer,
+      actual_output: entry.renderer || "",
     }));
   }
   if (spec.kind === "Matrix" && spec.template === "table" && entry.renderer !== "ppt_native") {
-    issues.push(issue(slide, "content_visual_anchor_table_not_native", "error", "Matrix/table visual anchors must always render as native PowerPoint tables.", {
+    issues.push(issue(slide, "content_visual_anchor_table_contract_mismatch", "error", "Matrix/table visual anchors must remain editable table output.", {
       visual_anchor_id: entry.visual_anchor_id || spec.id || "",
-      actual_renderer: entry.renderer || "",
+      actual_output: entry.renderer || "",
     }));
   }
   return issues;

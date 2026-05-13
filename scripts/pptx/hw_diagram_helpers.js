@@ -42,7 +42,8 @@ const DIAGRAM_STYLE = Object.freeze({
 
 const TEXT_LIMITS = Object.freeze({
   minSvgFontSize: 14,
-  minNativeFontSize: 6,
+  minNativeFontSize: 10,
+  allowedNativeFontSizes: [24, 18, 14, 12, 10],
 });
 
 const TEMPLATE_LAYOUTS = Object.freeze({
@@ -67,6 +68,36 @@ const TEMPLATE_LAYOUTS = Object.freeze({
   dependency_graph: "16:9",
   module_interaction_map: "16:9",
   causal_influence_graph: "16:9",
+});
+
+const TEMPLATE_RENDERERS = Object.freeze({
+  source_figure: "evidence",
+  source_table: "evidence",
+  source_screenshot: "evidence",
+  source_chart: "evidence",
+
+  data_cards: "ppt_native",
+  heatmap: "ppt_native",
+  process: "ppt_native",
+  timeline: "ppt_native",
+  capability_stack: "ppt_native",
+  capability_matrix: "ppt_native",
+  table: "ppt_native",
+
+  bar_chart: "rough_svg",
+  line_chart: "rough_svg",
+  proportion_chart: "rough_svg",
+  swimlane: "ppt_native",
+  closed_loop: "rough_svg",
+  dual_loop: "rough_svg",
+  spiral_iteration_ladder: "rough_svg",
+  tree: "rough_svg",
+  layered_architecture: "rough_svg",
+  quadrant_matrix: "rough_svg",
+  hub_spoke_network: "rough_svg",
+  dependency_graph: "rough_svg",
+  module_interaction_map: "rough_svg",
+  causal_influence_graph: "rough_svg",
 });
 
 const STANDALONE_VISUAL_SPEC_TEXT_FIELDS = Object.freeze([
@@ -177,7 +208,7 @@ function trimLineEnd(line) {
   return String(line || "").replace(/\s+$/g, "");
 }
 
-function wrapTextToWidth(text, opts = {}) {
+function wrapTextToWidthFixed(text, opts = {}) {
   const size = opts.size || 28;
   const minSize = opts.minSize || TEXT_LIMITS.minSvgFontSize;
   if (size < minSize) {
@@ -234,6 +265,27 @@ function wrapTextToWidth(text, opts = {}) {
   return lines.length ? lines : [""];
 }
 
+function fitSvgTextToBox(text, opts = {}) {
+  const startSize = opts.size || 28;
+  const minSize = opts.minSize || TEXT_LIMITS.minSvgFontSize;
+  let lastError = null;
+  for (let size = startSize; size >= minSize; size -= 1) {
+    const lineHeightRatio = (opts.lineHeight || startSize * 1.25) / startSize;
+    const lineHeight = opts.lineHeight ? Math.max(size * 1.08, Math.round(size * lineHeightRatio)) : size * 1.25;
+    try {
+      const lines = wrapTextToWidthFixed(text, { ...opts, size, lineHeight });
+      return { lines, size, lineHeight };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function wrapTextToWidth(text, opts = {}) {
+  return fitSvgTextToBox(text, opts).lines;
+}
+
 function measureTextLines(lines, size, lineHeight) {
   const values = Array.isArray(lines) ? lines : [lines];
   return {
@@ -243,13 +295,12 @@ function measureTextLines(lines, size, lineHeight) {
 }
 
 function svgText(x, y, text, opts = {}) {
-  const size = opts.size || 28;
   const weight = opts.weight || 500;
   const anchor = opts.anchor || "middle";
   const fill = opts.fill || DIAGRAM_STYLE.color.ink;
   const family = opts.family || DIAGRAM_STYLE.font;
-  const lineHeight = opts.lineHeight || size * 1.25;
-  const lines = wrapTextToWidth(text, { ...opts, size, lineHeight });
+  const fitted = fitSvgTextToBox(text, opts);
+  const { size, lineHeight, lines } = fitted;
   const startY = y - ((lines.length - 1) * lineHeight) / 2;
   const tspans = lines
     .map((line, i) => `<tspan x="${x}" y="${startY + i * lineHeight}">${escapeXml(line)}</tspan>`)
@@ -272,10 +323,9 @@ function estimateTextWidth(text, size) {
 }
 
 function getTextBounds(x, y, text, opts = {}) {
-  const size = opts.size || 28;
   const anchor = opts.anchor || "middle";
-  const lineHeight = opts.lineHeight || size * 1.25;
-  const lines = wrapTextToWidth(text, { ...opts, size, lineHeight });
+  const fitted = fitSvgTextToBox(text, opts);
+  const { size, lineHeight, lines } = fitted;
   const maxWidth = Math.max(...lines.map((line) => estimateTextWidth(line, size)), size * 0.8);
   const totalHeight = lineHeight * Math.max(1, lines.length);
   const padX = Math.max(8, size * 0.22);
@@ -1415,10 +1465,6 @@ function drawQuadrantMatrix(spec) {
   canvas.add(svgText(x0 - 58, y0 + h, visual.y_axis.bottom, { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
   canvas.add(svgText(x0 - 58, y0, visual.y_axis.top, { size: 20, anchor: "end", fill: colors.muted, maxWidth: 180, maxLines: 2 }));
 
-  if ((visual.items || []).length > 8) {
-    throw new Error(`quadrant_matrix supports at most 8 items without tiny labels; received ${(visual.items || []).length}.`);
-  }
-
   (visual.items || []).forEach((item, i) => {
     const px = x0 + Math.max(0.06, Math.min(0.94, Number(item.x) || 0.5)) * w;
     const py = y0 + (1 - Math.max(0.06, Math.min(0.94, Number(item.y) || 0.5))) * h;
@@ -1613,21 +1659,12 @@ function drawHubSpokeNetwork(spec) {
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
-function getVisualAnchorRenderer(config = {}) {
-  const renderer = typeof config === "string"
-    ? config
-    : (config.visualAnchorRenderer || config.visual_anchor_renderer || "rough_svg");
-  if (!["rough_svg", "ppt_native"].includes(renderer)) {
-    throw new Error(`Unsupported visual anchor renderer: ${renderer}. Use rough_svg or ppt_native.`);
-  }
-  return renderer;
-}
-
-function resolveVisualAnchorRenderPath(spec, config = {}) {
+function resolveVisualAnchorRenderPath(spec) {
   validateVisualAnchorSpec(spec);
-  if (spec.kind === "Evidence") return "evidence";
-  if (spec.kind === "Matrix" && spec.template === "table") return "ppt_native";
-  return getVisualAnchorRenderer(config);
+  const template = spec.template || spec.kind;
+  const renderer = TEMPLATE_RENDERERS[template];
+  if (!renderer) throw new Error(`Unsupported visual anchor template renderer: ${spec.kind}/${template}`);
+  return renderer;
 }
 
 function renderVisualAnchorRoughSvg(spec, options = {}) {
@@ -1714,10 +1751,9 @@ function normalizeNativeMargin(margin) {
   return 0.04;
 }
 
-function wrapNativeTextToBox(text, opts) {
+function wrapNativeTextToBoxAtSize(text, opts, fontSize) {
   const value = safeText(text);
   if (!value) return "";
-  const fontSize = opts.fontSize || 11;
   if (fontSize < TEXT_LIMITS.minNativeFontSize) {
     throw new Error(`ppt_native text font size ${fontSize} is below the ${TEXT_LIMITS.minNativeFontSize}pt minimum: ${value}`);
   }
@@ -1774,19 +1810,66 @@ function wrapNativeTextToBox(text, opts) {
   return output.join("\n");
 }
 
+function fitNativeTextToBox(text, opts) {
+  const startSize = opts.fontSize || 12;
+  let lastError = null;
+  const candidateSizes = TEXT_LIMITS.allowedNativeFontSizes.filter((fontSize) => fontSize <= startSize);
+  for (const fontSize of candidateSizes) {
+    try {
+      return {
+        text: wrapNativeTextToBoxAtSize(text, opts, fontSize),
+        fontSize,
+      };
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
 function nativeText(slide, text, options = {}) {
   if (options.fit) {
     throw new Error(`ppt_native text does not allow fit:${options.fit}; resize the box, wrap text, or reject the render.`);
   }
   const opts = {
     fontFace: "Microsoft YaHei",
-    fontSize: 11,
+    fontSize: 12,
     color: "333333",
     margin: 0.04,
     breakLine: false,
     ...options,
   };
-  slide.addText(wrapNativeTextToBox(text, opts), opts);
+  const fitted = fitNativeTextToBox(text, opts);
+  slide.addText(fitted.text, { ...opts, fontSize: fitted.fontSize });
+}
+
+function nativeTextCell(slide, text, options = {}) {
+  const {
+    fill = "F7F7F7",
+    stroke = "D9D9D9",
+    strokeWidth = 0.5,
+    ...textOptions
+  } = options;
+  if (textOptions.fit) {
+    throw new Error(`ppt_native text cell does not allow fit:${textOptions.fit}; resize the cell or shorten text.`);
+  }
+  const opts = {
+    fontFace: "Microsoft YaHei",
+    fontSize: 10,
+    color: "333333",
+    margin: 0,
+    breakLine: false,
+    align: "center",
+    valign: "mid",
+    ...textOptions,
+  };
+  const fitted = fitNativeTextToBox(text, opts);
+  slide.addText(fitted.text, {
+    ...opts,
+    fontSize: fitted.fontSize,
+    fill: { color: fill },
+    line: { color: stroke, width: strokeWidth },
+  });
 }
 
 function nativeRect(slide, x, y, w, h, options = {}) {
@@ -1821,6 +1904,51 @@ function nativeLine(slide, x1, y1, x2, y2, options = {}) {
   });
 }
 
+function nativeEllipse(slide, cx, cy, w, h, options = {}) {
+  slide.addShape("ellipse", {
+    x: cx - w / 2,
+    y: cy - h / 2,
+    w,
+    h,
+    fill: { color: options.fill || "FFFFFF", transparency: options.transparency ?? 0 },
+    line: { color: options.stroke || "BFBFBF", width: options.strokeWidth || 0.5 },
+  });
+}
+
+function nativeHatch(slide, x, y, w, h, options = {}) {
+  const color = options.color || "BFBFBF";
+  const width = options.width || 0.5;
+  const gap = options.gap || 0.18;
+  for (let offset = -h; offset < w; offset += gap) {
+    const x1 = x + Math.max(0, offset);
+    const y1 = y + Math.max(0, -offset);
+    const x2 = x + Math.min(w, offset + h);
+    const y2 = y + Math.min(h, h - Math.max(0, offset + h - w));
+    if (x2 > x1 && y2 > y1) nativeLine(slide, x1, y1, x2, y2, { color, width });
+  }
+}
+
+function nativeSketchRect(slide, x, y, w, h, options = {}) {
+  const highlighted = Boolean(options.highlighted);
+  const fill = options.fill || (highlighted ? "FFF1EF" : "F7F7F7");
+  const stroke = options.stroke || (highlighted ? "C00000" : "8C8C8C");
+  nativeRect(slide, x, y, w, h, { fill, stroke, strokeWidth: 0.5 });
+  nativeHatch(slide, x + 0.03, y + 0.03, Math.max(0.04, w - 0.06), Math.max(0.04, h - 0.06), {
+    color: options.hatchColor || (highlighted ? "C00000" : "D9D9D9"),
+    width: 0.5,
+    gap: options.hatchGap || 0.16,
+  });
+  slide.addShape(ShapeType.line, { x, y, w, h: 0, line: { color: stroke, width: 0.5 } });
+  slide.addShape(ShapeType.line, { x, y: y + h, w, h: 0, line: { color: stroke, width: 0.5 } });
+}
+
+function nativeSketchArrow(slide, x1, y1, x2, y2, options = {}) {
+  const color = options.color || "595959";
+  nativeLine(slide, x1, y1, x2, y2, { color, width: 0.5, endArrowType: "triangle" });
+  const wobble = options.wobble || 0.025;
+  nativeLine(slide, x1, y1 + wobble, x2, y2 - wobble, { color, width: 0.5 });
+}
+
 function drawNativeTable(slide, visual, area) {
   const rows = visual.rows || [];
   if (!rows.length) throw new Error("Matrix/table native render requires visual_spec.rows.");
@@ -1829,7 +1957,7 @@ function drawNativeTable(slide, visual, area) {
     y: area.y,
     w: area.w,
     h: area.h,
-    fontSize: area.h / Math.max(rows.length, 1) < 0.32 ? 8 : 10,
+    fontSize: 10,
     boldFirstColumn: true,
   });
 }
@@ -1879,8 +2007,7 @@ function drawNativeEvidence(slide, spec, area) {
     slide.addImage({ path: imagePath, ...fitted });
     return { image_area: fitted };
   } else {
-    nativeRect(slide, area.x + 0.08, area.y + 0.08, area.w - 0.16, area.h - 0.16, { fill: "F7F7F7", stroke: "D9D9D9" });
-    nativeText(slide, source.path || source.id, { x: area.x + 0.45, y: area.y + 0.72, w: area.w - 0.9, h: 0.32, fontSize: 12, bold: true, color: "595959", align: "center" });
+    nativeTextCell(slide, source.path || source.id, { x: area.x + 0.08, y: area.y + 0.08, w: area.w - 0.16, h: area.h - 0.16, fontSize: 12, bold: true, color: "595959", align: "center", fill: "F7F7F7", stroke: "D9D9D9" });
     return { image_area: imageBox, placeholder: true };
   }
 }
@@ -1922,9 +2049,9 @@ function drawNativeDataCards(slide, visual, area) {
   const gap = 0.14;
   const cardW = (area.w - gap * Math.max(0, cards.length - 1)) / Math.max(1, cards.length);
   const compact = area.h < 1.3 || cardW < 1.2;
-  const valueFontSize = compact ? 12 : 26;
-  const unitFontSize = compact ? 6 : 9;
-  const labelFontSize = compact ? 7 : 12;
+  const valueFontSize = compact ? 12 : 24;
+  const unitFontSize = 10;
+  const labelFontSize = compact ? 10 : 12;
   cards.forEach((card, idx) => {
     const x = area.x + idx * (cardW + gap);
     const highlighted = card.id === visual.highlight || card.label === visual.highlight;
@@ -1941,9 +2068,9 @@ function drawNativeDataCards(slide, visual, area) {
       nativeText(slide, card.label || "", { x: x + 0.04, y: labelY, w: cardW - 0.08, h: labelH, fontSize: labelFontSize, bold: true, align: "center" });
       return;
     }
-    nativeText(slide, card.value, { x: x + 0.08, y: area.y + (compact ? 0.2 : 0.34), w: cardW - 0.16, h: compact ? 0.24 : 0.42, fontFace: "Impact", fontSize: valueFontSize, color: highlighted ? "C00000" : "333333", align: "center" });
-    nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + (compact ? 0.48 : 0.8), w: cardW - 0.16, h: 0.18, fontSize: unitFontSize, color: "595959", align: "center" });
-    nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + (compact ? 0.68 : 1.15), w: cardW - 0.16, h: compact ? 0.18 : 0.22, fontSize: labelFontSize, bold: true, align: "center" });
+    nativeText(slide, card.value, { x: x + 0.08, y: area.y + 0.34, w: cardW - 0.16, h: 0.42, fontFace: "Impact", fontSize: valueFontSize, color: highlighted ? "C00000" : "333333", align: "center" });
+    nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + 0.8, w: cardW - 0.16, h: 0.18, fontSize: unitFontSize, color: "595959", align: "center" });
+    nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + 1.15, w: cardW - 0.16, h: 0.22, fontSize: labelFontSize, bold: true, align: "center" });
   });
 }
 
@@ -1965,7 +2092,7 @@ function drawNativeBarChart(slide, visual, area) {
       const highlighted = visual.highlight?.category === category && visual.highlight?.series === entry.name;
       nativeRect(slide, x, y, barW, h, { fill: highlighted ? "C00000" : "D9D9D9", stroke: highlighted ? "C00000" : "BFBFBF" });
     });
-    nativeText(slide, category, { x: chart.x + catIdx * groupW, y: chart.y + chart.h + 0.08, w: groupW, h: 0.16, fontSize: 7, align: "center" });
+    nativeText(slide, category, { x: chart.x + catIdx * groupW, y: chart.y + chart.h + 0.08, w: groupW, h: 0.2, fontSize: 10, align: "center" });
   });
 }
 
@@ -1989,40 +2116,179 @@ function drawNativeLineChart(slide, visual, area) {
     }
     points.forEach((point) => slide.addShape("ellipse", { x: point.x - 0.035, y: point.y - 0.035, w: 0.07, h: 0.07, fill: { color: seriesIdx ? "8C8C8C" : "C00000" }, line: { color: "FFFFFF", width: 0.2 } }));
   });
-  categories.forEach((category, idx) => nativeText(slide, category, { x: chart.x + idx * (chart.w / Math.max(1, categories.length - 1)) - 0.25, y: chart.y + chart.h + 0.08, w: 0.5, h: 0.16, fontSize: 7, align: "center" }));
+  categories.forEach((category, idx) => nativeText(slide, category, { x: chart.x + idx * (chart.w / Math.max(1, categories.length - 1)) - 0.25, y: chart.y + chart.h + 0.08, w: 0.5, h: 0.2, fontSize: 10, align: "center" }));
 }
 
 function drawNativeGrid(slide, visual, area) {
   const rows = visual.rows || [];
   const columns = visual.columns || [];
-  const cellW = area.w / Math.max(1, columns.length);
-  const cellH = area.h / Math.max(1, rows.length);
-  const cellFontSize = cellW < 1 || cellH < 0.35 ? 6 : 9;
-  const labelFontSize = cellW < 1 || cellH < 0.35 ? 6 : 8;
+  const hasRowLabels = rows.some((row) => safeText(row));
+  const hasColumnLabels = columns.some((column) => safeText(column));
+  const labelLeft = hasRowLabels ? Math.min(0.85, Math.max(0.38, area.w * 0.14)) : 0;
+  const labelTop = hasColumnLabels ? Math.min(0.42, Math.max(0.24, area.h * 0.12)) : 0;
+  const grid = {
+    x: area.x + labelLeft,
+    y: area.y + labelTop,
+    w: Math.max(0.3, area.w - labelLeft),
+    h: Math.max(0.3, area.h - labelTop),
+  };
+  const cellW = grid.w / Math.max(1, columns.length);
+  const cellH = grid.h / Math.max(1, rows.length);
+  const cellFontSize = 10;
+  const labelFontSize = 10;
   rows.forEach((row, rowIdx) => {
     columns.forEach((column, colIdx) => {
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
-      nativeRect(slide, area.x + colIdx * cellW, area.y + rowIdx * cellH, cellW - 0.03, cellH - 0.03, { fill: highlighted ? "FFF1EF" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"), stroke: highlighted ? "C00000" : "D9D9D9" });
-      nativeText(slide, String(valueAt(visual.values, rowIdx, colIdx)), { x: area.x + colIdx * cellW + 0.04, y: area.y + rowIdx * cellH + 0.06, w: cellW - 0.08, h: Math.max(0.14, cellH - 0.08), fontSize: cellFontSize, align: "center" });
+      const x = grid.x + colIdx * cellW;
+      const y = grid.y + rowIdx * cellH;
+      const boxW = Math.max(0.1, cellW - 0.03);
+      const boxH = Math.max(0.22, cellH - 0.03);
+      nativeTextCell(slide, String(valueAt(visual.values, rowIdx, colIdx)), {
+        x,
+        y,
+        w: boxW,
+        h: boxH,
+        fontSize: cellFontSize,
+        fill: highlighted ? "FFF1EF" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"),
+        stroke: highlighted ? "C00000" : "D9D9D9",
+      });
     });
-    nativeText(slide, row, { x: area.x - 0.62, y: area.y + rowIdx * cellH + 0.08, w: 0.55, h: 0.18, fontSize: labelFontSize, align: "right" });
+    if (hasRowLabels) nativeText(slide, row, { x: area.x, y: grid.y + rowIdx * cellH + 0.02, w: labelLeft - 0.04, h: Math.max(0.22, cellH - 0.04), fontSize: labelFontSize, align: "right", valign: "mid", margin: 0 });
   });
-  columns.forEach((column, colIdx) => nativeText(slide, column, { x: area.x + colIdx * cellW, y: area.y - 0.22, w: cellW, h: 0.16, fontSize: labelFontSize, bold: true, align: "center", color: "C00000" }));
+  if (hasColumnLabels) columns.forEach((column, colIdx) => nativeText(slide, column, { x: grid.x + colIdx * cellW, y: area.y, w: cellW, h: labelTop - 0.03, fontSize: labelFontSize, bold: true, align: "center", valign: "mid", color: "C00000", margin: 0 }));
 }
 
 function drawNativeProcess(slide, visual, area) {
   const steps = visual.steps || [];
-  const gap = 0.16;
-  const stepW = (area.w - gap * Math.max(0, steps.length - 1)) / Math.max(1, steps.length);
+  if (area.w < 0.7 || area.h < 0.6) {
+    throw new Error(`ppt_native sequence area is too small for readable process rendering: ${area.w.toFixed(2)}x${area.h.toFixed(2)}`);
+  }
+  const maxLabelUnits = Math.max(0, ...steps.map((step) => estimateNativeTextUnits(step.label)));
+  const shouldStack = visual.orientation === "vertical" || (area.w < 4.2 && steps.length <= 4 && maxLabelUnits > 14);
+  if (shouldStack) {
+    const gap = Math.max(0.12, Math.min(0.22, area.h * 0.045));
+    const maxStepH = 0.78;
+    const stepH = Math.min(maxStepH, (area.h - gap * Math.max(0, steps.length - 1)) / Math.max(1, steps.length));
+    const groupH = steps.length * stepH + gap * Math.max(0, steps.length - 1);
+    const top = area.y + (area.h - groupH) / 2;
+    const cardW = Math.min(area.w * 0.72, 3.1);
+    const cardX = area.x + (area.w - cardW) / 2;
+    steps.forEach((step, idx) => {
+      const y = top + idx * (stepH + gap);
+      const highlighted = step.id === visual.highlight;
+      nativeRect(slide, cardX, y, cardW, stepH, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C" });
+      nativeText(slide, String(idx + 1), { x: cardX + 0.12, y: y + stepH / 2 - 0.1, w: 0.24, h: 0.2, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
+      nativeText(slide, step.label, { x: cardX + 0.46, y: y + 0.08, w: cardW - 0.62, h: Math.max(0.24, stepH - 0.16), fontSize: 12, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333" });
+      if (idx < steps.length - 1) {
+        const x = area.x + area.w / 2;
+        nativeLine(slide, x, y + stepH + 0.02, x, y + stepH + gap - 0.02, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+      }
+    });
+    return;
+  }
+  if (steps.length > 6) {
+    const columns = Math.ceil(steps.length / 2);
+    const targetGroupW = area.w * 0.86;
+    const gapX = Math.max(0.2, Math.min(0.32, targetGroupW * 0.035));
+    const gapY = Math.max(0.28, Math.min(0.42, area.h * 0.09));
+    const stepW = Math.min(2.1, (targetGroupW - gapX * Math.max(0, columns - 1)) / Math.max(1, columns));
+    const cardH = Math.min(0.86, Math.max(0.68, area.h * 0.22));
+    const groupW = stepW * columns + gapX * Math.max(0, columns - 1);
+    const groupH = cardH * 2 + gapY;
+    const startX = area.x + (area.w - groupW) / 2;
+    const startY = area.y + (area.h - groupH) / 2;
+    steps.forEach((step, idx) => {
+      const row = Math.floor(idx / columns);
+      const col = idx % columns;
+      const x = startX + col * (stepW + gapX);
+      const y = startY + row * (cardH + gapY);
+      const highlighted = step.id === visual.highlight;
+      nativeRect(slide, x, y, stepW, cardH, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C" });
+      nativeText(slide, String(idx + 1), { x: x + 0.12, y: y + 0.12, w: 0.26, h: 0.2, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
+      nativeText(slide, step.label, { x: x + 0.44, y: y + 0.1, w: stepW - 0.56, h: cardH - 0.2, fontSize: 10, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333", margin: 0.01 });
+      if (idx < steps.length - 1) {
+        const nextRow = Math.floor((idx + 1) / columns);
+        if (nextRow === row) {
+          nativeLine(slide, x + stepW + 0.04, y + cardH / 2, x + stepW + gapX - 0.04, y + cardH / 2, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+        } else {
+          nativeLine(slide, x + stepW / 2, y + cardH + 0.04, x + stepW / 2, y + cardH + gapY - 0.04, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+        }
+      }
+    });
+    return;
+  }
+  const targetGroupW = area.w * (steps.length <= 3 ? 0.78 : 0.84);
+  const gap = Math.max(0.22, Math.min(0.36, targetGroupW * 0.04));
+  const maxStepW = steps.length <= 3 ? 2.75 : steps.length <= 5 ? 1.95 : 1.45;
+  const availableStepW = (targetGroupW - gap * Math.max(0, steps.length - 1)) / Math.max(1, steps.length);
+  const stepW = Math.min(maxStepW, availableStepW);
+  const groupW = stepW * steps.length + gap * Math.max(0, steps.length - 1);
+  const startX = area.x + (area.w - groupW) / 2;
+  const boxH = Math.min(1.18, Math.max(0.86, area.h * 0.38));
+  const boxY = area.y + (area.h - boxH) / 2;
   steps.forEach((step, idx) => {
-    const x = area.x + idx * (stepW + gap);
+    const x = startX + idx * (stepW + gap);
     const highlighted = step.id === visual.highlight;
-    nativeRect(slide, x, area.y + 0.85, stepW, 0.85, { fill: highlighted ? "C00000" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF" });
-    nativeText(slide, step.label, { x: x + 0.04, y: area.y + 1.02, w: stepW - 0.08, h: 0.2, fontSize: 11, bold: true, align: "center", color: highlighted ? "FFFFFF" : "333333" });
+    nativeRect(slide, x, boxY, stepW, boxH, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C" });
+    nativeText(slide, String(idx + 1), { x: x + 0.16, y: boxY + 0.13, w: 0.24, h: 0.2, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
+    nativeText(slide, step.label, { x: x + 0.2, y: boxY + 0.34, w: stepW - 0.4, h: step.time ? Math.max(0.3, boxH * 0.38) : Math.max(0.4, boxH - 0.48), fontSize: 12, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333" });
     if (step.time) {
-      nativeText(slide, step.time, { x: x + 0.04, y: area.y + 1.32, w: stepW - 0.08, h: 0.16, fontSize: 7, align: "center", color: highlighted ? "FFFFFF" : "595959" });
+      nativeText(slide, step.time, { x: x + 0.14, y: boxY + boxH - 0.32, w: stepW - 0.28, h: 0.2, fontSize: 10, align: "center", color: highlighted ? "C00000" : "595959" });
     }
-    if (idx < steps.length - 1) slide.addShape(ShapeType.line, { x: x + stepW, y: area.y + 1.28, w: gap, h: 0, line: { color: "8C8C8C", width: 0.6, endArrowType: "triangle" } });
+    if (idx < steps.length - 1) nativeLine(slide, x + stepW + 0.04, boxY + boxH / 2, x + stepW + gap - 0.04, boxY + boxH / 2, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+  });
+}
+
+function drawNativeTimeline(slide, visual, area) {
+  const steps = visual.steps || [];
+  if (area.w < 1.2 || area.h < 0.9) {
+    throw new Error(`ppt_native sequence area is too small for readable timeline rendering: ${area.w.toFixed(2)}x${area.h.toFixed(2)}`);
+  }
+  const y = area.y + area.h * 0.42;
+  const sideInset = Math.min(0.85, area.w * 0.09);
+  const startX = area.x + sideInset;
+  const endX = area.x + area.w - sideInset;
+  nativeLine(slide, startX, y, endX, y, { color: "C00000", width: 0.5, endArrowType: "triangle" });
+  steps.forEach((step, idx) => {
+    const x = startX + (idx / Math.max(1, steps.length - 1)) * (endX - startX - 0.18);
+    const highlighted = step.id === visual.highlight;
+    nativeEllipse(slide, x, y, highlighted ? 0.26 : 0.2, highlighted ? 0.2 : 0.16, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "595959", strokeWidth: 0.5 });
+    nativeText(slide, step.time || `T${idx + 1}`, { x: x - 0.52, y: y - 0.68, w: 1.04, h: 0.42, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
+    const cardW = Math.min(1.62, Math.max(1.08, area.w / Math.max(steps.length, 1) * 0.78));
+    const cardH = Math.min(0.94, Math.max(0.66, area.h * 0.25));
+    const cardY = y + 0.38;
+    nativeTextCell(slide, step.label, { x: x - cardW / 2, y: cardY, w: cardW, h: cardH, fontSize: 10, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333", fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C", margin: 0.02 });
+  });
+}
+
+function drawNativeSwimlane(slide, visual, area) {
+  const lanes = visual.lanes || [];
+  const laneLabelW = Math.min(1.18, Math.max(0.78, area.w * 0.15));
+  const laneGap = Math.max(0.1, Math.min(0.2, area.h * 0.04));
+  const laneH = Math.min(1.08, (area.h - laneGap * Math.max(0, lanes.length - 1)) / Math.max(1, lanes.length));
+  const groupH = laneH * lanes.length + laneGap * Math.max(0, lanes.length - 1);
+  const top = area.y + (area.h - groupH) / 2;
+  const maxSteps = Math.max(1, ...lanes.map((lane) => (lane.steps || []).length));
+  const rowW = area.w * 0.9;
+  const stepW = Math.min(2.15, Math.max(1.5, rowW * 0.22));
+  const stepGap = maxSteps <= 1 ? 0 : Math.max(0.18, (rowW - laneLabelW - stepW * maxSteps) / maxSteps);
+  const startX = area.x + (area.w - rowW) / 2;
+  lanes.forEach((lane, laneIdx) => {
+    const y = top + laneIdx * (laneH + laneGap);
+    nativeRect(slide, startX, y, rowW, laneH, { fill: laneIdx % 2 ? "FFFFFF" : "F7F7F7", stroke: "D9D9D9" });
+    nativeTextCell(slide, lane.label, { x: startX + 0.06, y: y + 0.06, w: laneLabelW - 0.12, h: Math.max(0.24, laneH - 0.12), fontSize: 10, bold: true, align: "center", valign: "mid", color: "C00000", fill: laneIdx % 2 ? "FFFFFF" : "F7F7F7", stroke: laneIdx % 2 ? "FFFFFF" : "F7F7F7", margin: 0 });
+    (lane.steps || []).forEach((step, stepIdx) => {
+      const x = startX + laneLabelW + stepGap * 0.55 + stepIdx * (stepW + stepGap);
+      const highlighted = step.id === visual.highlight;
+      const cardW = stepW;
+      const cardH = Math.min(0.72, Math.max(0.46, laneH * 0.58));
+      const cardX = x;
+      const cardY = y + (laneH - cardH) / 2;
+      nativeTextCell(slide, step.label, { x: cardX, y: cardY, w: cardW, h: cardH, fontSize: 10, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333", fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C", margin: 0.02 });
+      if (stepIdx < (lane.steps || []).length - 1) {
+        nativeLine(slide, cardX + cardW + 0.08, y + laneH / 2, cardX + cardW + stepGap - 0.08, y + laneH / 2, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+      }
+    });
   });
 }
 
@@ -2031,13 +2297,12 @@ function drawNativeLoop(slide, visual, area) {
   const cx = area.x + area.w / 2;
   const cy = area.y + area.h / 2;
   const radius = Math.min(area.w, area.h) * 0.34;
-  nativeText(slide, visual.center || visual.loops?.[0]?.label || "", { x: cx - 0.8, y: cy - 0.16, w: 1.6, h: 0.28, fontSize: 13, bold: true, align: "center", color: "C00000" });
+  nativeText(slide, visual.center || visual.loops?.[0]?.label || "", { x: cx - 0.8, y: cy - 0.16, w: 1.6, h: 0.28, fontSize: 14, bold: true, align: "center", color: "C00000" });
   steps.forEach((step, idx) => {
     const angle = -Math.PI / 2 + idx * (Math.PI * 2 / Math.max(1, steps.length));
     const x = cx + Math.cos(angle) * radius - 0.55;
     const y = cy + Math.sin(angle) * radius - 0.25;
-    nativeRect(slide, x, y, 1.1, 0.5, { fill: step.id === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: step.id === visual.highlight ? "C00000" : "BFBFBF" });
-    nativeText(slide, step.label || step, { x: x + 0.05, y: y + 0.14, w: 1, h: 0.16, fontSize: 8, bold: true, align: "center" });
+    nativeTextCell(slide, step.label || step, { x, y, w: 1.1, h: 0.5, fontSize: 10, bold: true, align: "center", valign: "mid", fill: step.id === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: step.id === visual.highlight ? "C00000" : "BFBFBF", margin: 0.02 });
   });
 }
 
@@ -2045,14 +2310,37 @@ function drawNativeHierarchy(slide, spec, area) {
   const visual = spec.visual_spec || {};
   if (spec.template === "capability_stack") {
     const levels = visual.levels || [];
-    const levelH = area.h / Math.max(1, levels.length);
+    const count = Math.max(1, levels.length);
+    const palette = ["F7F7F7", "FFFFFF", "F2F2F2", "E6E6E6"];
+    const gap = Math.min(0.05, Math.max(0.02, area.h * 0.012));
+    const pyramidH = Math.min(area.h * 0.88, count * 0.74 + (count - 1) * gap);
+    const levelH = (pyramidH - gap * (count - 1)) / count;
+    const maxW = Math.min(area.w * 0.9, 8.2);
+    const minW = Math.max(Math.min(area.w * 0.32, maxW * 0.45), 1.55);
+    const centerX = area.x + area.w / 2;
+    const startY = area.y + (area.h - pyramidH) / 2;
     levels.forEach((level, idx) => {
-      const w = area.w - idx * 0.35;
-      const x = area.x + (area.w - w) / 2;
-      const y = area.y + area.h - (idx + 1) * levelH;
-      const highlighted = level.label === visual.highlight;
-      nativeRect(slide, x, y, w, levelH - 0.06, { fill: highlighted ? "C00000" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF" });
-      nativeText(slide, level.label, { x: x + 0.1, y: y + 0.12, w: w - 0.2, h: 0.2, fontSize: 11, bold: true, align: "center", color: highlighted ? "FFFFFF" : "333333" });
+      const t = count === 1 ? 1 : idx / (count - 1);
+      const w = minW + t * (maxW - minW);
+      const x = centerX - w / 2;
+      const y = startY + idx * (levelH + gap);
+      const highlighted = level.label === visual.highlight || level.id === visual.highlight;
+      nativeTextCell(slide, level.label, {
+        shape: "trapezoid",
+        x,
+        y,
+        w,
+        h: levelH,
+        fontSize: 12,
+        bold: true,
+        align: "center",
+        valign: "mid",
+        color: highlighted ? "FFFFFF" : "333333",
+        fill: highlighted ? "C00000" : palette[idx % palette.length],
+        stroke: highlighted ? "C00000" : "8C8C8C",
+        strokeWidth: 0.5,
+        margin: 0.02,
+      });
     });
     return;
   }
@@ -2070,14 +2358,13 @@ function drawNativeNetwork(slide, visual, area) {
     const x = idx === 0 ? cx - 0.55 : cx + Math.cos(angle) * radius - 0.55;
     const y = idx === 0 ? cy - 0.28 : cy + Math.sin(angle) * radius - 0.28;
     if (idx > 0) nativeLine(slide, cx, cy, x + 0.55, y + 0.28);
-    nativeRect(slide, x, y, 1.1, 0.56, { fill: idx === 0 ? "FFF1EF" : "F7F7F7", stroke: idx === 0 ? "C00000" : "BFBFBF" });
-    nativeText(slide, node.label || node.id, { x: x + 0.05, y: y + 0.18, w: 1, h: 0.16, fontSize: 8, bold: true, align: "center" });
+    nativeTextCell(slide, node.label || node.id, { x, y, w: 1.1, h: 0.56, fontSize: 10, bold: true, align: "center", valign: "mid", fill: idx === 0 ? "FFF1EF" : "F7F7F7", stroke: idx === 0 ? "C00000" : "BFBFBF", margin: 0.02 });
   });
 }
 
 function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 11.65, h: 5.25 }) {
   validateVisualAnchorSpec(spec);
-  const renderPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "ppt_native" });
+  const renderPath = resolveVisualAnchorRenderPath(spec);
   const visual = spec.visual_spec || {};
 
   if (renderPath === "evidence") return drawNativeEvidence(slide, spec, area);
@@ -2100,7 +2387,9 @@ function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 
   if (spec.template === "line_chart") return drawNativeLineChart(slide, visual, inner);
   if (spec.template === "proportion_chart") return drawNativeLoop(slide, { center: visual.total_label, steps: (visual.segments || []).map((segment, idx) => ({ id: `s${idx}`, label: segment.label })), highlight: visual.highlight }, inner);
   if (spec.template === "heatmap" || spec.template === "capability_matrix") return drawNativeGrid(slide, visual, inner);
-  if (["process", "timeline", "swimlane"].includes(spec.template)) return drawNativeProcess(slide, visual.lanes ? { steps: visual.lanes.flatMap((lane) => lane.steps || []).slice(0, 6), highlight: visual.highlight } : visual, inner);
+  if (spec.template === "swimlane") return drawNativeSwimlane(slide, visual, inner);
+  if (spec.template === "timeline") return drawNativeTimeline(slide, visual, inner);
+  if (spec.template === "process") return drawNativeProcess(slide, visual, inner);
   if (["closed_loop", "dual_loop", "spiral_iteration_ladder"].includes(spec.template)) return drawNativeLoop(slide, visual, inner);
   if (["tree", "layered_architecture", "capability_stack"].includes(spec.template)) return drawNativeHierarchy(slide, spec, inner);
   if (["hub_spoke_network", "dependency_graph", "module_interaction_map", "causal_influence_graph"].includes(spec.template)) return drawNativeNetwork(slide, visual, inner);
@@ -2111,8 +2400,7 @@ function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 
     (visual.items || []).forEach((item) => {
       const x = inner.x + item.x * inner.w - 0.32;
       const y = inner.y + (1 - item.y) * inner.h - 0.16;
-      nativeRect(slide, x, y, 0.64, 0.32, { fill: item.label === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: item.label === visual.highlight ? "C00000" : "BFBFBF" });
-      nativeText(slide, item.label, { x: x + 0.04, y: y + 0.09, w: 0.56, h: 0.12, fontSize: 6, align: "center" });
+      nativeTextCell(slide, item.label, { x, y, w: 0.64, h: 0.32, fontSize: 10, align: "center", valign: "mid", fill: item.label === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: item.label === visual.highlight ? "C00000" : "BFBFBF", margin: 0 });
     });
     return undefined;
   }
@@ -2453,11 +2741,11 @@ function writeVisualAnchorImage(spec, outDir, options = {}) {
 
 module.exports = {
   DIAGRAM_STYLE,
+  TEMPLATE_RENDERERS,
   TEMPLATE_LAYOUTS,
   chooseTemplateLayout,
   createVisualAnchorImage,
   createVisualAnchorSvg,
-  getVisualAnchorRenderer,
   renderVisualAnchorPptNative,
   renderVisualAnchorRoughSvg,
   resolveVisualAnchorRenderPath,

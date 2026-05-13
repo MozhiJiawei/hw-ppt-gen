@@ -55,28 +55,28 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_layout_unintegrated",
   "content_visual_anchor_layout_missing",
   "content_visual_anchor_layout_invalid",
-  "content_visual_anchor_renderer_config_missing",
-  "content_visual_anchor_renderer_scope_invalid",
-  "content_visual_anchor_table_not_native",
+  "content_visual_anchor_manifest_mismatch",
+  "content_visual_anchor_table_contract_mismatch",
   "content_visual_anchor_table_overflow",
   "content_layout_schema_invalid",
   "content_layout_schema_anchor_missing",
 ];
 
-const roughSvgSpec = {
-  id: "contract_default_renderer",
-  title: "Default Renderer",
-  claim: "默认正文页应使用 rough_svg 图片路径。",
-  kind: "Sequence",
-  template: "process",
+const imageVisualSpec = {
+  id: "contract_image_visual",
+  title: "Image Visual",
+  claim: "正文页视觉锚点应生成可检查的图片证据。",
+  kind: "Quantity",
+  template: "line_chart",
   visual_spec: {
-    steps: [
-      { id: "plan", label: "计划" },
-      { id: "render", label: "渲染" },
+    y_label: "质量",
+    categories: ["计划", "生成", "检查"],
+    series: [
+      { name: "质量", values: [1, 2, 3] },
     ],
-    highlight: "render",
+    highlight: { category: "生成", series: "质量" },
   },
-  highlight_reason: "高亮渲染，因为它验证默认路径是否真正生成 SVG。",
+  highlight_reason: "高亮生成，因为它验证图片证据是否真正记录。",
 };
 
 function read(relativePath) {
@@ -103,22 +103,21 @@ function assertVisualAnchorSlideSurface() {
   assert.deepStrictEqual(Object.keys(visualSlide).sort(), expectedContentSlideExports);
 }
 
-function assertContentSlideHonorsDefaultRenderer() {
+function assertContentSlideRecordsFixedOutputEvidence() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
-  const pptx = createHuaweiDeck({ title: "renderer contract" });
+  const pptx = createHuaweiDeck({ title: "visual output contract" });
   addVisualAnchorContentSlide(pptx, {
-    title: "默认渲染器",
+    title: "视觉锚点证据",
     sections: ["测试"],
     currentSection: "测试",
-    summary: { body: [{ label: "默认路径", text: "未设置环境变量时应走 SVG 图片路径。" }] },
-    visual_anchor: roughSvgSpec,
+    summary: { body: [{ label: "证据留痕", text: "图片型视觉锚点应记录实际输出证据。" }] },
+    visual_anchor: imageVisualSpec,
     page: "01",
   });
-  const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_renderer_manifest.json"));
-  assert.equal(manifest.visual_anchor_renderer, "rough_svg", "manifest should record the deck-level renderer");
-  assert.equal(manifest.slides[0].renderer, "rough_svg", "default content-slide renderer should be rough_svg");
-  assert.equal(manifest.slides[0].image_format, "svg", "default content-slide renderer should embed SVG image output");
+  const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_output_manifest.json"));
+  assert.equal(manifest.slides[0].renderer, "rough_svg", "image-based content-slide output should be recorded in the manifest");
+  assert.equal(manifest.slides[0].image_format, "svg", "image-based content-slide output should record its image format");
 }
 
 function assertContentSlideUsesProportionalImagePlacement() {
@@ -132,15 +131,15 @@ function assertContentSlideUsesProportionalImagePlacement() {
     summary: { body: [{ label: "等比", text: "SVG 图片只能 contain 等比放入区域，不能拉伸填满。" }] },
     anchorArea: { x: 1.0, y: 1.65, w: 10.0, h: 2.1 },
     visual_anchor: {
-      ...roughSvgSpec,
+      ...imageVisualSpec,
       id: "proportional_image",
       visual_spec: {
-        steps: [
-          { id: "a", label: "较宽图" },
-          { id: "b", label: "保持比例" },
-          { id: "c", label: "留白允许" },
+        y_label: "趋势",
+        categories: ["较宽图", "保持比例", "留白允许"],
+        series: [
+          { name: "等比", values: [1, 2, 3] },
         ],
-        highlight: "b",
+        highlight: { category: "保持比例", series: "等比" },
       },
     },
     page: "01",
@@ -148,11 +147,11 @@ function assertContentSlideUsesProportionalImagePlacement() {
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_image_placement_manifest.json"));
 
   const slide = manifest.slides[0];
-  assert(slide.image_area, "rough_svg manifest should record the actual image placement area");
+  assert(slide.image_area, "image-based manifest should record the actual image placement area");
   assert(slide.image_area.w <= slide.anchor_area.w && slide.image_area.h <= slide.anchor_area.h, "image placement should stay inside the anchor area");
   assert(
     Math.abs((slide.image_area.w / slide.image_area.h) - (slide.image_width / slide.image_height)) < 0.01,
-    "image placement should preserve the SVG image aspect ratio"
+    "image placement should preserve the image aspect ratio"
   );
   assert(
     Math.abs((slide.image_area.w / slide.image_area.h) - (slide.anchor_area.w / slide.anchor_area.h)) > 0.1,
@@ -179,7 +178,7 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
     ],
     layoutReference: "06 内容 偏分栏",
     visual_anchor: {
-      ...roughSvgSpec,
+      ...imageVisualSpec,
       id: "caption_outside_visual_spec",
     },
     page: "01",
@@ -200,7 +199,7 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
 function assertDiagramExportsStayAvailable() {
   const diagram = require("../pptx/hw_diagram_helpers");
   for (const name of requiredDiagramExports) {
-    assert.equal(typeof diagram[name], "function", `expected visual-anchor renderer export: ${name}`);
+    assert.equal(typeof diagram[name], "function", `expected visual-anchor helper export: ${name}`);
   }
 }
 
@@ -234,7 +233,7 @@ function assertSkillDocumentsCurrentPath() {
   assert(skill.includes("--require-plan"), "SKILL should require plan-backed visual-anchor alignment QA");
   assert(skill.includes("05 内容 二分栏"), "SKILL should document the fixed content-layout references");
   assert(skill.includes("至少一个"), "SKILL should document that content pages may have one or more visual anchors");
-  assert(skill.includes("visual_anchor_renderer"), "SKILL should document deck-level renderer configuration");
+  assert(skill.includes("Choose the visual anchor's semantic `kind` and `template`"), "SKILL should document semantic visual-anchor selection");
 }
 
 function assertPackageScriptsRunContractBeforeSmoke() {
@@ -249,10 +248,10 @@ function main() {
   const failures = [];
   collect("page helpers expose the primitive surface", assertPagePrimitiveSurface, failures);
   collect("visual-anchor content-slide surface exists", assertVisualAnchorSlideSurface, failures);
-  collect("content-slide entrypoint honors default renderer", assertContentSlideHonorsDefaultRenderer, failures);
-  collect("content-slide SVG images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
+  collect("content-slide entrypoint records fixed output evidence", assertContentSlideRecordsFixedOutputEvidence, failures);
+  collect("content-slide images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
   collect("content-slide captions stay outside visual_spec", assertContentSlideRendersEditableCaptionOutsideVisualSpec, failures);
-  collect("diagram renderer exports remain available", assertDiagramExportsStayAvailable, failures);
+  collect("diagram helper exports remain available", assertDiagramExportsStayAvailable, failures);
   collect("sample deck uses the visual-anchor path", assertSampleDeckUsesVisualAnchorContentSlides, failures);
   collect("hard QA validates rendered visual anchors", assertHardQaKnowsVisualAnchorContract, failures);
   collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicSchemaEscapeHatch, failures);

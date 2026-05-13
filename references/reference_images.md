@@ -14,8 +14,8 @@ Reference set:
 
 - `01 目录.png`: contents layout.
 - `02 配色示例.png`: color palette and neutral/red balance.
-- `03 手绘图 饼图.png`: rough SVG proportion-chart treatment for `Quantity/proportion_chart`.
-- `04 手绘图 柱状图.png`: rough SVG bar-chart treatment for `Quantity/bar_chart`.
+- `03 手绘图 饼图.png`: hand-drawn proportion-chart reference for `Quantity/proportion_chart`.
+- `04 手绘图 柱状图.png`: hand-drawn bar-chart reference for `Quantity/bar_chart`.
 - `05 内容 二分栏.png`: equal two-column content page.
 - `06 内容 偏分栏.png`: biased column layout with top analysis summary.
 - `07 内容 三分栏.png`: three-column content page with top analysis summary.

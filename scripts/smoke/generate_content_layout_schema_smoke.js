@@ -11,12 +11,7 @@ const {
   writeVisualAnchorManifest,
 } = require("../pptx/hw_visual_anchor_slide");
 
-const rendererArgIndex = process.argv.indexOf("--renderer");
-const RENDERER = rendererArgIndex >= 0 ? process.argv[rendererArgIndex + 1] : "ppt_native";
-if (!["ppt_native", "rough_svg"].includes(RENDERER)) {
-  throw new Error(`Unsupported --renderer value: ${RENDERER}. Use ppt_native or rough_svg.`);
-}
-const OUTPUT_STEM = RENDERER === "rough_svg" ? "content_layout_schema_svg_smoke" : "content_layout_schema_smoke";
+const OUTPUT_STEM = "content_layout_schema_smoke";
 const OUT_DIR = ensureTmpPath(path.join(".tmp", OUTPUT_STEM));
 const PPTX_PATH = path.join(OUT_DIR, `${OUTPUT_STEM}.pptx`);
 const MANIFEST_PATH = path.join(OUT_DIR, `${OUTPUT_STEM}_visual_anchor_manifest.json`);
@@ -79,10 +74,6 @@ function collectVisualAnchors(modules = []) {
     }
   }
   return anchors;
-}
-
-function rendererBody(nativeText, svgText) {
-  return RENDERER === "rough_svg" ? svgText : nativeText;
 }
 
 function quantityAnchor(id, title) {
@@ -178,7 +169,7 @@ async function main() {
     evidence: await writeDemoImage("left_evidence.png", "左列证据", "C00000"),
     lower: await writeDemoImage("lower_panel.png", "下方面板", "C00000"),
   };
-  const pptx = createHuaweiDeck({ title: "内容布局 Schema Smoke", visualAnchorRenderer: RENDERER });
+  const pptx = createHuaweiDeck({ title: "内容布局 Schema Smoke" });
   const sections = ["二分栏", "偏分栏", "三分栏", "四分栏"];
   const source = "来源：内容布局 Schema 冒烟测试";
   const planSlides = [];
@@ -205,7 +196,7 @@ async function main() {
               {
                 type: "text",
                 height: 1.1,
-                fontSize: 8,
+                fontSize: 10,
                 body: [
                   "第一段解释文字放在上方白色内容框，形成参考图 05 的段落密度。",
                   "第二段补充判断依据，并引导读者进入下方小框阵列。",
@@ -219,7 +210,7 @@ async function main() {
                   ["一", "二", "三"],
                   ["A", "B", "C"],
                   [
-                    ["小标题", "标签", "8号字"],
+                    ["小标题", "标签", "10号字"],
                     ["内容区", "标签", "补充项"],
                     ["内容较多的标签", "小标题", "结论块"],
                   ],
@@ -247,11 +238,8 @@ async function main() {
               {
                 type: "text",
                 height: 0.62,
-                fontSize: 8,
-                body: rendererBody(
-                  ["右侧先呈现 KPI 数据卡，再接结构图和下方判断文字。", "原生图形分支保留红灰视觉层次。"],
-                  ["右侧先呈现 SVG 数据卡，再接 SVG 锚点和下方判断文字。", "只整体缩放，不改图片长宽比。"],
-                ),
+                fontSize: 10,
+                body: ["右侧先呈现 KPI 数据卡，再接结构图和下方判断文字。", "原生图形分支保留红灰视觉层次。"],
               },
             ],
           },
@@ -276,10 +264,7 @@ async function main() {
             role: "visual_anchor",
             visual_anchor: quantityAnchor("layout_biased_quantity", "偏分栏主图"),
             visualAnchorCaption: {
-              text: rendererBody(
-                "偏分栏主视觉：宽栏只承载图形证据",
-                "偏分栏主视觉：SVG 宽栏只承载图形证据",
-              ),
+              text: "偏分栏主视觉：宽栏只承载图形证据",
             },
           },
           {
@@ -319,7 +304,7 @@ async function main() {
             role: "content_panel",
             title: "这里是标题区域 样式",
             blocks: [
-              { type: "text", height: 1.05, fontSize: 8, body: ["左列以短说明开场，密度贴近参考图 07。", "下方三列小框承接细节。"] },
+              { type: "text", height: 1.05, fontSize: 10, body: ["左列以短说明开场，密度贴近参考图 07。", "下方三列小框承接细节。"] },
               {
                 type: "visual_anchor",
                 visual_anchor: matrixAnchor(
@@ -339,7 +324,7 @@ async function main() {
               {
                 type: "text",
                 height: 0.28,
-                fontSize: 8,
+                fontSize: 10,
                 body: "卡片内标题",
               },
               {
@@ -350,7 +335,7 @@ async function main() {
               {
                 type: "text",
                 height: 0.28,
-                fontSize: 8,
+                fontSize: 10,
                 body: "卡片内标题",
               },
               {
@@ -367,7 +352,7 @@ async function main() {
               {
                 type: "text",
                 height: 0.28,
-                fontSize: 8,
+                fontSize: 10,
                 body: "卡片内标题",
               },
               {
@@ -390,10 +375,7 @@ async function main() {
                 type: "text",
                 weight: 1,
                 fontSize: 12,
-                body: rendererBody(
-                  ["右列放流程锚点并给出结论清单。", "处理环节负责收敛差异。", "输出结果进入质量检查。"],
-                  ["右列放 SVG 锚点并给出结论清单。", "处理环节负责收敛差异。", "输出结果进入质量检查。"],
-                ),
+                body: ["右列放流程锚点并给出结论清单。", "处理环节负责收敛差异。", "输出结果进入质量检查。"],
               },
               { type: "visual_anchor", height: 1.25, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
             ],
@@ -427,7 +409,7 @@ async function main() {
             title: "标题2",
             blocks: [
               { type: "visual_anchor", height: 1.0, visual_anchor: metricStripAnchor("layout_four_metrics", "四分栏 KPI", "线索") },
-              { type: "text", fontSize: 8, body: ["这里为内容区域样式这里为内容区域样式，这里为内容区域样式。", "这里为内容区域样式这里为内容区域，这里为内容区域样式。"] },
+              { type: "text", fontSize: 10, body: ["这里为内容区域样式这里为内容区域样式，这里为内容区域样式。", "这里为内容区域样式这里为内容区域，这里为内容区域样式。"] },
             ],
           },
           {
@@ -441,7 +423,7 @@ async function main() {
                   "四分栏下方矩阵",
                   ["一", "二", "三", "四", "五"],
                   ["A", "B"],
-                  [["小标题", "小标题"], ["内容较多的标签", "内容较多的标签"], ["8号字", "8号字"], ["内容区", "内容区"], ["标签", "内容较多的标签"]],
+                  [["小标题", "小标题"], ["内容较多的标签", "内容较多的标签"], ["10号字", "10号字"], ["内容区", "内容区"], ["标签", "内容较多的标签"]],
                 ),
               },
             ],
@@ -475,7 +457,7 @@ async function main() {
   });
 
   writeVisualAnchorManifest(pptx, MANIFEST_PATH);
-  fs.writeFileSync(PLAN_PATH, JSON.stringify({ visual_anchor_renderer: RENDERER, slides: planSlides }, null, 2), "utf8");
+  fs.writeFileSync(PLAN_PATH, JSON.stringify({ slides: planSlides }, null, 2), "utf8");
   await pptx.writeFile({ fileName: PPTX_PATH });
   if (process.env.HW_SKIP_PPTX_REPAIR !== "1") await repairPptxForPowerPointCom(PPTX_PATH);
   console.log(`Wrote ${PPTX_PATH}`);

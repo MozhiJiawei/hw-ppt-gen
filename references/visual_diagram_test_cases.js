@@ -7,7 +7,7 @@ function variedText(base, idx, variant = 0) {
     `${base}${idx + 1}统一调度`,
     `${base}${idx + 1}生成导出`,
     `${base}${idx + 1}规则检查`,
-    `${base}${idx + 1}原生回退`,
+    `${base}${idx + 1}边界校验`,
     `${base}${idx + 1}交付审阅`,
     `${base}${idx + 1}协同路径`,
     `${base}${idx + 1}长文回归`,
@@ -95,7 +95,7 @@ function buildTemplateCases() {
       value: `${20 + idx * 3 + cardIdx * 7}`,
       unit: cardIdx % 2 ? "%" : "分",
     }));
-    return withMeta(`data_cards_${idx + 1}`, "Quantity", "data_cards", "KPI 卡片属于数量型视觉锚点，同一语义可走 rough_svg 或 PPT 原生。", {
+    return withMeta(`data_cards_${idx + 1}`, "Quantity", "data_cards", "KPI 卡片属于数量型视觉锚点，适合承载少量关键指标。", {
       cards,
       highlight: cards[cards.length - 1].id,
     }, aspectRatio);
@@ -324,11 +324,11 @@ function buildTemplateCases() {
     highlight: "render",
   }, DEFAULT_LAYOUT));
 
-  cases.push(withMeta("long_text_hub_spoke_network_1", "Network", "hub_spoke_network", "长文本回归：网络节点中的文件名、renderer 名称和中文注释需要保持可读。", {
+  cases.push(withMeta("long_text_hub_spoke_network_1", "Network", "hub_spoke_network", "长文本回归：网络节点中的文件名、模块名称和中文注释需要保持可读。", {
     hub: { id: "hub", label: "hw-ppt-gen 统一渲染入口" },
     nodes: [
       { id: "diagram", label: "hw_diagram_helpers.js" },
-      { id: "native", label: "ppt_native fallback renderer" },
+      { id: "native", label: "PPT 原生图形模块" },
       { id: "qa", label: "check_huawei_pptx.js" },
       { id: "export", label: "export_pptx_images.js" },
     ],
@@ -341,7 +341,7 @@ function buildTemplateCases() {
     title: "evidence_source_figure_1",
     kind: "Evidence",
     template: "source_figure",
-    claim: "原始图像作为视觉锚点时不进入 renderer 分支，而由证据模块处理。",
+    claim: "原始图像作为视觉锚点时由证据模块处理。",
     layout: DEFAULT_LAYOUT,
     source: {
       path: "assets/slides_ref/10 内容 图文并茂2.png",
@@ -352,10 +352,10 @@ function buildTemplateCases() {
   });
 
   for (let idx = 0; idx < 10; idx += 1) {
-    cases.push(withMeta(`matrix_table_${idx + 1}`, "Matrix", "table", "生成或转写表格作为视觉锚点时跟随全局 renderer。", {
+    cases.push(withMeta(`matrix_table_${idx + 1}`, "Matrix", "table", "生成或转写表格作为视觉锚点时保持可编辑。", {
       rows: [
         ["能力", "当前状态", "统一后规则"],
-        [variedText("原始表格", idx, 0), "散落在页面逻辑中", "Matrix/table 跟随全局 renderer"],
+        [variedText("原始表格", idx, 0), "散落在页面逻辑中", "Matrix/table 保持可编辑"],
         [variedText("概念图", idx, 2), "由模板分别处理", "统一 visual anchor"],
         [variedText("原图索引", idx, 4), "证据引用", "Evidence 固定证据模块"],
       ],

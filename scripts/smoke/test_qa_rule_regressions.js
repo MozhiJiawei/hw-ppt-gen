@@ -73,7 +73,7 @@ function planEntry(page, slideData) {
 
 async function generateDeck() {
   ensureDir(OUT_DIR);
-  const pptx = createHuaweiDeck({ title: "QA Rule Regressions", visualAnchorRenderer: "ppt_native" });
+  const pptx = createHuaweiDeck({ title: "QA Rule Regressions" });
   addCoverSlide(pptx, {
     title: "QA 规则回归复现",
     subtitle: "用于验证 #7 #8 #9 #10",
@@ -171,7 +171,7 @@ async function generateDeck() {
   const qaPath = path.join(OUT_DIR, "qa_rule_regressions.qa.json");
 
   writeVisualAnchorManifest(pptx, manifestPath);
-  fs.writeFileSync(planPath, JSON.stringify({ visual_anchor_renderer: "ppt_native", slides: planSlides }, null, 2), "utf8");
+  fs.writeFileSync(planPath, JSON.stringify({ slides: planSlides }, null, 2), "utf8");
   await pptx.writeFile({ fileName: pptxPath });
   await repairPptxForPowerPointCom(pptxPath);
 

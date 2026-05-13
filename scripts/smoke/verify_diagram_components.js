@@ -25,10 +25,9 @@ function usage() {
   console.log(`Usage:
   node scripts/smoke/verify_diagram_components.js [--spec path/to/visual_specs.json] [--out .tmp/diagram_component_smoke]
 
-Creates two review decks from the same visual-anchor cases:
-- rough_svg: SVG+PNG assets embedded into a PPT review deck.
-- ppt_native: native PPT preview shapes for the same semantic cases.
-Evidence and Matrix/table remain fixed-rule exceptions outside the renderer switch.`);
+Creates review decks from visual-anchor cases:
+- each kind/template directory gets one review PPT using the fixed template implementation.
+- rejected over-capacity cases are included as rejection slides in that directory PPT.`);
 }
 
 function safePathPart(value) {
@@ -91,16 +90,6 @@ function loadCases(specPath) {
   throw new Error(`Unsupported spec format: ${specPath}`);
 }
 
-function groupAssetsByTemplate(assets) {
-  const groups = new Map();
-  for (const asset of assets) {
-    const key = `${asset.kind || "unknown"} / ${asset.template || "unknown"}`;
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(asset);
-  }
-  return [...groups.entries()];
-}
-
 function addSlideTitle(slide, title, subtitle = "") {
   slide.addText(title, {
     x: 0.45,
@@ -129,7 +118,7 @@ function addSlideTitle(slide, title, subtitle = "") {
       w: 12.25,
       h: 0.24,
       fontFace: "Microsoft YaHei",
-      fontSize: 8,
+      fontSize: 10,
       color: "595959",
       margin: 0,
       breakLine: false,
@@ -146,13 +135,13 @@ function addFooter(slide, pageNo, totalPages) {
     h: 0,
     line: { color: "D9D9D9", width: 0.5 },
   });
-  slide.addText("Visual anchor rough_svg smoke review", {
+  slide.addText("Visual anchor smoke review", {
     x: 0.45,
     y: 7.18,
     w: 5.5,
     h: 0.16,
     fontFace: "Arial",
-    fontSize: 6,
+    fontSize: 10,
     color: "8C8C8C",
     margin: 0,
   });
@@ -162,7 +151,7 @@ function addFooter(slide, pageNo, totalPages) {
     w: 1.15,
     h: 0.16,
     fontFace: "Arial",
-    fontSize: 6,
+    fontSize: 10,
     color: "8C8C8C",
     align: "right",
     margin: 0,
@@ -190,7 +179,7 @@ function addImageTile(slide, asset, index, x, y, w, h) {
     w: w - 0.12,
     h: 0.16,
     fontFace: "Arial",
-    fontSize: 6,
+    fontSize: 10,
     color: "595959",
     margin: 0,
     fit: "shrink",
@@ -199,15 +188,6 @@ function addImageTile(slide, asset, index, x, y, w, h) {
 
 function getCaseDescription(asset) {
   return asset.scenario || asset.claim || asset.title || asset.id || asset.template || "未命名用例";
-}
-
-function sortReviewItems(items) {
-  return [...items].sort((a, b) => {
-    const aLong = String(a.id || "").startsWith("long_text") ? 0 : 1;
-    const bLong = String(b.id || "").startsWith("long_text") ? 0 : 1;
-    if (aLong !== bLong) return aLong - bLong;
-    return 0;
-  });
 }
 
 function addCaseImageSlide(slide, asset) {
@@ -225,6 +205,100 @@ function addCaseImageSlide(slide, asset) {
   });
 }
 
+function addRejectedSlide(pptx, spec, renderPath, error, pageNo, totalPages) {
+  const slide = pptx.addSlide();
+  slide.background = { color: "FFFFFF" };
+  addSlideTitle(slide, getCaseDescription(spec), `${renderPath} · ${spec.kind} / ${spec.template} · ${spec.id}`);
+  slide.addShape(ShapeType.rect, {
+    x: 0.75,
+    y: 1.35,
+    w: 11.8,
+    h: 4.95,
+    fill: { color: "FFF1EF" },
+    line: { color: "C00000", width: 1 },
+  });
+  slide.addText("Rejected by visual capacity guard", {
+    x: 1.0,
+    y: 1.7,
+    w: 11.3,
+    h: 0.32,
+    fontFace: "Microsoft YaHei",
+    fontSize: 18,
+    bold: true,
+    color: "C00000",
+    margin: 0,
+  });
+  slide.addText(error, {
+    x: 1.0,
+    y: 2.25,
+    w: 11.1,
+    h: 2.4,
+    fontFace: "Microsoft YaHei",
+    fontSize: 12,
+    color: "333333",
+    margin: 0.02,
+    fit: "shrink",
+    breakLine: false,
+  });
+  slide.addText("This slide is intentionally generated so rejected cases remain reviewable during visual-anchor template work.", {
+    x: 1.0,
+    y: 5.15,
+    w: 11.1,
+    h: 0.28,
+    fontFace: "Arial",
+    fontSize: 10,
+    color: "595959",
+    margin: 0,
+  });
+  addFooter(slide, pageNo, totalPages);
+}
+
+function addRenderedSlide(pptx, spec, renderPath, payload, pageNo, totalPages) {
+  const slide = pptx.addSlide();
+  slide.background = { color: "FFFFFF" };
+  addSlideTitle(slide, getCaseDescription(spec), `${renderPath} · ${spec.kind} / ${spec.template} · ${spec.id}`);
+  if (renderPath === "rough_svg") {
+    addCaseImageSlide(slide, payload.asset);
+  } else {
+    renderVisualAnchorPptNative(slide, spec);
+  }
+  addFooter(slide, pageNo, totalPages);
+}
+
+function verifyNativeCaseCapacity(spec) {
+  const pptx = new pptxgen();
+  pptx.layout = "LAYOUT_WIDE";
+  renderVisualAnchorPptNative(pptx.addSlide(), spec);
+}
+
+async function writeTemplateReviewPpt(group, outRoot) {
+  const { kind, template, cases } = group;
+  const kindDir = safePathPart(kind);
+  const templateDir = safePathPart(template);
+  const caseDir = path.join(outRoot, "review_pptx", kindDir);
+  fs.mkdirSync(caseDir, { recursive: true });
+
+  const pptx = new pptxgen();
+  pptx.layout = "LAYOUT_WIDE";
+  pptx.author = "hw-ppt-gen";
+  pptx.subject = `Visual anchor ${kind}/${template} review`;
+  pptx.title = `${kind}/${template} review`;
+  pptx.company = "Huawei-style PPTX generator";
+  pptx.lang = "zh-CN";
+  pptx.theme = { headFontFace: "Microsoft YaHei", bodyFontFace: "Microsoft YaHei", lang: "zh-CN" };
+
+  cases.forEach((entry, idx) => {
+    const pageNo = idx + 1;
+    const totalPages = cases.length;
+    if (entry.error) addRejectedSlide(pptx, entry.spec, entry.renderPath, entry.error, pageNo, totalPages);
+    else addRenderedSlide(pptx, entry.spec, entry.renderPath, entry, pageNo, totalPages);
+  });
+
+  const pptxPath = path.join(caseDir, `${templateDir}.pptx`);
+  await pptx.writeFile({ fileName: pptxPath });
+  return pptxPath;
+}
+
 function fitAreaContain(area, imageWidth, imageHeight) {
   if (!Number.isFinite(imageWidth) || !Number.isFinite(imageHeight) || imageWidth <= 0 || imageHeight <= 0) return area;
   const areaRatio = area.w / area.h;
@@ -235,156 +309,6 @@ function fitAreaContain(area, imageWidth, imageHeight) {
   }
   const w = area.h * imageRatio;
   return { x: area.x + (area.w - w) / 2, y: area.y, w, h: area.h };
-}
-
-async function writeRoughReviewDeck(assets, outRoot, manifest) {
-  const groups = groupAssetsByTemplate(assets);
-  const reviewAssets = sortReviewItems(assets);
-  const pptx = new pptxgen();
-  pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "hw-ppt-gen";
-  pptx.subject = "Visual anchor rough_svg smoke review";
-  pptx.title = "Visual Anchor Rough SVG Smoke Review";
-  pptx.company = "Huawei-style PPTX generator";
-  pptx.lang = "zh-CN";
-  pptx.theme = {
-    headFontFace: "Microsoft YaHei",
-    bodyFontFace: "Microsoft YaHei",
-    lang: "zh-CN",
-  };
-
-  const totalPages = reviewAssets.length + 1;
-  const cover = pptx.addSlide();
-  cover.background = { color: "FFFFFF" };
-  addSlideTitle(cover, "视觉锚点 Rough SVG Smoke Review", `${assets.length} images · ${groups.length} templates · ${manifest.generated_at}`);
-  cover.addText("封面后每页展示一个用例，页标题为用例描述，图片保持比例放入正文区域。用于快速检查配色、裁切、文字可读性和模板差异。", {
-    x: 0.75,
-    y: 1.55,
-    w: 11.8,
-    h: 0.5,
-    fontFace: "Microsoft YaHei",
-    fontSize: 14,
-    color: "333333",
-    margin: 0,
-    fit: "shrink",
-  });
-  cover.addText(groups.map(([name, group]) => `${name}: ${group.length}`).join("\n"), {
-    x: 0.85,
-    y: 2.35,
-    w: 11.5,
-    h: 3.7,
-    fontFace: "Arial",
-    fontSize: 9,
-    color: "595959",
-    breakLine: false,
-    margin: 0.04,
-    fit: "shrink",
-  });
-  addFooter(cover, 1, totalPages);
-
-  reviewAssets.forEach((asset, assetIdx) => {
-    const slide = pptx.addSlide();
-    slide.background = { color: "FFFFFF" };
-    addSlideTitle(slide, getCaseDescription(asset), `${asset.kind} / ${asset.template} · ${asset.id}`);
-    addCaseImageSlide(slide, asset);
-    addFooter(slide, assetIdx + 2, totalPages);
-  });
-
-  const pptxPath = path.join(outRoot, "visual_anchor_rough_svg_review.pptx");
-  await pptx.writeFile({ fileName: pptxPath });
-  return pptxPath;
-}
-
-async function writeNativeReviewDeck(cases, outRoot, manifest) {
-  const reviewCases = sortReviewItems(cases);
-  const renderableCases = [];
-  const rejectedCases = [];
-  for (const spec of reviewCases) {
-    try {
-      validateVisualAnchorSpec(spec);
-      const renderPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "ppt_native" });
-      if (!["ppt_native", "evidence"].includes(renderPath)) throw new Error(`Expected ppt_native/evidence render path for ${spec.id}, got ${renderPath}`);
-      renderableCases.push({ spec, renderPath });
-    } catch (error) {
-      if (!isTextCapacityError(error)) throw error;
-      rejectedCases.push({
-        id: spec.id,
-        title: spec.title,
-        claim: spec.claim,
-        kind: spec.kind,
-        template: spec.template,
-        renderer: "ppt_native",
-        reason: error.message,
-      });
-    }
-  }
-  const pptx = new pptxgen();
-  pptx.layout = "LAYOUT_WIDE";
-  pptx.author = "hw-ppt-gen";
-  pptx.subject = "Visual anchor ppt_native smoke review";
-  pptx.title = "Visual Anchor PPT Native Smoke Review";
-  pptx.company = "Huawei-style PPTX generator";
-  pptx.lang = "zh-CN";
-  pptx.theme = { headFontFace: "Microsoft YaHei", bodyFontFace: "Microsoft YaHei", lang: "zh-CN" };
-
-  const groups = new Map();
-  cases.forEach((spec) => groups.set(`${spec.kind}/${spec.template}`, (groups.get(`${spec.kind}/${spec.template}`) || 0) + 1));
-  const totalPages = renderableCases.length + 1;
-  const cover = pptx.addSlide();
-  cover.background = { color: "FFFFFF" };
-  addSlideTitle(cover, "视觉锚点 PPT Native Smoke Review", `${renderableCases.length}/${cases.length} rendered · ${rejectedCases.length} rejected · ${groups.size} templates · ${manifest.generated_at}`);
-  cover.addText("封面后每页用 PPT 原生形状渲染同一批语义用例。该卡组验证 ppt_native 全局模式能覆盖现有 visual anchor case。", {
-    x: 0.75,
-    y: 1.55,
-    w: 11.8,
-    h: 0.5,
-    fontFace: "Microsoft YaHei",
-    fontSize: 14,
-    color: "333333",
-    margin: 0,
-    fit: "shrink",
-  });
-  cover.addText([...groups.entries()].map(([name, count]) => `${name}: ${count}`).join("\n"), {
-    x: 0.85,
-    y: 2.35,
-    w: 11.5,
-    h: 3.7,
-    fontFace: "Arial",
-    fontSize: 9,
-    color: "595959",
-    breakLine: false,
-    margin: 0.04,
-    fit: "shrink",
-  });
-  addFooter(cover, 1, totalPages);
-
-  let nativePage = 0;
-  renderableCases.forEach(({ spec }) => {
-    const slide = pptx.addSlide();
-    slide.background = { color: "FFFFFF" };
-    addSlideTitle(slide, spec.scenario || spec.claim || spec.title || spec.id, `${spec.kind} / ${spec.template} · ${spec.id}`);
-    try {
-      renderVisualAnchorPptNative(slide, spec);
-      nativePage += 1;
-      addFooter(slide, nativePage + 1, totalPages);
-    } catch (error) {
-      if (!isTextCapacityError(error)) throw error;
-      pptx._slides.pop();
-      rejectedCases.push({
-        id: spec.id,
-        title: spec.title,
-        claim: spec.claim,
-        kind: spec.kind,
-        template: spec.template,
-        renderer: "ppt_native",
-        reason: error.message,
-      });
-    }
-  });
-
-  const pptxPath = path.join(outRoot, "visual_anchor_ppt_native_review.pptx");
-  await pptx.writeFile({ fileName: pptxPath });
-  return { pptxPath, rejectedCases };
 }
 
 async function main() {
@@ -399,36 +323,62 @@ async function main() {
   const cases = loadCases(args.spec);
   if (!cases.length) throw new Error(`No cases found in spec: ${args.spec}`);
 
-  const assets = [];
-  const fixedRuleCases = [];
+  const renderedCases = [];
   const rejectedCases = [];
+  const groups = new Map();
+  const addGroupEntry = (spec, renderPath, entry) => {
+    const key = `${spec.kind}/${spec.template}`;
+    if (!groups.has(key)) groups.set(key, { kind: spec.kind, template: spec.template, cases: [] });
+    groups.get(key).cases.push({ spec, renderPath, ...entry });
+  };
+
   for (const spec of cases) {
     validateVisualAnchorSpec(spec);
-    const roughPath = resolveVisualAnchorRenderPath(spec, { visualAnchorRenderer: "rough_svg" });
-    if (roughPath === "rough_svg") {
-      try {
-        assets.push(await writeDiagramAssets(spec, args.out));
-      } catch (error) {
-        if (!isTextCapacityError(error)) throw error;
-        rejectedCases.push({
-          id: spec.id,
-          title: spec.title,
-          claim: spec.claim,
-          kind: spec.kind,
-          template: spec.template,
-          renderer: "rough_svg",
-          reason: error.message,
-        });
-      }
-    } else {
-      fixedRuleCases.push({
+    const renderPath = resolveVisualAnchorRenderPath(spec);
+    try {
+      const asset = renderPath === "rough_svg" ? await writeDiagramAssets(spec, args.out) : null;
+      if (renderPath === "ppt_native" || renderPath === "evidence") verifyNativeCaseCapacity(spec);
+      addGroupEntry(spec, renderPath, { asset });
+      renderedCases.push({
         id: spec.id,
         title: spec.title,
         claim: spec.claim,
         kind: spec.kind,
         template: spec.template,
-        render_path: roughPath,
+        renderer: renderPath,
+        svg: asset?.svg,
+        png: asset?.png,
+        width: asset?.width,
+        height: asset?.height,
       });
+    } catch (error) {
+      if (!isTextCapacityError(error)) throw error;
+      addGroupEntry(spec, renderPath, { error: error.message });
+      rejectedCases.push({
+        id: spec.id,
+        title: spec.title,
+        claim: spec.claim,
+        kind: spec.kind,
+        template: spec.template,
+        renderer: renderPath,
+        reason: error.message,
+      });
+    }
+  }
+
+  const reviewDecks = [];
+  for (const group of groups.values()) {
+    const pptxPath = await writeTemplateReviewPpt(group, args.out);
+    const relativePptx = path.relative(ROOT, pptxPath).replace(/\\/g, "/");
+    reviewDecks.push({
+      kind: group.kind,
+      template: group.template,
+      pptx: relativePptx,
+      rendered_count: group.cases.filter((entry) => !entry.error).length,
+      rejected_count: group.cases.filter((entry) => entry.error).length,
+    });
+    for (const entry of [...renderedCases, ...rejectedCases]) {
+      if (entry.kind === group.kind && entry.template === group.template) entry.pptx = relativePptx;
     }
   }
 
@@ -436,26 +386,14 @@ async function main() {
     generated_at: new Date().toISOString(),
     spec: path.relative(ROOT, args.spec).replace(/\\/g, "/"),
     helper: "scripts/pptx/hw_diagram_helpers.js",
-    output_contract: ["image/svg+xml", "image/png"],
-    assets,
-    fixed_rule_cases: fixedRuleCases,
+    output_contract: ["one fixed implementation per case", "one review PPT per kind/template directory"],
+    review_decks: reviewDecks,
+    rendered_cases: renderedCases,
     rejected_cases: rejectedCases,
   };
-  const roughReviewPptx = await writeRoughReviewDeck(assets, args.out, manifest);
-  const nativeReview = await writeNativeReviewDeck(cases, args.out, manifest);
-  const nativeReviewPptx = nativeReview.pptxPath;
-  manifest.rejected_cases.push(...nativeReview.rejectedCases);
-  manifest.review_pptx = path.relative(ROOT, roughReviewPptx).replace(/\\/g, "/");
-  manifest.review_pptx_by_renderer = {
-    rough_svg: path.relative(ROOT, roughReviewPptx).replace(/\\/g, "/"),
-    ppt_native: path.relative(ROOT, nativeReviewPptx).replace(/\\/g, "/"),
-  };
   fs.writeFileSync(path.join(args.out, "manifest.json"), JSON.stringify(manifest, null, 2), "utf8");
-  console.log(`Generated ${assets.length} SVG+PNG pairs under ${args.out}`);
-  console.log(`Rejected ${manifest.rejected_cases.length} over-capacity render cases`);
-  console.log(`Covered ${fixedRuleCases.length} fixed-rule Evidence/table cases in native review deck`);
-  console.log(`Generated rough_svg review deck: ${roughReviewPptx}`);
-  console.log(`Generated ppt_native review deck: ${nativeReviewPptx}`);
+  console.log(`Generated ${reviewDecks.length} directory review PPTs under ${path.join(args.out, "review_pptx")}`);
+  console.log(`Included ${renderedCases.length} rendered cases and ${rejectedCases.length} over-capacity rejection slides`);
 }
 
 main().catch((error) => {

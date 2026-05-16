@@ -81,6 +81,7 @@ function estimateWrapFontScale(line, fontSize, effectiveWidth) {
   const cjkCount = (text.match(/[\u3400-\u9fff]/g) || []).length;
   const asciiShare = asciiCount / Math.max(1, asciiCount + cjkCount);
   if (fontSize <= 10 && Number(effectiveWidth) <= 1.7 && asciiShare < 0.2) return 1.12;
+  if (fontSize >= 12 && fontSize < 14 && asciiShare >= 0.45 && Number(effectiveWidth) >= 2.4 && Number(effectiveWidth) <= 4.0) return 1.08;
   if (fontSize >= 18 && asciiShare >= 0.25 && Number(effectiveWidth) >= 5.0) return 1.18;
   if (fontSize >= 12 && asciiShare >= 0.20 && Number(effectiveWidth) >= 5.0) return 1.08;
   if (fontSize >= 14 && asciiShare >= 0.25) return Number(effectiveWidth) >= 3.0 ? 1.14 : 1;

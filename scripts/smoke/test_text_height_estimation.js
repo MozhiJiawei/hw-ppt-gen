@@ -1446,7 +1446,7 @@ async function generateDeck() {
       valign: "top",
       breakLine: false,
       lineSpacingMultiple: 1.5,
-      line: { color: "111111", width: 0.75, transparency: 0 },
+      line: { color: "111111", width: 0, transparency: 100 },
       fill: { color: "FFFFFF", transparency: 100 },
     });
     boxes.push({ ...testCase, slide: slideNo, x, y, h: estimate.height, estimatedLines: estimate.estimatedLines });
@@ -1461,7 +1461,7 @@ async function generateDeck() {
 }
 
 function cropBounds(box) {
-  const borderPad = 5;
+  const borderPad = 0;
   return {
     left: Math.max(0, Math.floor(box.x * PX.perIn) + borderPad),
     top: Math.max(0, Math.floor(box.y * PX.perIn) + borderPad),
@@ -1588,7 +1588,7 @@ function guardBounds(box, slideBoxes, rawInfo) {
 }
 
 function textAndOverflowBounds(box, guard, rawInfo) {
-  const borderPad = 7;
+  const borderPad = 0;
   const left = Math.max(0, Math.floor(box.x * PX.perIn) + borderPad);
   const top = Math.max(0, Math.floor(box.y * PX.perIn) + borderPad);
   const boxBottom = Math.floor((box.y + box.h) * PX.perIn) - borderPad;
@@ -1780,7 +1780,7 @@ async function generateReviewDeck(manifest, results, options = {}) {
       valign: "top",
       breakLine: false,
       lineSpacingMultiple: 1.5,
-      line: { color: "111111", width: 0.75, transparency: 0 },
+      line: { color: "111111", width: 0, transparency: 100 },
       fill: { color: "FFFFFF", transparency: 100 },
     });
     slide.addText(`${box.id} / ${box.label}`, {

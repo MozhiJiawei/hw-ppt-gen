@@ -39,7 +39,6 @@ A normal content module is a layout container. It may stack or place multiple vi
 {
   "role": "content_panel",
   "title": "这里是标题区域 样式",
-  "flow": "top_bottom",
   "blocks": [
     {
       "type": "text",
@@ -61,14 +60,13 @@ A normal content module is a layout container. It may stack or place multiple vi
 }
 ```
 
-`flow` controls block placement inside the module:
-
-- `top_bottom`: blocks stack vertically.
-- `bottom_top`: blocks stack vertically in reverse order.
-- `left_right`: blocks flow horizontally.
-- `right_left`: blocks flow horizontally in reverse order.
-
-Block sizing uses `height` / `width` in inches for fixed blocks and `weight` for flexible remaining space. This is how a single column can contain multiple visual/text units without inventing layout-specific visual roles.
+The renderer owns block placement inside the module. Do not provide a `flow` field.
+When a module contains source evidence plus text, the renderer uses the available
+panel size and source image dimensions to choose the internal relationship:
+wide evidence normally stacks above text, while tall/narrow evidence can sit
+beside its reading text. Block sizing uses `height` in inches for fixed vertical
+blocks and `weight` for flexible remaining space; horizontal visual/text sizing is
+resolved by the renderer.
 
 ## Visual Blocks
 
@@ -85,7 +83,9 @@ Generated and transcribed tables must remain editable. Do not add `type: "table"
 
 ## Text Annotations
 
-Use `type: "text"` blocks for module interpretation, section labels, conclusions, and reading guidance. Use `visualAnchorCaption` / `visual_anchor_caption` beside a visual block for editable figure legends. Do not put page-level explanation text, source notes, captions, or conclusions inside `visual_anchor.visual_spec`.
+Use `type: "text"` blocks for module interpretation, section labels, conclusions, and reading guidance. Use `visualAnchorCaption` / `visual_anchor_caption` beside a visual block for editable figure legends only when the layout has enough visual space.
+
+For dense `two_column` (`05 内容 二分栏`) and `three_column` (`07 内容 三分栏`) pages, omit visual captions and source notes under module visuals. The renderer suppresses module visual captions in these layouts so the image or chart can occupy the full block. Put the evidence reading and source reference in the adjacent text block, the page footer, or the brief-backed narrative.
 
 For `biased_column`, the first module remains visual-only. Put interpretation in the right-side stacked cards, not inside the left visual box.
 

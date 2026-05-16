@@ -195,7 +195,7 @@ async function main() {
             blocks: [
               {
                 type: "text",
-                height: 1.1,
+                height: 0.7,
                 fontSize: 10,
                 body: [
                   "第一段解释文字放在上方白色内容框，形成参考图 05 的段落密度。",
@@ -304,7 +304,7 @@ async function main() {
             role: "content_panel",
             title: "这里是标题区域 样式",
             blocks: [
-              { type: "text", height: 1.05, fontSize: 10, body: ["左列以短说明开场，密度贴近参考图 07。", "下方三列小框承接细节。"] },
+              { type: "text", height: 0.7, fontSize: 10, body: ["左列以短说明开场，密度贴近参考图 07。", "下方三列小框承接细节。"] },
               {
                 type: "visual_anchor",
                 visual_anchor: matrixAnchor(
@@ -323,7 +323,7 @@ async function main() {
             blocks: [
               {
                 type: "text",
-                height: 0.28,
+                height: 0.5,
                 fontSize: 10,
                 body: "卡片内标题",
               },
@@ -334,7 +334,7 @@ async function main() {
               },
               {
                 type: "text",
-                height: 0.28,
+                height: 0.5,
                 fontSize: 10,
                 body: "卡片内标题",
               },
@@ -351,7 +351,7 @@ async function main() {
               },
               {
                 type: "text",
-                height: 0.28,
+                height: 0.5,
                 fontSize: 10,
                 body: "卡片内标题",
               },
@@ -377,7 +377,7 @@ async function main() {
                 fontSize: 12,
                 body: ["右列放流程锚点并给出结论清单。", "处理环节负责收敛差异。", "输出结果进入质量检查。"],
               },
-              { type: "visual_anchor", height: 1.25, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
+              { type: "visual_anchor", height: 2.8, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
             ],
           },
         ],

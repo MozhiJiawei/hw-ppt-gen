@@ -15,6 +15,10 @@ const expectedPagePrimitiveExports = [
   "cloneOptions",
   "createHuaweiDeck",
   "ensureTmpPath",
+  "estimateTextBoxHeight",
+  "estimateTextUnits",
+  "estimateTextWidth",
+  "estimateWrappedLines",
   "grayCard",
   "redTitleCard",
   "repairPptxForPowerPointCom",
@@ -47,6 +51,7 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_template_invalid",
   "content_visual_anchor_image_missing",
   "content_visual_anchor_image_invalid",
+  "content_visual_anchor_image_too_small",
   "content_visual_anchor_highlight_unexplained",
   "content_visual_anchor_subjective_scores",
   "content_visual_anchor_relationship_unproven",
@@ -60,6 +65,11 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_table_overflow",
   "content_layout_schema_invalid",
   "content_layout_schema_anchor_missing",
+  "content_layout_module_alignment",
+  "content_layout_module_inner_alignment",
+  "content_layout_block_gap",
+  "content_layout_text_frame_mismatch",
+  "content_layout_visual_frame_gap",
 ];
 
 const imageVisualSpec = {
@@ -78,6 +88,27 @@ const imageVisualSpec = {
   },
   highlight_reason: "高亮生成，因为它验证图片证据是否真正记录。",
 };
+
+function writeSourceSvg(relativePath, width, height, label = "source") {
+  const filePath = path.join(ROOT, relativePath);
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect x="0" y="0" width="${width}" height="${height}" fill="#FFFFFF" stroke="#C00000" stroke-width="8"/>
+  <text x="${width / 2}" y="${height / 2}" text-anchor="middle" font-size="42" font-family="Microsoft YaHei">${label}</text>
+</svg>`, "utf8");
+  return filePath;
+}
+
+function evidenceSourceAnchor(id, sourcePath) {
+  return {
+    id,
+    title: id,
+    claim: "源图作为证据锚点进入内容布局。",
+    kind: "Evidence",
+    template: "source_figure",
+    source: { path: sourcePath, caption: "Source figure for auto layout." },
+  };
+}
 
 function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
@@ -196,6 +227,135 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
   assert(slide.visual_anchor_caption.area.y >= slide.visual_area.y + slide.visual_area.h - 0.01, "caption should sit below the rendered visual area");
 }
 
+function assertContentLayoutAutoResolvesTallEvidenceSideText() {
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
+  const sourcePath = writeSourceSvg(".tmp/visual_anchor_contract/tall_source.svg", 360, 1100, "tall");
+  const pptx = createHuaweiDeck({ title: "auto flow contract" });
+  addVisualAnchorContentSlide(pptx, {
+    title: "瘦高证据自适应",
+    sections: ["测试"],
+    currentSection: "测试",
+    summary: { body: [{ label: "自适应", text: "模型不给 flow，渲染器根据源图比例选择左右结构。" }] },
+    contentLayout: {
+      type: "two_column",
+      reference: "05 内容 二分栏",
+      modules: [
+        {
+          role: "content_panel",
+          title: "瘦高图",
+          blocks: [
+            { type: "visual_anchor", visual_anchor: evidenceSourceAnchor("auto_tall_evidence", sourcePath) },
+            { type: "text", body: ["瘦高源图不应强行上图下文。", "解释文字应自动放到图的右侧。"], fontSize: 10 },
+          ],
+        },
+        {
+          role: "content_panel",
+          title: "说明",
+          blocks: [{ type: "text", body: "另一个模块用于保持二分栏结构完整。" }],
+        },
+      ],
+    },
+    page: "01",
+  });
+  const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_auto_flow_manifest.json"));
+  const moduleLayout = manifest.slides[0].content_layout_schema.module_layouts[0];
+  assert.equal(moduleLayout.resolved_flow, "left_right", "tall source evidence plus text should auto-resolve to side-by-side layout");
+  assert(moduleLayout.block_areas[0].area.x < moduleLayout.block_areas[1].area.x, "visual block should be placed to the left of its text block");
+  assert(Math.abs(moduleLayout.block_areas[0].visible_area.y - moduleLayout.block_areas[0].area.y) < 0.001, "source evidence should be top-aligned inside its visual block");
+  assert(moduleLayout.block_areas[0].visible_area.x > moduleLayout.block_areas[0].area.x, "tall source evidence should be horizontally centered inside its visual block");
+}
+
+function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
+  const pptx = createHuaweiDeck({ title: "column caption contract" });
+  addVisualAnchorContentSlide(pptx, {
+    title: "二分栏图注规则",
+    sections: ["测试"],
+    currentSection: "测试",
+    summary: { body: [{ label: "密度", text: "二分栏和三分栏把空间优先留给图本体。" }] },
+    contentLayout: {
+      type: "two_column",
+      reference: "05 内容 二分栏",
+      modules: [
+        {
+          role: "content_panel",
+          title: "主证据",
+          blocks: [{
+            type: "visual_anchor",
+            visual_anchor: { ...imageVisualSpec, id: "two_column_caption_suppressed" },
+            visualAnchorCaption: {
+              text: "这段图题在二分栏中不应渲染。",
+              source: "这段来源在二分栏中不应渲染。",
+            },
+          }],
+        },
+        {
+          role: "content_panel",
+          title: "解读",
+          blocks: [{ type: "text", body: "解释文字承接图中证据。" }],
+        },
+      ],
+    },
+    page: "01",
+  });
+  addVisualAnchorContentSlide(pptx, {
+    title: "三分栏图注规则",
+    sections: ["测试"],
+    currentSection: "测试",
+    summary: { body: [{ label: "密度", text: "三分栏同样不为图题和来源预留额外高度。" }] },
+    contentLayout: {
+      type: "three_column",
+      reference: "07 内容 三分栏",
+      modules: [
+        {
+          role: "content_panel",
+          title: "证据一",
+          blocks: [{
+            type: "visual_anchor",
+            visual_anchor: { ...imageVisualSpec, id: "three_column_caption_suppressed" },
+            visualAnchorCaption: "这段图题在三分栏中不应渲染。",
+          }],
+        },
+        {
+          role: "content_panel",
+          title: "证据二",
+          blocks: [{
+            type: "visual_anchor",
+            visual_anchor: {
+              id: "three_column_matrix_caption_suppressed",
+              title: "Matrix Visual",
+              claim: "非 Evidence 的视觉锚点也不应在三分栏渲染图注。",
+              kind: "Matrix",
+              template: "table",
+              visual_spec: {
+                rows: [
+                  ["指标", "判断"],
+                  ["密度", "优先给图"],
+                  ["来源", "放入正文"],
+                ],
+              },
+            },
+            visualAnchorCaption: {
+              text: "这段 Matrix 图题在三分栏中不应渲染。",
+              source: "这段 Matrix 来源在三分栏中不应渲染。",
+            },
+          }],
+        },
+        { role: "content_panel", title: "证据三", blocks: [{ type: "text", body: "第三栏文字。" }] },
+      ],
+    },
+    page: "02",
+  });
+  const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_column_caption_manifest.json"));
+
+  for (const slide of manifest.slides) {
+    assert(!slide.visual_anchor_caption, `${slide.resolved_layout_type} should not render module visual captions`);
+    assert.equal(slide.visual_area.h, slide.anchor_area.h, `${slide.resolved_layout_type} should not reserve caption height`);
+  }
+}
+
 function assertDiagramExportsStayAvailable() {
   const diagram = require("../pptx/hw_diagram_helpers");
   for (const name of requiredDiagramExports) {
@@ -236,6 +396,14 @@ function assertSkillDocumentsCurrentPath() {
   assert(skill.includes("Choose the visual anchor's semantic `kind` and `template`"), "SKILL should document semantic visual-anchor selection");
 }
 
+function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
+  const schema = read("references/content_layout_schema.md");
+  assert(schema.includes("two_column"), "content layout reference should document two_column");
+  assert(schema.includes("three_column"), "content layout reference should document three_column");
+  assert(schema.includes("renderer suppresses module visual captions"), "content layout reference should document dense-column caption suppression");
+  assert(schema.includes("Do not provide a `flow` field"), "content layout reference should make module flow renderer-owned");
+}
+
 function assertPackageScriptsRunContractBeforeSmoke() {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.scripts["test:visual-anchor-contract"], "node scripts/smoke/test_visual_anchor_content_contract.js");
@@ -250,12 +418,15 @@ function main() {
   collect("visual-anchor content-slide surface exists", assertVisualAnchorSlideSurface, failures);
   collect("content-slide entrypoint records fixed output evidence", assertContentSlideRecordsFixedOutputEvidence, failures);
   collect("content-slide images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
+  collect("content layout auto-resolves tall evidence side text", assertContentLayoutAutoResolvesTallEvidenceSideText, failures);
   collect("content-slide captions stay outside visual_spec", assertContentSlideRendersEditableCaptionOutsideVisualSpec, failures);
+  collect("dense column layouts suppress visual captions", assertTwoAndThreeColumnLayoutsSuppressVisualCaptions, failures);
   collect("diagram helper exports remain available", assertDiagramExportsStayAvailable, failures);
   collect("sample deck uses the visual-anchor path", assertSampleDeckUsesVisualAnchorContentSlides, failures);
   collect("hard QA validates rendered visual anchors", assertHardQaKnowsVisualAnchorContract, failures);
   collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicSchemaEscapeHatch, failures);
   collect("SKILL documents the current path", assertSkillDocumentsCurrentPath, failures);
+  collect("content layout reference documents dense caption suppression", assertContentLayoutReferenceDocumentsDenseCaptionSuppression, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 
   if (failures.length) {

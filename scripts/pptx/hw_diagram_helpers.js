@@ -1999,13 +1999,17 @@ function addMatrixTable(slide, rows, options = {}) {
 function drawNativeEvidence(slide, spec, area) {
   const source = spec.source || {};
   const imagePath = source.path ? path.resolve(source.path) : "";
-  const pad = 0.04;
+  const pad = 0;
   const imageBox = { x: area.x + pad, y: area.y + pad, w: area.w - pad * 2, h: area.h - pad * 2 };
   if (imagePath && fs.existsSync(imagePath)) {
     const dimensions = readImageDimensions(imagePath);
     const fitted = dimensions ? fitAreaContain(imageBox, dimensions.width, dimensions.height) : imageBox;
     slide.addImage({ path: imagePath, ...fitted });
-    return { image_area: fitted };
+    return {
+      image_area: fitted,
+      image_width: dimensions?.width,
+      image_height: dimensions?.height,
+    };
   } else {
     nativeTextCell(slide, source.path || source.id, { x: area.x + 0.08, y: area.y + 0.08, w: area.w - 0.16, h: area.h - 0.16, fontSize: 12, bold: true, color: "595959", align: "center", fill: "F7F7F7", stroke: "D9D9D9" });
     return { image_area: imageBox, placeholder: true };
@@ -2018,7 +2022,7 @@ function fitAreaContain(area, imageWidth, imageHeight) {
   const imageRatio = imageWidth / imageHeight;
   if (imageRatio >= areaRatio) {
     const h = area.w / imageRatio;
-    return { x: area.x, y: area.y + (area.h - h) / 2, w: area.w, h };
+    return { x: area.x, y: area.y, w: area.w, h };
   }
   const w = area.h * imageRatio;
   return { x: area.x + (area.w - w) / 2, y: area.y, w, h: area.h };
@@ -2746,6 +2750,7 @@ module.exports = {
   chooseTemplateLayout,
   createVisualAnchorImage,
   createVisualAnchorSvg,
+  readImageDimensions,
   renderVisualAnchorPptNative,
   renderVisualAnchorRoughSvg,
   resolveVisualAnchorRenderPath,

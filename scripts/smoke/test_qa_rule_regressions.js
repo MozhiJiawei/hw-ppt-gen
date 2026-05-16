@@ -2,6 +2,7 @@ const assert = require("assert");
 const { execFileSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
+const sharp = require("sharp");
 
 const {
   addCoverSlide,
@@ -56,6 +57,43 @@ function tableAnchor(id, rows) {
   };
 }
 
+function evidenceAnchor(id, imagePath) {
+  return {
+    id,
+    title: "源图缩放",
+    claim: "源图必须在视觉区域内保持可读尺寸。",
+    kind: "Evidence",
+    template: "source_figure",
+    why_this_visual: "源图直接承载页面证据，缩放过小时会失去论证价值。",
+    layout_reference: "05 内容 二分栏",
+    relationship_test: "源图与结论存在直接证据关系，必须作为 Evidence 呈现。",
+    source: {
+      path: imagePath,
+      caption: "极宽源图用于复现缩放过小的证据图问题。",
+    },
+  };
+}
+
+function compactTableAnchor(id, layoutReference = "07 内容 三分栏") {
+  return {
+    id,
+    title: "对齐复现表",
+    claim: "用于复现分栏内容上下边界不齐的问题。",
+    kind: "Matrix",
+    template: "table",
+    why_this_visual: "表格锚点能稳定渲染并触发分栏模块几何记录。",
+    layout_reference: layoutReference,
+    relationship_test: "多项判断存在结构化比较关系，适合表格呈现。",
+    visual_spec: {
+      rows: [
+        ["项", "判断"],
+        ["A", "通过"],
+        ["B", "观察"],
+      ],
+    },
+  };
+}
+
 function planEntry(page, slideData) {
   const anchors = [];
   const collect = (module) => {
@@ -73,6 +111,19 @@ function planEntry(page, slideData) {
 
 async function generateDeck() {
   ensureDir(OUT_DIR);
+  const tinyEvidencePath = path.join(OUT_DIR, "tiny_evidence.png");
+  await sharp({
+    create: {
+      width: 1000,
+      height: 80,
+      channels: 4,
+      background: "#ffffff",
+    },
+  })
+    .composite([{ input: Buffer.from(`<svg width="1000" height="80"><rect x="0" y="0" width="1000" height="80" fill="white"/><text x="500" y="48" font-size="38" text-anchor="middle" fill="#C00000">过宽证据图</text></svg>`), top: 0, left: 0 }])
+    .png()
+    .toFile(tinyEvidencePath);
+
   const pptx = createHuaweiDeck({ title: "QA Rule Regressions" });
   addCoverSlide(pptx, {
     title: "QA 规则回归复现",
@@ -80,7 +131,7 @@ async function generateDeck() {
     source: "来源：规则回归测试",
   });
 
-  const sections = ["规则复现"];
+  const sections = ["规则复现", "对照章节"];
   const slides = [
     {
       page: "02",
@@ -157,6 +208,88 @@ async function generateDeck() {
         ],
       },
     },
+    {
+      page: "06",
+      title: "证据图缩放过小必须被 QA 拦截",
+      sections,
+      currentSection: "规则复现",
+      summary: { body: [{ label: "可读优先", text: "源图即使按比例放置，也不能小到失去证据作用。" }] },
+      contentLayout: {
+        type: "two_column",
+        reference: "05 内容 二分栏",
+        modules: [
+          {
+            role: "content_panel",
+            title: "过宽源图",
+            blocks: [{
+              type: "visual_anchor",
+              height: 3.7,
+              visual_anchor: evidenceAnchor("tiny_evidence_source_figure", tinyEvidencePath),
+              visualAnchorCaption: { text: "证据图缩放：极宽图在常规模块中会被压得过小", source: "来源：QA 规则回归测试" },
+            }],
+          },
+          { role: "content_panel", title: "阅读风险", blocks: [{ type: "text", body: "如果 hard QA 不拦截，最终视觉审阅才会发现图像过小。" }] },
+        ],
+      },
+    },
+    {
+      page: "07",
+      title: "大卡内容稀疏必须被 QA 拦截",
+      sections,
+      currentSection: "规则复现",
+      summary: { body: [{ label: "密度约束", text: "大面积内容卡不能只放短句，否则会形成明显空白。" }] },
+      contentLayout: {
+        type: "two_column",
+        reference: "05 内容 二分栏",
+        modules: [
+          {
+            role: "content_panel",
+            title: "合规视觉",
+            blocks: [{
+              type: "visual_anchor",
+              visual_anchor: baseProcessAnchor("sparse_card_control_visual", "05 内容 二分栏"),
+            }],
+          },
+          { role: "content_panel", title: "稀疏大卡", blocks: [{ type: "text", body: "短句。" }] },
+        ],
+      },
+    },
+    {
+      page: "08",
+      title: "分栏内容上下边界必须对齐",
+      sections,
+      currentSection: "规则复现",
+      summary: { body: [{ label: "对齐约束", text: "二分栏和三分栏的内容块不能在不同高度结束。" }] },
+      contentLayout: {
+        type: "three_column",
+        reference: "07 内容 三分栏",
+        modules: [
+          {
+            role: "content_panel",
+            title: "短视觉",
+            blocks: [{
+              type: "visual_anchor",
+              height: 1.0,
+              visual_anchor: compactTableAnchor("misaligned_short_visual"),
+            }],
+          },
+          {
+            role: "content_panel",
+            title: "长视觉",
+            blocks: [{
+              type: "visual_anchor",
+              height: 2.0,
+              visual_anchor: compactTableAnchor("misaligned_tall_visual"),
+            }],
+          },
+          {
+            role: "content_panel",
+            title: "短文本",
+            blocks: [{ type: "text", height: 1.1, body: "短内容导致底边提前结束。" }],
+          },
+        ],
+      },
+    },
   ];
 
   const planSlides = [];
@@ -212,6 +345,9 @@ async function main() {
   assert(supportingCardEntry.content_layout_schema, "#8: supportingCards path should expose unified content layout schema evidence");
 
   assert(issuesOf(result, "content_visual_anchor_table_overflow", 5).length >= 1, "#10: tall Matrix/table anchors in four-column modules should be blocking QA issues");
+  assert(issuesOf(result, "content_visual_anchor_image_too_small", 6).length >= 1, "#11: evidence images that occupy too little visual area should be blocking QA issues");
+  assert(issuesOf(result, "sparse_large_card").some((item) => item.severity === "error"), "#12: very sparse large cards should be blocking QA issues");
+  assert(issuesOf(result, "content_layout_module_alignment", 8).length >= 1, "#13: misaligned column module content should be blocking QA issues");
 
   console.log("QA rule regression tests passed");
 }

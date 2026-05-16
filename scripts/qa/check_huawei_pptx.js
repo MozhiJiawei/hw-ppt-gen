@@ -313,12 +313,12 @@ function englishWords(text) {
 function estimateTextUnits(text) {
   let units = 0;
   for (const char of String(text || "")) {
-    if (/[\u3400-\u9fff]/.test(char)) units += 1;
-    else if (/[A-Z]/.test(char)) units += 0.72;
-    else if (/[a-z]/.test(char)) units += 0.55;
-    else if (/[0-9]/.test(char)) units += 0.55;
-    else if (/\s/.test(char)) units += 0.3;
-    else units += 0.35;
+    if (/[\u3400-\u9fff]/.test(char)) units += 1.02;
+    else if (/[A-Z]/.test(char)) units += 0.78;
+    else if (/[a-z]/.test(char)) units += 0.60;
+    else if (/[0-9]/.test(char)) units += 0.61;
+      else if (/\s/.test(char)) units += 0.30;
+    else units += 0.46;
   }
   return units;
 }
@@ -326,10 +326,21 @@ function estimateTextUnits(text) {
 function estimateWrappedLines(text, fontSize, widthInches) {
   if (!text || !fontSize || !widthInches) return 0;
   const avgCjkCharWidth = fontSize / 72;
-  const unitsPerLine = Math.max(widthInches / avgCjkCharWidth, 1);
   return String(text)
     .split(/\r?\n/)
-    .reduce((sum, line) => sum + Math.max(1, Math.ceil(estimateTextUnits(line) / unitsPerLine)), 0);
+    .reduce((sum, line) => {
+      const bulletIndentUnits = 0;
+      const effectiveWidth = Math.max(fontSize / 72, widthInches - bulletIndentUnits * avgCjkCharWidth);
+      const asciiCount = (line.match(/[A-Za-z0-9]/g) || []).length;
+      const cjkCount = (line.match(/[\u3400-\u9fff]/g) || []).length;
+      const asciiShare = asciiCount / Math.max(1, asciiCount + cjkCount);
+      let fontScale = 1;
+      if (fontSize >= 18 && asciiShare >= 0.25 && effectiveWidth >= 5.0) fontScale = 1.18;
+      else if (fontSize >= 12 && asciiShare >= 0.20 && effectiveWidth >= 5.0) fontScale = 1.08;
+      else if (fontSize >= 14 && asciiShare >= 0.25 && effectiveWidth >= 3.0) fontScale = 1.14;
+      const effectiveUnits = Math.max(1, (effectiveWidth / avgCjkCharWidth) * fontScale);
+      return sum + Math.max(1, Math.ceil(estimateTextUnits(line) / effectiveUnits));
+    }, 0);
 }
 
 function availableTextLines(shape, fontSize, lineSpacingMultiple = 1.5) {
@@ -613,7 +624,7 @@ function checkSlideXml(name, xml) {
       if (titleColors.size && !titleColors.has("C00000")) {
         issues.push(issue(slide, "page_title_color", "error", `Page title should be Huawei red (C00000), found ${[...titleColors].join(", ")}.`, { text: title.text }));
       }
-      const titleLines = estimateWrappedLines(title.text, maxSize || 24, title.w || 12.2);
+      const titleLines = estimatePageTitleLines(title.text, title.w || 12.2, maxSize || 24);
       if (titleLines > 1) {
         issues.push(issue(slide, "page_title_wrap", "error", "Page title is estimated to wrap beyond one line; shorten the Chinese viewpoint title.", { estimated_lines: titleLines, text: title.text }));
       }
@@ -647,6 +658,7 @@ function checkSlideXml(name, xml) {
     }));
   }
 
+  const pageTitle = slide && slide > 1 ? titleShape(shapes) : null;
   for (const shape of shapes.filter((item) => item.text)) {
     const words = englishWords(shape.text);
     if (words.length >= 3 && !hasCjk(shape.text)) {
@@ -663,7 +675,9 @@ function checkSlideXml(name, xml) {
 
     const maxSize = Math.max(...shape.fontSizes, 0) || 12;
     if (maxSize >= 10 && shape.w && shape.h) {
-      const estimatedLines = estimateWrappedLines(shape.text, maxSize, Math.max(shape.w - 0.08, 0.1));
+      const estimatedLines = shape === pageTitle
+        ? estimatePageTitleLines(shape.text, Math.max(shape.w - 0.08, 0.1), maxSize)
+        : estimateWrappedLines(shape.text, maxSize, Math.max(shape.w - 0.08, 0.1));
       const availableLines = availableTextLines(shape, maxSize, maxSize >= 18 ? 1.15 : 1.5);
       if (estimatedLines > availableLines + 0.35) {
         issues.push(issue(slide, "text_overflow_estimate", "error", "Text is estimated to exceed its text box capacity at the declared font size; shorten, split, or resize instead of relying on autofit.", {
@@ -693,7 +707,7 @@ function checkSlideXml(name, xml) {
     }
   }
 
-  const largeCards = shapes.filter((shape) => CONTENT_CARD_FILLS.has(shape.fill) && shape.area >= 2.8 && (shape.y === null || shape.y >= 1.95));
+  const largeCards = shapes.filter((shape) => !shape.text && CONTENT_CARD_FILLS.has(shape.fill) && shape.area >= 2.8 && (shape.y === null || shape.y >= 1.95));
   for (const card of largeCards) {
     const containedText = shapes
       .filter((shape) => shape.text && isInside(shape, card))
@@ -705,7 +719,8 @@ function checkSlideXml(name, xml) {
     if (structuredCount >= 2) continue;
     if (isBiasedColumnInterpretationCard(card, shapes, containedText)) continue;
     if (textLen < 55 || density < 12) {
-      issues.push(issue(slide, "sparse_large_card", "warning", "Large content card has too little text for its size; add appropriately sized explanation text or shrink the card.", {
+      const severity = structuredCount === 0 || textLen < 25 || density < 2 ? "error" : "warning";
+      issues.push(issue(slide, "sparse_large_card", severity, "Large content card is too sparse for its size; add source-grounded explanation/interpretation, move content from adjacent sparse modules, or shrink the card instead of leaving empty space.", {
         area: Math.round(card.area * 100) / 100,
         text_length: textLen,
         density: Math.round(density * 10) / 10,
@@ -844,6 +859,7 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     issues.push(...checkVisualAnchorLayout(slide, entry));
     issues.push(...checkVisualAnchorManifestContract(slide, entry, manifest));
     issues.push(...checkVisualAnchorTableCapacity(slide, entry));
+    issues.push(...checkVisualAnchorImagePresenceAndScale(slide, entry));
     if (entry.renderer === "rough_svg") {
       const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
         && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
@@ -867,6 +883,38 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
   }
   }
 
+  return issues;
+}
+
+function checkVisualAnchorImagePresenceAndScale(slide, entry) {
+  const spec = entry.visual_anchor || {};
+  const isEvidenceImage = spec.kind === "Evidence" && /^source_(figure|table|screenshot|chart)$/.test(safeText(spec.template));
+  const isImageRenderer = entry.renderer === "rough_svg" || entry.renderer === "evidence";
+  if (!isImageRenderer) return [];
+
+  const issues = [];
+  const imageArea = entry.image_area;
+  const visualArea = entry.visual_area || entry.anchor_area;
+  if (entry.placeholder === true || entry.renderResult?.placeholder === true) {
+    issues.push(issue(slide, "content_visual_anchor_image_missing", "error", "Evidence visual anchor rendered a placeholder instead of the source image; fix the source path or replace the evidence.", {
+      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      source_path: spec.source?.path || "",
+    }));
+  }
+
+  if (!isRectLike(imageArea) || !isRectLike(visualArea)) return issues;
+
+  const coverage = imageCoverage(imageArea, visualArea);
+  const minimumCoverage = isEvidenceImage ? 0.38 : 0.32;
+  if (coverage < minimumCoverage) {
+    issues.push(issue(slide, "content_visual_anchor_image_too_small", "error", "Visual anchor image occupies too little of its intended visual area; redesign the layout or choose a better-fitted source crop/region instead of accepting a tiny image.", {
+      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      coverage: Math.round(coverage * 1000) / 1000,
+      minimum_coverage: minimumCoverage,
+      image_area: imageArea,
+      visual_area: visualArea,
+    }));
+  }
   return issues;
 }
 
@@ -913,6 +961,129 @@ function checkContentLayoutSchema(slide, entries) {
   }
   if (!/(05 内容 二分栏|06 内容 偏分栏|07 内容 三分栏|08 内容 四分栏)/.test(schemaText)) {
     issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema must be grounded in one of the 05-08 content reference images."));
+  }
+  issues.push(...checkContentLayoutModuleAlignment(slide, first));
+  issues.push(...checkContentLayoutBlockFrames(slide, first));
+  return issues;
+}
+
+function estimatePageTitleLines(text, widthInches, titleFontSize = 24) {
+  const value = safeText(text);
+  if (!value.includes(" - ")) return estimateWrappedLines(value, titleFontSize, widthInches);
+  const [main, ...rest] = value.split(" - ");
+  const subtitle = rest.join(" - ");
+  const mainWidth = estimateTextUnits(main) * (titleFontSize / 72);
+  const subtitleWidth = estimateTextUnits(` - ${subtitle}`) * (14 / 72);
+  return Math.max(1, Math.ceil((mainWidth + subtitleWidth) / Math.max(widthInches, 0.1)));
+}
+
+function checkContentLayoutModuleAlignment(slide, schema = {}) {
+  if (!["two_column", "three_column"].includes(schema.type)) return [];
+  const modules = Array.isArray(schema.module_layouts) ? schema.module_layouts : [];
+  if (modules.length < 2) return [];
+  const occupied = modules
+    .map((module, idx) => ({ idx, title: module.title || `module_${idx + 1}`, area: module.occupied_area }))
+    .filter((module) => isRectLike(module.area));
+  if (occupied.length < modules.length) return [];
+
+  const topTolerance = 0.08;
+  const bottomTolerance = 0.16;
+  const tops = occupied.map((module) => module.area.y);
+  const bottoms = occupied.map((module) => module.area.y + module.area.h);
+  const topDelta = Math.max(...tops) - Math.min(...tops);
+  const bottomDelta = Math.max(...bottoms) - Math.min(...bottoms);
+  const issues = [];
+  if (topDelta > topTolerance || bottomDelta > bottomTolerance) {
+    issues.push(issue(slide, "content_layout_module_alignment", "error", "Column module contents are not vertically aligned; make two/three-column modules start and end at consistent heights by adding grounded content, adjusting visual block height/scale, or choosing a denser layout.", {
+      layout_type: schema.type,
+      top_delta: Math.round(topDelta * 1000) / 1000,
+      bottom_delta: Math.round(bottomDelta * 1000) / 1000,
+      top_tolerance: topTolerance,
+      bottom_tolerance: bottomTolerance,
+      modules: occupied.map((module) => ({
+        index: module.idx + 1,
+        title: module.title,
+        top: Math.round(module.area.y * 1000) / 1000,
+        bottom: Math.round((module.area.y + module.area.h) * 1000) / 1000,
+        height: Math.round(module.area.h * 1000) / 1000,
+      })),
+    }));
+  }
+  return issues;
+}
+
+function checkContentLayoutBlockFrames(slide, schema = {}) {
+  if (!["two_column", "three_column"].includes(schema.type)) return [];
+  const modules = Array.isArray(schema.module_layouts) ? schema.module_layouts : [];
+  const issues = [];
+  for (const [idx, module] of modules.entries()) {
+    const title = module.title || `module_${idx + 1}`;
+    const contentArea = module.content_area;
+    const occupied = module.occupied_area;
+    if (isRectLike(contentArea) && isRectLike(occupied)) {
+      const topGap = Number(occupied.y) - Number(contentArea.y);
+      const bottomGap = (Number(contentArea.y) + Number(contentArea.h)) - (Number(occupied.y) + Number(occupied.h));
+      if (topGap > 0.08 || bottomGap > 0.42) {
+        issues.push(issue(slide, "content_layout_module_inner_alignment", "error", "Column module content does not fill the module from top toward the bottom; add grounded bullets, enlarge a visual anchor, or choose a denser split instead of leaving a floating block.", {
+          layout_type: schema.type,
+          module_index: idx + 1,
+          module_title: title,
+          top_gap: Math.round(topGap * 1000) / 1000,
+          bottom_gap: Math.round(bottomGap * 1000) / 1000,
+          max_top_gap: 0.08,
+          max_bottom_gap: 0.42,
+        }));
+      }
+    }
+
+    const gaps = Array.isArray(module.block_gaps) ? module.block_gaps.map(Number).filter(Number.isFinite) : [];
+    const largeGap = gaps.find((gap) => gap > 0.28);
+    if (largeGap !== undefined) {
+      issues.push(issue(slide, "content_layout_block_gap", "error", "Blocks inside a column module are too far apart; keep image/text evidence compact or move to a different layout.", {
+        layout_type: schema.type,
+        module_index: idx + 1,
+        module_title: title,
+        max_gap: 0.28,
+        gaps,
+      }));
+    }
+
+    const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+    for (const [blockIdx, block] of blocks.entries()) {
+      const area = block.area;
+      if (!isRectLike(area)) continue;
+      if (block.type === "text" && Number.isFinite(Number(block.estimated_height))) {
+        const estimated = Number(block.estimated_height);
+        const excess = Number(area.h) - estimated;
+        const shortage = estimated - Number(area.h);
+        if ((excess > 0.26 && excess / Math.max(estimated, 0.1) > 0.22) || shortage > 0.12) {
+          issues.push(issue(slide, "content_layout_text_frame_mismatch", "error", "Text block frame height does not match the renderer's text-height estimate; fix the sizing rule or adjust content before relying on visual QA.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            frame_height: Math.round(Number(area.h) * 1000) / 1000,
+            estimated_height: Math.round(estimated * 1000) / 1000,
+            excess: Math.round(excess * 1000) / 1000,
+            shortage: Math.round(shortage * 1000) / 1000,
+          }));
+        }
+      }
+      if (isRectLike(block.visible_area) && block.type !== "text") {
+        const verticalSlack = Number(area.h) - Number(block.visible_area.h);
+        if (verticalSlack > 0.32 && Number(area.h) / Math.max(Number(block.visible_area.h), 0.1) > 1.18) {
+          issues.push(issue(slide, "content_layout_visual_frame_gap", "error", "Visual block frame is much taller than the visible rendered visual; size the visual block from source aspect ratio instead of hiding empty space inside the frame.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            frame_height: Math.round(Number(area.h) * 1000) / 1000,
+            visible_height: Math.round(Number(block.visible_area.h) * 1000) / 1000,
+            vertical_slack: Math.round(verticalSlack * 1000) / 1000,
+          }));
+        }
+      }
+    }
   }
   return issues;
 }
@@ -1188,6 +1359,11 @@ function isRectLike(value) {
     && Number(value.w) > 0
     && Number.isFinite(Number(value.h))
     && Number(value.h) > 0;
+}
+
+function imageCoverage(imageArea, visualArea) {
+  if (!isRectLike(imageArea) || !isRectLike(visualArea)) return 0;
+  return (Number(imageArea.w) * Number(imageArea.h)) / (Number(visualArea.w) * Number(visualArea.h));
 }
 
 function isContained(inner, outer) {

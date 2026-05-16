@@ -153,6 +153,10 @@ async function main() {
       },
       highlight_reason: "高亮视觉锚点，因为它承接页面骨架并支撑解释模块。",
     },
+    visualAnchorCaption: {
+      text: "能力栈：页面骨架、视觉锚点和解释模块形成自下而上的支撑关系",
+      source: "示例说明：视觉锚点不是装饰，而是正文页信息组织的主对象",
+    },
     source,
     page: "05",
   });

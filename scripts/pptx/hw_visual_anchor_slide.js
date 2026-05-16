@@ -6,6 +6,7 @@ const {
   addFooter,
   addPageTitle,
   cloneOptions,
+  estimateTextBoxHeight,
   grayCard,
   redTitleCard,
   safeText,
@@ -13,6 +14,7 @@ const {
 } = require("./hw_pptx_helpers");
 const {
   createVisualAnchorImage,
+  readImageDimensions,
   renderVisualAnchorPptNative,
   resolveVisualAnchorRenderPath,
   validateVisualAnchorSpec,
@@ -336,24 +338,27 @@ function normalizeModuleBlocks(module, data = {}) {
       visual_anchor: module.visual_anchor || module.visualAnchor || data.visual_anchor,
       visualAnchorCaption: module.visualAnchorCaption || module.visual_anchor_caption || module.caption,
       body: module.body,
-      flow: module.flow,
     }].filter((block) => block.visual_anchor);
   }
   return [{ type: "text", body: normalizeModuleBody(module), fontSize: module.fontSize }];
 }
 
-function splitBlockAreas(area, blocks, flow = "top_bottom") {
-  const gap = 0.1;
+function splitBlockAreas(area, blocks, flow = "top_bottom", options = {}) {
+  const gap = Number(options.blockGap ?? 0.12);
   const visibleBlocks = blocks.filter(Boolean);
   const horizontal = flow === "left_right" || flow === "right_left";
+  if (!visibleBlocks.length) return [];
+  if (!horizontal) return splitVerticalBlockAreas(area, visibleBlocks, flow, options);
+
   const total = horizontal ? area.w : area.h;
-  const explicit = visibleBlocks.reduce((sum, block) => sum + (Number(block.width || block.w || block.height || block.h) > 0 ? Number(horizontal ? (block.width || block.w) : (block.height || block.h)) : 0), 0);
-  const flexible = visibleBlocks.filter((block) => !(Number(horizontal ? (block.width || block.w) : (block.height || block.h)) > 0));
+  const blockSizes = visibleBlocks.map((block) => adjustedBlockSize(block, area, horizontal, options));
+  const explicit = blockSizes.reduce((sum, size) => sum + (size > 0 ? size : 0), 0);
+  const flexible = visibleBlocks.filter((_, idx) => !(blockSizes[idx] > 0));
   const weightTotal = flexible.reduce((sum, block) => sum + Math.max(0.1, Number(block.weight || block.flex || 1)), 0);
   const available = Math.max(0.1, total - gap * Math.max(0, visibleBlocks.length - 1) - explicit);
   let cursor = horizontal ? area.x : area.y;
-  const areas = visibleBlocks.map((block) => {
-    const explicitSize = Number(horizontal ? (block.width || block.w) : (block.height || block.h));
+  const areas = visibleBlocks.map((block, idx) => {
+    const explicitSize = blockSizes[idx];
     const size = explicitSize > 0 ? explicitSize : available * (Math.max(0.1, Number(block.weight || block.flex || 1)) / weightTotal);
     const blockArea = horizontal
       ? { x: cursor, y: area.y, w: size, h: area.h }
@@ -364,10 +369,137 @@ function splitBlockAreas(area, blocks, flow = "top_bottom") {
   return flow === "right_left" || flow === "bottom_top" ? areas.reverse() : areas;
 }
 
-function renderVisualAnchorBlock(slide, block, module, data, area, fallbackCaption = null) {
+function splitVerticalBlockAreas(area, visibleBlocks, flow = "top_bottom", options = {}) {
+  const gap = Number(options.blockGap ?? 0.12);
+  const blockSizes = visibleBlocks.map((block) => adjustedBlockSize(block, area, false, options));
+  const fallbackCount = blockSizes.filter((size) => !(size > 0)).length;
+  const explicit = blockSizes.reduce((sum, size) => sum + (size > 0 ? size : 0), 0);
+  const gapTotal = gap * Math.max(0, visibleBlocks.length - 1);
+  const fallbackSize = fallbackCount
+    ? Math.max(0.28, (area.h - explicit - gapTotal) / fallbackCount)
+    : 0;
+  const sized = blockSizes.map((size, idx) => {
+    if (size > 0) return Math.min(size, area.h);
+    if (visibleBlocks.length === 1 && !isTextBlock(visibleBlocks[idx])) return area.h;
+    return fallbackSize;
+  });
+  const totalNeeded = sized.reduce((sum, size) => sum + size, 0) + gapTotal;
+  const finalSizes = fitVerticalBlockSizes(sized, visibleBlocks, Math.max(0.1, area.h - gapTotal), totalNeeded > area.h);
+  let cursor = area.y;
+  const areas = finalSizes.map((size) => {
+    const blockArea = { x: area.x, y: cursor, w: area.w, h: Math.min(size, Math.max(0.22, area.y + area.h - cursor)) };
+    cursor += blockArea.h + gap;
+    return blockArea;
+  });
+  return flow === "bottom_top" ? areas.reverse() : areas;
+}
+
+function fitVerticalBlockSizes(sized, visibleBlocks, availableHeight, overflowed) {
+  const finalSizes = [...sized];
+  if (!overflowed) return finalSizes;
+
+  let overflow = finalSizes.reduce((sum, size) => sum + size, 0) - availableHeight;
+  const visualCandidates = finalSizes
+    .map((size, idx) => ({ idx, size, min: isTextBlock(visibleBlocks[idx]) ? size : 0.45 }))
+    .filter((item) => item.size > item.min + 0.01);
+  const shrinkCapacity = visualCandidates.reduce((sum, item) => sum + (item.size - item.min), 0);
+  if (shrinkCapacity > 0) {
+    for (const item of visualCandidates) {
+      const shrink = Math.min(item.size - item.min, overflow * ((item.size - item.min) / shrinkCapacity));
+      finalSizes[item.idx] -= shrink;
+    }
+  }
+
+  overflow = finalSizes.reduce((sum, size) => sum + size, 0) - availableHeight;
+  if (overflow > 0.01) {
+    const scale = Math.max(0.35, availableHeight / Math.max(0.1, finalSizes.reduce((sum, size) => sum + size, 0)));
+    return finalSizes.map((size) => Math.max(0.22, size * scale));
+  }
+  return finalSizes;
+}
+
+function adjustedBlockSize(block, area, horizontal, options = {}) {
+  const explicitSize = Number(horizontal ? (block.width || block.w) : (block.height || block.h));
+  if (!horizontal && isTextBlock(block)) {
+    return estimateTextBlockSize(block, area);
+  }
+  if (explicitSize > 0) return explicitSize;
+  const visualAnchor = block.visual_anchor || block.visualAnchor;
+  if (horizontal && isEvidenceAnchor(visualAnchor)) {
+    const dimensions = readEvidenceSourceDimensions(visualAnchor);
+    if (!dimensions) return Math.max(area.w * 0.36, 0.8);
+    const imageRatio = dimensions.width / dimensions.height;
+    const naturalWidth = area.h * imageRatio;
+    const minWidth = area.w * 0.28;
+    const maxWidth = area.w * 0.5;
+    return Math.min(Math.max(naturalWidth, minWidth), maxWidth);
+  }
+  if (!isEvidenceAnchor(visualAnchor)) return explicitSize;
+  const dimensions = readEvidenceSourceDimensions(visualAnchor);
+  if (!dimensions) return explicitSize;
+  const caption = options.suppressVisualAnchorCaptions ? null : normalizeVisualAnchorCaption(block);
+  const captionReserveH = caption ? (caption.source ? 0.58 : 0.42) : 0;
+  const imageRatio = dimensions.width / dimensions.height;
+  const targetImageW = area.w;
+  const desired = targetImageW / imageRatio + captionReserveH;
+  const maxVisualShare = area.h * (options.maxVisualShare || 0.78);
+  const fittedSize = Math.min(Math.max(desired, 0.55), maxVisualShare);
+  return fittedSize;
+}
+
+function isTextBlock(block = {}) {
+  const type = block.type || block.role || block.kind || "text";
+  return !(block.visual_anchor || block.visualAnchor) && type === "text";
+}
+
+function estimateTextBlockSize(block, area) {
+  const body = normalizeModuleBody(block);
+  if (!safeText(body)) return 0;
+  const fontSize = Number(block.fontSize || HW_STYLE.size.body);
+  const lineSpacingMultiple = Number(block.lineSpacingMultiple || 1.5);
+  const estimated = estimateTextBoxHeight(body, {
+    w: area.w,
+    fontSize,
+    lineSpacingMultiple,
+    margin: 0.08,
+    bulletIndentUnits: 0,
+  });
+  const rounded = Math.ceil((estimated + 0.03) * 20) / 20;
+  return Math.max(0.26, rounded);
+}
+
+function isEvidenceAnchor(visualAnchor) {
+  return visualAnchor?.kind === "Evidence" && /^source_(figure|table|screenshot|chart)$/.test(safeText(visualAnchor.template));
+}
+
+function readEvidenceSourceDimensions(visualAnchor) {
+  const sourcePath = safeText(visualAnchor?.source?.path);
+  if (!sourcePath) return null;
+  const resolved = path.resolve(sourcePath);
+  if (!fs.existsSync(resolved)) return null;
+  return readImageDimensions(resolved);
+}
+
+function resolveBlockFlow(area, blocks) {
+  const visibleBlocks = blocks.filter(Boolean);
+  if (visibleBlocks.length !== 2) return "top_bottom";
+  const hasText = visibleBlocks.some((block) => isTextBlock(block));
+  const evidenceBlock = visibleBlocks.find((block) => isEvidenceAnchor(block.visual_anchor || block.visualAnchor));
+  if (!hasText || !evidenceBlock) return "top_bottom";
+
+  const dimensions = readEvidenceSourceDimensions(evidenceBlock.visual_anchor || evidenceBlock.visualAnchor);
+  if (!dimensions) return "top_bottom";
+  const imageRatio = dimensions.width / dimensions.height;
+  const panelRatio = area.w / area.h;
+  const isTallImage = imageRatio < 0.85;
+  const hasRoomForSideText = area.w >= 3.0 && panelRatio >= 1.15;
+  return isTallImage && hasRoomForSideText ? "left_right" : "top_bottom";
+}
+
+function renderVisualAnchorBlock(slide, block, module, data, area, fallbackCaption = null, options = {}) {
   const visualAnchor = block.visual_anchor || block.visualAnchor;
   validateVisualAnchorSpec(visualAnchor);
-  const caption = normalizeVisualAnchorCaption(block) || fallbackCaption;
+  const caption = options.suppressVisualAnchorCaptions ? null : (normalizeVisualAnchorCaption(block) || fallbackCaption);
   const captionReserveH = caption ? (caption.source ? 0.58 : 0.42) : 0;
   const visualArea = caption
     ? { ...area, h: Math.max(0.55, area.h - captionReserveH) }
@@ -377,10 +509,10 @@ function renderVisualAnchorBlock(slide, block, module, data, area, fallbackCapti
   return { visualAnchor, anchorArea: area, visualArea, renderResult, captionResult };
 }
 
-function renderModuleBlock(slide, block, module, data, area, fallbackCaption = null) {
+function renderModuleBlock(slide, block, module, data, area, fallbackCaption = null, options = {}) {
   const type = block.type || block.role || block.kind || "text";
   if (type === "visual_anchor" || block.visual_anchor || block.visualAnchor) {
-    return renderVisualAnchorBlock(slide, block, module, data, area, fallbackCaption);
+    return renderVisualAnchorBlock(slide, block, module, data, area, fallbackCaption, options);
   }
   if (type === "image") {
     throw new Error("contentLayout image blocks were removed; use visual_anchor kind=Evidence/template=source_figure with text annotations.");
@@ -392,16 +524,92 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
   return null;
 }
 
-function addContentPanelModule(slide, module, data, area, visualCaption) {
+function addContentPanelModule(slide, module, data, area, visualCaption, options = {}) {
   const bodyArea = addContentModuleFrame(slide, module, area);
   const blocks = normalizeModuleBlocks(module, data);
-  const blockAreas = splitBlockAreas(bodyArea, blocks, module.flow || module.blockFlow || module.block_flow || "top_bottom");
+  const resolvedFlow = resolveBlockFlow(bodyArea, blocks);
+  const blockAreas = splitBlockAreas(bodyArea, blocks, resolvedFlow, options);
   const anchorResults = [];
+  const visibleAreas = [];
+  const blockMetrics = [];
   blocks.forEach((block, idx) => {
-    const result = renderModuleBlock(slide, block, module, data, blockAreas[idx], idx === 0 ? visualCaption : null);
-    if (result) anchorResults.push(result);
+    const fallbackCaption = options.suppressVisualAnchorCaptions ? null : (idx === 0 ? visualCaption : null);
+    const result = renderModuleBlock(slide, block, module, data, blockAreas[idx], fallbackCaption, options);
+    if (result) {
+      anchorResults.push(result);
+      visibleAreas[idx] = result.renderResult.image_area || result.visualArea || blockAreas[idx];
+    } else {
+      visibleAreas[idx] = blockAreas[idx];
+    }
+    blockMetrics[idx] = describeBlockLayout(block, blockAreas[idx], visibleAreas[idx], options);
   });
-  return anchorResults;
+  return {
+    anchorResults,
+    moduleLayout: {
+      title: safeText(module.title || module.label || "模块"),
+      frame_area: area,
+      content_area: bodyArea,
+      resolved_flow: resolvedFlow,
+      occupied_area: unionAreas(blockAreas),
+      visible_occupied_area: unionAreas(visibleAreas),
+      block_gaps: calculateBlockGaps(blockAreas, resolvedFlow),
+      block_areas: blockMetrics,
+    },
+  };
+}
+
+function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
+  const visualAnchor = block?.visual_anchor || block?.visualAnchor;
+  const descriptor = {
+    type: block?.type || block?.role || block?.kind || "text",
+    area: blockArea,
+    visible_area: visibleArea,
+  };
+  if (isTextBlock(block)) {
+    descriptor.estimated_height = estimateTextBlockSize(block, blockArea || { w: 1, h: 1 });
+    descriptor.text_length = safeText(normalizeModuleBody(block)).length;
+  } else if (isEvidenceAnchor(visualAnchor)) {
+    const dimensions = readEvidenceSourceDimensions(visualAnchor);
+    if (dimensions && blockArea) {
+      descriptor.source_width = dimensions.width;
+      descriptor.source_height = dimensions.height;
+      descriptor.natural_height = Math.min(blockArea.h, blockArea.w / (dimensions.width / dimensions.height));
+    }
+  }
+  if (options.suppressVisualAnchorCaptions) descriptor.caption_suppressed = true;
+  return descriptor;
+}
+
+function calculateBlockGaps(blockAreas = [], flow = "top_bottom") {
+  const rects = blockAreas.filter(isRectLikeLocal);
+  if (rects.length < 2) return [];
+  const horizontal = flow === "left_right" || flow === "right_left";
+  const ordered = [...rects].sort((a, b) => horizontal ? a.x - b.x : a.y - b.y);
+  return ordered.slice(1).map((rect, idx) => {
+    const prev = ordered[idx];
+    const gap = horizontal ? rect.x - (prev.x + prev.w) : rect.y - (prev.y + prev.h);
+    return Math.max(0, Math.round(gap * 1000) / 1000);
+  });
+}
+
+function isRectLikeLocal(value) {
+  return value
+    && Number.isFinite(Number(value.x))
+    && Number.isFinite(Number(value.y))
+    && Number.isFinite(Number(value.w))
+    && Number.isFinite(Number(value.h))
+    && Number(value.w) > 0
+    && Number(value.h) > 0;
+}
+
+function unionAreas(areas = []) {
+  const rects = areas.filter((area) => area && Number.isFinite(area.x) && Number.isFinite(area.y) && Number.isFinite(area.w) && Number.isFinite(area.h));
+  if (!rects.length) return null;
+  const left = Math.min(...rects.map((area) => area.x));
+  const top = Math.min(...rects.map((area) => area.y));
+  const right = Math.max(...rects.map((area) => area.x + area.w));
+  const bottom = Math.max(...rects.map((area) => area.y + area.h));
+  return { x: left, y: top, w: right - left, h: bottom - top };
 }
 
 function addModuleRect(slide, area, options = {}) {
@@ -558,13 +766,36 @@ function renderContentLayout(slide, data, layout, visualCaption) {
   };
   const areas = contentLayoutAreas(layout, contentArea);
   const anchorResults = [];
+  const moduleLayouts = [];
+  const moduleOptions = {
+    suppressVisualAnchorCaptions: layout.type === "two_column" || layout.type === "three_column",
+  };
   layout.modules.forEach((module, idx) => {
     const area = areas[idx];
     const role = module.role || module.kind || "text";
     if (module.blocks || module.children || role === "content_panel" || role === "visual_anchor") {
-      anchorResults.push(...addContentPanelModule(slide, module, data, area, visualCaption));
+      const result = addContentPanelModule(slide, module, data, area, visualCaption, moduleOptions);
+      anchorResults.push(...result.anchorResults);
+      moduleLayouts.push(result.moduleLayout);
     } else {
       addTextModule(slide, module, area);
+      moduleLayouts.push({
+        title: safeText(module.title || module.label || "模块"),
+        frame_area: area,
+        content_area: {
+          x: area.x + 0.13,
+          y: area.y + 0.48,
+          w: area.w - 0.26,
+          h: area.h - 0.62,
+        },
+        occupied_area: {
+          x: area.x + 0.13,
+          y: area.y + 0.48,
+          w: area.w - 0.26,
+          h: area.h - 0.62,
+        },
+        block_areas: [],
+      });
     }
   });
   addColumnFlowArrows(slide, areas, layout.flowArrows || layout.flow_arrows || {});
@@ -579,6 +810,7 @@ function renderContentLayout(slide, data, layout, visualCaption) {
       text_modules_count: layout.modules.filter((module) => !countModuleVisualAnchors(module)).length,
       visual_anchor_modules_count: anchorResults.length,
       visual_anchor_blocks_count: anchorResults.length,
+      module_layouts: moduleLayouts,
     },
   };
 }
@@ -591,7 +823,7 @@ function fitAreaContain(area, imageWidth, imageHeight) {
   const imageRatio = imageWidth / imageHeight;
   if (imageRatio >= areaRatio) {
     const h = area.w / imageRatio;
-    return { x: area.x, y: area.y + (area.h - h) / 2, w: area.w, h };
+    return { x: area.x, y: area.y, w: area.w, h };
   }
   const w = area.h * imageRatio;
   return { x: area.x + (area.w - w) / 2, y: area.y, w, h: area.h };
@@ -675,6 +907,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     image_format: anchorResult.renderResult.image_format,
     image_width: anchorResult.renderResult.image_width,
     image_height: anchorResult.renderResult.image_height,
+    placeholder: anchorResult.renderResult.placeholder || undefined,
     image_area: anchorResult.renderResult.image_area,
     anchor_area: anchorResult.anchorArea,
     visual_area: anchorResult.visualArea,

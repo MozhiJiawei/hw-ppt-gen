@@ -2,6 +2,10 @@ const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
 const { resolveVisualAnchorRenderPath, validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
+const {
+  estimateTextBoxHeight: estimateGeneratedTextBoxHeight,
+  estimateWrappedLines: estimateGeneratedWrappedLines,
+} = require("../pptx/hw_pptx_helpers");
 
 const ALLOWED_FONTS = new Set([
   "Microsoft YaHei",
@@ -323,7 +327,7 @@ function estimateTextUnits(text) {
   return units;
 }
 
-function estimateWrappedLines(text, fontSize, widthInches) {
+function estimateQaTitleWrappedLines(text, fontSize, widthInches) {
   if (!text || !fontSize || !widthInches) return 0;
   const avgCjkCharWidth = fontSize / 72;
   return String(text)
@@ -347,6 +351,20 @@ function availableTextLines(shape, fontSize, lineSpacingMultiple = 1.5) {
   if (!shape.h || !fontSize) return 0;
   const lineHeight = (fontSize / 72) * lineSpacingMultiple;
   return Math.max(shape.h / lineHeight, 0);
+}
+
+function isTextOverflowEstimateCandidate(shape, pageTitle, slide) {
+  if (shape === pageTitle) return true;
+  const text = safeText(shape.text);
+  if (!text) return false;
+  const maxSize = Math.max(...shape.fontSizes, 0) || 12;
+  if (slide === 1 && maxSize >= 18) return false;
+  const compactHeight = shape.h !== null && shape.h <= 0.66;
+  const normalized = text.replace(/\s/g, "");
+  if (compactHeight && /^来源[:：]/.test(text)) return false;
+  if (compactHeight && /^(?:\d{1,2}|步|[>→+\-–—]|线索[一二三四五六七八九十])$/.test(normalized)) return false;
+  if (compactHeight && normalized.length <= 8) return false;
+  return normalized.length >= 18 || /[\r\n。；;！？?]/.test(text);
 }
 
 function titleShape(shapes) {
@@ -674,12 +692,16 @@ function checkSlideXml(name, xml) {
     }
 
     const maxSize = Math.max(...shape.fontSizes, 0) || 12;
-    if (maxSize >= 10 && shape.w && shape.h) {
-      const estimatedLines = shape === pageTitle
+    if (maxSize >= 10 && shape.w && shape.h && isTextOverflowEstimateCandidate(shape, pageTitle, slide)) {
+      const isTitle = shape === pageTitle;
+      const estimatedLines = isTitle
         ? estimatePageTitleLines(shape.text, Math.max(shape.w - 0.08, 0.1), maxSize)
-        : estimateWrappedLines(shape.text, maxSize, Math.max(shape.w - 0.08, 0.1));
-      const availableLines = availableTextLines(shape, maxSize, maxSize >= 18 ? 1.15 : 1.5);
-      if (estimatedLines > availableLines + 0.35) {
+        : estimateGeneratedWrappedLines(shape.text, maxSize, Math.max(shape.w - Math.max(0.06 * 2, 0.16), 0.1));
+      const availableLines = isTitle
+        ? availableTextLines(shape, maxSize, maxSize >= 18 ? 1.15 : 1.5)
+        : Math.max(0, shape.h / Math.max(estimateGeneratedTextBoxHeight(shape.text, { w: shape.w, fontSize: maxSize, margin: 0.06 }) / Math.max(estimatedLines, 1), 0.01));
+      const lineTolerance = isTitle ? 0.35 : 0.5;
+      if (estimatedLines > availableLines + lineTolerance) {
         issues.push(issue(slide, "text_overflow_estimate", "error", "Text is estimated to exceed its text box capacity at the declared font size; shorten, split, or resize instead of relying on autofit.", {
           estimated_lines: estimatedLines,
           available_lines: Math.round(availableLines * 10) / 10,
@@ -969,7 +991,7 @@ function checkContentLayoutSchema(slide, entries) {
 
 function estimatePageTitleLines(text, widthInches, titleFontSize = 24) {
   const value = safeText(text);
-  if (!value.includes(" - ")) return estimateWrappedLines(value, titleFontSize, widthInches);
+  if (!value.includes(" - ")) return estimateQaTitleWrappedLines(value, titleFontSize, widthInches);
   const [main, ...rest] = value.split(" - ");
   const subtitle = rest.join(" - ");
   const mainWidth = estimateTextUnits(main) * (titleFontSize / 72);

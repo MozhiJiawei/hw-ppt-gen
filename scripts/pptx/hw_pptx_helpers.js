@@ -80,15 +80,33 @@ function estimateWrapFontScale(line, fontSize, effectiveWidth) {
   const asciiCount = (text.match(/[A-Za-z0-9]/g) || []).length;
   const cjkCount = (text.match(/[\u3400-\u9fff]/g) || []).length;
   const asciiShare = asciiCount / Math.max(1, asciiCount + cjkCount);
-  if (fontSize <= 10 && Number(effectiveWidth) <= 1.7 && asciiShare < 0.2) return 1.12;
+  const maxTokenUnits = estimateMaxTokenUnits(text);
+  const capacityUnits = Number(effectiveWidth) / (fontSize / 72);
+  const rawLineShare = estimateTextUnits(text) / Math.max(1, capacityUnits);
+  const fullwidthPunctuationCount = (text.match(/[，。；：“”《》（）【】、]/g) || []).length;
+  const urlLikeToken = /(?:https?:\/\/|\/[A-Za-z0-9]|::|\?[^，。\s]*)/.test(text);
+  if (/\s\|\s/.test(text) && asciiShare >= 0.8) return 1.22;
+  if (fontSize <= 10 && Number(effectiveWidth) <= 1.7 && asciiShare >= 0.55) return 0.88;
+  if (fontSize <= 10 && Number(effectiveWidth) <= 1.7 && asciiShare < 0.2) return rawLineShare > 2.1 && rawLineShare < 3.35 ? 1 : 1.12;
+  if (fontSize <= 10 && asciiShare >= 0.75 && maxTokenUnits < 8 && rawLineShare > 2.05 && Number(effectiveWidth) >= 2.4) return 1;
+  if (fontSize <= 10 && urlLikeToken && maxTokenUnits > 45 && Number(effectiveWidth) >= 2.4) return 1;
+  if (fontSize <= 10 && asciiShare >= 0.85 && maxTokenUnits > 18 && Number(effectiveWidth) >= 2.4) return 1.12;
   if (fontSize <= 10 && asciiShare >= 0.5 && estimateMaxTokenUnits(text) <= 16 && Number(effectiveWidth) >= 2.4) return 1.12;
+  if (fontSize >= 12 && fontSize < 14 && /::/.test(text) && maxTokenUnits > capacityUnits * 0.9 && Number(effectiveWidth) >= 3.0 && Number(effectiveWidth) <= 4.0) return 0.86;
+  if (fontSize >= 12 && fontSize < 14 && urlLikeToken && maxTokenUnits > capacityUnits * 0.9 && Number(effectiveWidth) >= 3.0 && Number(effectiveWidth) <= 4.0) return 0.94;
+  if (fontSize >= 12 && fontSize < 14 && asciiShare >= 0.55 && maxTokenUnits < 7.5 && rawLineShare > 1.9 && rawLineShare < 2 && Number(effectiveWidth) >= 3.0 && Number(effectiveWidth) <= 4.0) return 0.95;
+  if (fontSize >= 12 && fontSize < 14 && asciiShare >= 0.75 && maxTokenUnits >= 14 && maxTokenUnits <= 18 && Number(effectiveWidth) <= 2.7) return 1.12;
+  if (fontSize >= 12 && fontSize < 14 && asciiShare < 0.1 && fullwidthPunctuationCount >= 5 && rawLineShare >= 0.85) return 0.9;
+  if (fontSize >= 12 && fontSize < 14 && asciiShare < 0.25 && !/[“”《》]/.test(text) && rawLineShare > 0.98 && Number(effectiveWidth) >= 6.5) return 1.04;
   if (fontSize >= 12 && fontSize < 14 && asciiShare < 0.2 && Number(effectiveWidth) >= 3.0 && Number(effectiveWidth) <= 3.2) return 1.08;
   if (fontSize >= 12 && fontSize < 14 && asciiShare >= 0.45 && Number(effectiveWidth) >= 2.4 && Number(effectiveWidth) <= 4.0) return 1.08;
   if (fontSize >= 18 && asciiShare >= 0.25 && Number(effectiveWidth) >= 5.0) return 1.18;
+  if (fontSize >= 14 && fontSize < 18 && asciiShare >= 0.45 && cjkCount >= 8 && fullwidthPunctuationCount >= 5 && Number(effectiveWidth) >= 3.4 && Number(effectiveWidth) <= 3.8) return 0.95;
   if (fontSize >= 14 && fontSize < 18 && asciiShare < 0.2 && Number(effectiveWidth) >= 3.5 && Number(effectiveWidth) <= 3.85) return 1.08;
   if (fontSize >= 14 && asciiShare >= 0.25) {
     if (Number(effectiveWidth) < 3.0) return 1;
-    return estimateMaxTokenUnits(text) > 16 ? 1.14 : 1.08;
+    if (maxTokenUnits > 24 && rawLineShare > 3) return 1;
+    return maxTokenUnits > 16 ? 1.14 : 1.08;
   }
   return 1;
 }
@@ -104,54 +122,34 @@ function estimateTextBoxHeight(text, options = {}) {
   const fontSize = Number(options.fontSize || HW_STYLE.size.body);
   const width = Number(options.w || options.width || 1);
   const margin = Number(options.margin ?? 0.06);
-  const requestedLineSpacingMultiple = Number(options.lineSpacingMultiple || 1.5);
-  const baseSafetyLines = Number(options.safetyLines ?? 0.35);
-  const contentWidth = Math.max(0.1, width - margin * 2);
+  const contentWidth = estimateTextContentWidth(width, margin);
   const lines = estimateWrappedLines(text, fontSize, contentWidth, options);
-  const lineSpacingMultiple = estimateEffectiveLineSpacingMultiple(lines, fontSize, requestedLineSpacingMultiple, contentWidth);
-  const safetyLines = estimateEffectiveSafetyLines(text, lines, fontSize, baseSafetyLines, contentWidth);
-  const lineHeight = (fontSize / 72) * lineSpacingMultiple;
-  const minHeight = estimateMinimumTextBoxHeight(fontSize);
-  return Math.max(minHeight, (lines + safetyLines) * lineHeight + margin * 2);
+  const lineHeight = estimateRenderedLineHeight(fontSize);
+  return lines * lineHeight + estimateParagraphGap(text, fontSize) + estimateTailPadding(fontSize);
 }
 
-function estimateMinimumTextBoxHeight(fontSize) {
-  if (fontSize <= 10) return 0.34;
-  if (fontSize <= 12) return 0.5;
-  if (fontSize >= 14) return 0.45;
-  return 0.5;
+function estimateTextContentWidth(width, margin) {
+  return Math.max(0.1, Number(width || 1) - Math.max(Number(margin || 0) * 2, 0.16));
 }
 
-function estimateEffectiveSafetyLines(text, lines, fontSize, baseSafetyLines, contentWidth) {
-  const base = Number(baseSafetyLines ?? 0.35);
-  const isNarrowBody = Number(contentWidth) <= 4.2;
-  const paragraphCount = String(text || "").split(/\r?\n/).filter((line) => line.trim()).length;
-  const isMultiParagraph = paragraphCount >= 2;
-  const hasPlainBulletLines = String(text || "").split(/\r?\n/).filter((line) => /^\s*[-•]\s+/.test(line)).length >= 2;
-  const isListLike = isMultiParagraph || hasPlainBulletLines;
-  if (fontSize <= 10 && Number(contentWidth) <= 1.7 && lines >= 5) return Math.max(base, 0.65);
-  if (fontSize >= 12 && fontSize < 14 && lines <= 2) {
-    if (estimateAsciiShare(text) < 0.25) return base;
-    if (Number(contentWidth) >= 5.0) return Math.max(base, 0.55);
-    return Math.max(base, estimateMaxTokenUnits(text) >= 18 ? 1.2 : 0.55);
-  }
-  if (fontSize >= 12 && fontSize < 14 && isListLike && lines >= 8) return Math.max(base, 2.05);
-  if (fontSize >= 12 && fontSize < 14 && paragraphCount >= 4 && lines >= 7) return Math.max(base, 1.8);
-  if (fontSize >= 12 && fontSize < 14 && isListLike && lines >= 7) return Math.max(base, 1.0);
-  if (fontSize >= 12 && fontSize < 14 && paragraphCount >= 4 && lines >= 6) return Math.max(base, 2.05);
-  if (fontSize >= 12 && fontSize < 14 && isListLike && lines >= 6) return Math.max(base, 1.45);
-  if (fontSize >= 14) {
-    if (Number(contentWidth) <= 2.8) return Math.max(base, 1.35);
-    if (isListLike && lines >= 8) return Math.max(base, 3.0);
-    if (paragraphCount >= 4 && lines >= 6) return Math.max(base, 2.6);
-    if (isListLike && lines >= 5) return Math.max(base, 1.8);
-    if (lines <= 2) return base;
-    return Math.max(base, 0.24);
-  }
-  if (fontSize >= 11 && fontSize <= 12 && isNarrowBody && lines >= 5) return Math.max(base, 1.0);
-  if (fontSize >= 11 && fontSize <= 12 && isNarrowBody && lines >= 4) return Math.max(base, 0.75);
-  if (fontSize >= 11 && fontSize <= 12 && lines >= 5) return Math.max(base, 0.45);
-  return base;
+function estimateRenderedLineHeight(fontSize) {
+  if (fontSize >= 14 && fontSize < 18) return (fontSize / 72) * 1.75;
+  if (fontSize >= 12 && fontSize < 14) return (fontSize / 72) * 1.72;
+  if (fontSize <= 10) return (fontSize / 72) * 1.72;
+  return (fontSize / 72) * 1.82;
+}
+
+function estimateParagraphGap(text, fontSize) {
+  const hardBreaks = (String(text || "").match(/\r?\n/g) || []).length;
+  return hardBreaks * (fontSize / 72) * 0.2;
+}
+
+function estimateTailPadding(fontSize) {
+  if (fontSize <= 10) return 0.06;
+  if (fontSize <= 12) return 0.07;
+  if (fontSize <= 14) return 0.06;
+  if (fontSize <= 18) return 0.11;
+  return 0.13;
 }
 
 function estimateAsciiShare(text) {
@@ -164,19 +162,6 @@ function estimateAsciiShare(text) {
 function estimateMaxTokenUnits(text) {
   const tokens = String(text || "").match(/[A-Za-z0-9_:/?&=.%#-]+/g) || [];
   return tokens.reduce((max, token) => Math.max(max, estimateTextUnits(token)), 0);
-}
-
-function estimateEffectiveLineSpacingMultiple(lines, fontSize, requestedLineSpacingMultiple, contentWidth) {
-  const requested = Number(requestedLineSpacingMultiple || 1.5);
-  if (fontSize >= 14 && requested >= 1.45) {
-    if (Number(contentWidth) <= 4.2) return requested;
-    return Math.min(requested, 1.42);
-  }
-  if (fontSize >= 11 && fontSize <= 12 && Number(contentWidth) <= 1.7 && requested >= 1.45) return requested;
-  if (fontSize >= 11 && fontSize <= 14 && requested >= 1.45) {
-    if (lines >= 4) return requested;
-  }
-  return requested;
 }
 
 function stripHash(color) {

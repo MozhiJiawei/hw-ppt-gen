@@ -5,6 +5,8 @@ const { spawnSync } = require("child_process");
 const pptxgen = require("pptxgenjs");
 const sharp = require("sharp");
 
+const ShapeType = pptxgen.ShapeType || { rect: "rect" };
+
 const {
   estimateTextBoxHeight,
   estimateWrappedLines,
@@ -1373,16 +1375,18 @@ function validateSupportedFontSizes(testCases) {
 const CASES = buildCases();
 
 function estimateCase(testCase) {
+  const margin = 0.06;
+  const contentWidth = Math.max(0.1, testCase.width - Math.max(margin * 2, 0.16));
   const h = estimateTextBoxHeight(testCase.text, {
     w: testCase.width,
     fontSize: testCase.fontSize,
-    margin: 0.06,
+    margin,
     lineSpacingMultiple: 1.5,
   });
   const rounded = Math.ceil((h + 0.03) * 20) / 20;
   return {
     height: Number(testCase.heightOverride || rounded),
-    estimatedLines: estimateWrappedLines(testCase.text, testCase.fontSize, Math.max(0.1, testCase.width - 0.16)),
+    estimatedLines: estimateWrappedLines(testCase.text, testCase.fontSize, contentWidth),
   };
 }
 
@@ -1470,6 +1474,24 @@ function cropBounds(box) {
   };
 }
 
+function lineScanBounds(box, slideBoxes, rawInfo) {
+  const crop = cropBounds(box);
+  const cropBottom = crop.top + crop.height;
+  const linePx = box.fontSize / 72 * 1.5 * PX.perIn;
+  const nextTop = (slideBoxes || [])
+    .filter((item) => item !== box && item.y > box.y)
+    .map((item) => Math.floor(item.y * PX.perIn))
+    .sort((a, b) => a - b)[0];
+  const maxBottom = Number.isFinite(nextTop)
+    ? Math.max(cropBottom, nextTop - 2)
+    : rawInfo.height;
+  const bottom = Math.min(rawInfo.height, maxBottom, Math.ceil(cropBottom + linePx * 0.55));
+  return {
+    ...crop,
+    height: Math.max(crop.height, bottom - crop.top),
+  };
+}
+
 async function analyze(manifestPath) {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   const pngDir = path.join(OUT, "png");
@@ -1493,12 +1515,19 @@ async function analyze(manifestPath) {
     const inside = scanDarkPixels(raw, crop);
     const guard = guardBounds(box, boxesBySlide.get(box.slide) || [], raw.info);
     const below = guard ? scanDarkPixels(raw, guard) : { darkCount: 0, minY: 0, maxY: -1 };
-    const lineScan = scanRenderedTextLines(raw, crop, box.fontSize);
+    const lineScan = scanRenderedTextLines(raw, lineScanBounds(box, boxesBySlide.get(box.slide) || [], raw.info), box.fontSize);
     const maxY = inside.maxY;
     const darkCount = inside.darkCount;
     const bottomGapPx = maxY >= 0 ? crop.height - 1 - maxY : crop.height;
     const topGapPx = inside.minY < crop.height ? inside.minY : crop.height;
     const linePx = box.fontSize / 72 * 1.5 * PX.perIn;
+    const frameFit = classifyFrameFit({
+      support: supportLevel(box),
+      lineDelta: box.estimatedLines - lineScan.actualLines,
+      bottomGapPx,
+      overflowBelowDarkCount: below.darkCount,
+      linePx,
+    });
     let verdict = classifyLineEstimate({
       darkCount,
       estimatedLines: box.estimatedLines,
@@ -1521,16 +1550,12 @@ async function analyze(manifestPath) {
       overflowBelowDarkCount: below.darkCount,
       overflowBelowMaxY: below.maxY,
       verdict,
+      frameFit,
       support: supportLevel(box),
     });
   }
   const analysisPath = path.join(OUT, "text_height_estimation_smoke_analysis.json");
   fs.writeFileSync(analysisPath, JSON.stringify({ results }, null, 2));
-  const reviewPath = await generateReviewDeck(manifest, results, {
-    fileName: "text_height_estimation_review.pptx",
-    title: "Text height estimation review",
-    filter: () => true,
-  });
   const passReviewPath = await generateReviewDeck(manifest, results, {
     fileName: "text_height_estimation_pass_review.pptx",
     title: "Text height estimation pass review",
@@ -1541,7 +1566,24 @@ async function analyze(manifestPath) {
     title: "Text height estimation fail review",
     filter: (result) => result.verdict !== "ok",
   });
-  return { analysisPath, reviewPath, passReviewPath, failReviewPath, results };
+  const blackFrameReviewPath = await generateReviewDeck(manifest, results, {
+    fileName: "text_height_estimation_pass_black_frame_review.pptx",
+    title: "Text height pass black-frame review",
+    filter: (result) => result.verdict === "ok",
+    showFrame: true,
+  });
+  cleanupObsoleteReviewDecks(manifest.pptxPath);
+  return { analysisPath, passReviewPath, failReviewPath, blackFrameReviewPath, results };
+}
+
+function cleanupObsoleteReviewDecks(sourcePptxPath) {
+  [
+    sourcePptxPath,
+    path.join(OUT, "text_height_estimation_review.pptx"),
+    path.join(OUT, "text_height_estimation_black_frame_review.pptx"),
+  ].forEach((fileName) => {
+    if (fileName && fs.existsSync(fileName)) fs.unlinkSync(fileName);
+  });
 }
 
 function scanDarkPixels(raw, crop) {
@@ -1653,7 +1695,8 @@ function scanRenderedTextLines(raw, crop, fontSize) {
   const punctuationClusters = [];
   current = null;
   faintRowCounts.forEach((count, y) => {
-    const isTinyPunctuationRow = count > 0 && count <= 8 && faintRowMaxX[y] <= 14;
+    const punctuationWidth = faintRowMaxX[y] - faintRowMinX[y] + 1;
+    const isTinyPunctuationRow = count > 0 && count <= 12 && punctuationWidth <= 14;
     if (isTinyPunctuationRow) {
       if (!current) current = { start: y, end: y, maxInk: count, minX: faintRowMinX[y], maxX: faintRowMaxX[y] };
       current.end = y;
@@ -1703,7 +1746,7 @@ function scanRenderedTextLines(raw, crop, fontSize) {
       : Infinity;
     const punctuationWidth = cluster.maxX - cluster.minX + 1;
     const likelyStandalonePunctuation = h >= 3
-      && punctuationWidth <= 8
+      && punctuationWidth <= 14
       && nearestAcceptedDistance >= linePitch * 0.42;
     if (likelyStandalonePunctuation) accepted.push(cluster);
   }
@@ -1732,11 +1775,20 @@ function classifyLineEstimate({ darkCount, estimatedLines, actualLines }) {
   return "ok";
 }
 
+function classifyFrameFit({ support, lineDelta, bottomGapPx, overflowBelowDarkCount, linePx }) {
+  if (support !== "supported" || lineDelta !== 0) return "not_applicable";
+  if (bottomGapPx <= 2 && overflowBelowDarkCount > 0) return "overflow";
+  const maxBottomGapPx = Math.max(24, linePx * 1.6);
+  if (bottomGapPx > maxBottomGapPx) return "too_tall";
+  return "ok";
+}
+
 async function generateReviewDeck(manifest, results, options = {}) {
   const {
     fileName = "text_height_estimation_review.pptx",
     title = "Text height estimation review",
     filter = () => true,
+    showFrame = false,
   } = options;
   const byId = new Map(results.map((item) => [item.id, item]));
   const boxes = manifest.boxes.filter((box) => {
@@ -1783,6 +1835,13 @@ async function generateReviewDeck(manifest, results, options = {}) {
       line: { color: "111111", width: 0, transparency: 100 },
       fill: { color: "FFFFFF", transparency: 100 },
     });
+    if (showFrame) {
+      slide.addShape(ShapeType.rect, {
+        x, y, w: box.width, h: box.h,
+        fill: { color: "FFFFFF", transparency: 100 },
+        line: { color: "111111", width: 0.75 },
+      });
+    }
     slide.addText(`${box.id} / ${box.label}`, {
       x: labelX, y, w: 11.9 - labelX, h: 0.22,
       fontFace: "Microsoft YaHei", fontSize: 8, color: "666666", margin: 0,
@@ -1795,7 +1854,7 @@ async function generateReviewDeck(manifest, results, options = {}) {
       x: labelX, y: y + 0.5, w: 11.9 - labelX, h: 0.24,
       fontFace: "Arial", fontSize: 8.5, bold: true, color: verdictColor, margin: 0,
     });
-    slide.addText(`verdict=${result?.verdict || "unknown"}`, {
+    slide.addText(`verdict=${result?.verdict || "unknown"} frame=${result?.frameFit || "unknown"}`, {
       x: labelX, y: y + 0.76, w: 11.9 - labelX, h: 0.24,
       fontFace: "Arial", fontSize: 8.5, color: verdictColor, margin: 0,
     });
@@ -1815,10 +1874,13 @@ function supportLevel(box) {
 
 async function main() {
   const { manifestPath } = await generateDeck();
-  const { analysisPath, reviewPath, passReviewPath, failReviewPath, results } = await analyze(manifestPath);
+  const { analysisPath, passReviewPath, failReviewPath, blackFrameReviewPath, results } = await analyze(manifestPath);
   const lineMismatches = results.filter((item) => item.support === "supported" && item.verdict !== "ok");
+  const supportedResults = results.filter((item) => item.support === "supported");
+  const oneLineMismatchRatio = lineMismatches.filter((item) => Math.abs(item.lineDelta) === 1).length / Math.max(1, supportedResults.length);
   const allLineMismatches = results.filter((item) => item.verdict !== "ok");
   const blockingLineMismatches = allLineMismatches.filter((item) => Math.abs(item.lineDelta) >= 2);
+  const frameFitFailures = results.filter((item) => item.frameFit !== "ok" && item.frameFit !== "not_applicable");
   const stressFindings = results.filter((item) => item.support === "stress" && item.verdict !== "ok");
   const titleFindings = results.filter((item) => item.support === "title_smoke" && item.verdict !== "ok");
   const mismatchSummary = lineMismatches.map((item) => ({
@@ -1834,16 +1896,17 @@ async function main() {
   if (lineMismatches.length) {
     console.error(JSON.stringify({
       analysisPath,
-      reviewPath,
       passReviewPath,
       failReviewPath,
+      blackFrameReviewPath,
       total: results.length,
       lineMismatchCount: lineMismatches.length,
       allLineMismatchCount: allLineMismatches.length,
       blockingLineMismatchCount: blockingLineMismatches.length,
+      frameFitFailureCount: frameFitFailures.length,
       overEstimatedCount: lineMismatches.filter((item) => item.verdict === "over_estimated_lines").length,
       underEstimatedCount: lineMismatches.filter((item) => item.verdict === "under_estimated_lines").length,
-      oneLineMismatchRatio: Number((lineMismatches.filter((item) => Math.abs(item.lineDelta) === 1).length / Math.max(1, results.filter((item) => item.support === "supported").length)).toFixed(4)),
+      oneLineMismatchRatio: Number(oneLineMismatchRatio.toFixed(4)),
       blockingLineMismatches: blockingLineMismatches.map((item) => ({
         id: item.id,
         label: item.label,
@@ -1854,13 +1917,25 @@ async function main() {
         lineDelta: item.lineDelta,
         verdict: item.verdict,
       })),
+      frameFitFailures: frameFitFailures.map((item) => ({
+        id: item.id,
+        label: item.label,
+        fontSize: item.fontSize,
+        width: item.width,
+        height: item.height,
+        estimatedLines: item.estimatedLines,
+        bottomGapIn: item.bottomGapIn,
+        frameFit: item.frameFit,
+      })),
       lineMismatches: mismatchSummary,
       stressFindings,
       titleFindings,
     }, null, 2));
   }
   assert.equal(blockingLineMismatches.length, 0, "text height estimate must not differ from rendered line count by 2 or more lines");
-  console.log(`Text height estimation smoke passed: ${analysisPath}; review deck: ${reviewPath}; pass deck: ${passReviewPath}; fail deck: ${failReviewPath} (${results.length} cases, ${lineMismatches.length} one-line supported findings, ${stressFindings.length} stress findings, ${titleFindings.length} title findings recorded)`);
+  assert.ok(oneLineMismatchRatio <= 0.025, `supported one-line mismatch ratio must be <= 2.5%; got ${Number(oneLineMismatchRatio.toFixed(4))}`);
+  assert.equal(frameFitFailures.length, 0, "text frame height must fit trusted rendered lines without excessive bottom gap or overflow");
+  console.log(`Text height estimation smoke passed: ${analysisPath}; pass deck: ${passReviewPath}; fail deck: ${failReviewPath}; pass black-frame deck: ${blackFrameReviewPath} (${results.length} cases, ${lineMismatches.length} one-line supported findings, ${stressFindings.length} stress findings, ${titleFindings.length} title findings recorded)`);
 }
 
 main().catch((error) => {

@@ -12,6 +12,7 @@ Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptx
 1. Read the user's source material and identify the audience, purpose, story line, and evidence.
    - All visible deck text that you create must be Chinese. Keep source figures/tables as-is, but translate slide titles, subtitles, card titles, body text, captions, footers, contents, and QA notes into Chinese.
    - Keep necessary technical acronyms in parentheses or inline, for example `首 Token 时延（TTFT）`, `每 Token 时延（TPOT）`, `服务等级目标（SLO）`, `GPU`, `KV cache`, and `SM`.
+   - If the user provides `ppt_content_brief.md` or a `ppt_content_brief` input, treat it as an optional upstream content contract. Load `references/ppt_content_brief_consumption.md`, run `node scripts/pptx/parse_ppt_content_brief.js <brief> --json` before planning, and do not reinvent the story line. Preserve the brief's `页面标题`, `标题说明`, `分析总结`, `Table of Contents` order, `所属章节`, and page count in the deck plan and visible text. Use `正文内容`, `参考图片`, and `备注` only as content material for layout compression, visual-anchor selection, supporting cards, captions, notes, and caveats. If the parser rejects the brief, fix or request a revised brief instead of silently taking slide copy from `research_audit.md`.
 2. Choose a filesystem-safe deck name `<deck>` before creating any artifacts. Create the deck workspace `.tmp/<deck>/` and save every deck-specific generated or temporary file under that directory. Use this pattern consistently:
    - Final PPTX: `.tmp/<deck>/<deck>.pptx`
    - Deck-specific generation script: `.tmp/<deck>/generate_<deck>.js`
@@ -158,6 +159,8 @@ For structured visual anchors, use `scripts/pptx/hw_diagram_helpers.js` as the s
 
 Do not duplicate visual-anchor kind or template rules in deck-specific prompts or scripts. `references/visual_diagram_rules.md` is the single source of truth for kind/template selection. `references/visual_diagram_spec_schema.md` is the single source of truth for field-level schema examples. The skill workflow only decides when to load those references.
 
+Use `scripts/pptx/parse_ppt_content_brief.js` only when a `ppt_content_brief.md` upstream input is present. It validates the brief and returns normalized `metadata`, `sections`, `summaryPage`, `tocItems`, `contentPages`, and `slideContract` data. Map `slideContract.contentSlides[*].title` to `title`, `titleNote` to `titleNote`, `summary.body` to the top `分析总结` block, `sections` and `currentSection` to the chapter indicator, and the body/reference/note fields to downstream content decisions. The parser does not choose `visual_anchor.kind`, `template`, `contentLayout`, font size, color, or column count.
+
 Generated visual anchors are not miniature PPT pages. They may include relationship-native labels, axis text, values, and time labels, but must not include page titles, slide claims, figure legends, source notes, standalone captions, interpretation paragraphs, node notes, bottom slogans, side callouts, or empty placeholder boxes. Put those in editable PPT text boxes, `分析总结`, supporting cards, or evidence legends. Do not use standalone explanation fields anywhere under `visual_spec`, including `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`. The `visual_spec` top-level schema is closed per template; do not add ad hoc prose keys.
 
 When embedding generated image output in PPT, preserve the image aspect ratio with proportional contain placement. Do not stretch an image to fill a region. If a visual looks too sparse after proportional placement, redesign the slide layout or regenerate the visual content instead of forcing the image to scale non-proportionally.
@@ -199,6 +202,7 @@ When embedding generated image output in PPT, preserve the image aspect ratio wi
 Content QA:
 
 - Verify every planned slide appears in the deck.
+- If the deck consumed `ppt_content_brief.md`, verify parser output was used as the source of truth for every brief-backed slide. Check that each brief `页面标题`, `标题说明`, `分析总结` label/text, TOC `小标题`, `所属章节`, and page order appears unchanged in the plan and visible slide copy.
 - Verify every正文内容页 has a top-right chapter indicator and that the active tab matches the slide's section in the contents outline.
 - Verify正文内容页 proceed monotonically through the contents outline: chapter 1 pages, then chapter 2 pages, then chapter 3 pages. Do not bounce between sections.
 - Verify every正文内容页 has the top `分析总结` block, and verify cover and contents slides do not have it.

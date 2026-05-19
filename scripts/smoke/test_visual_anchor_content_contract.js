@@ -404,6 +404,30 @@ function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
   assert(schema.includes("Do not provide a `flow` field"), "content layout reference should make module flow renderer-owned");
 }
 
+function assertContentLayoutDoesNotExposePageRegionOverride() {
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  const schema = read("references/content_layout_schema.md");
+  const skill = read("SKILL.md");
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
+  assert(!contentSlide.includes("data.contentArea || data.content_area"), "contentLayout must not let deck scripts override the fixed page region");
+  assert(contentSlide.includes("rejectContentLayoutPageRegionOverrides"), "contentLayout should fail fast when deck scripts pass page-region coordinates");
+  assert(schema.includes("`contentLayout.type` is the authoritative layout choice"), "content layout reference should describe the positive minimal schema");
+  assert(!skill.includes("contentArea"), "SKILL should avoid documenting removed content-layout page-region fields");
+  assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
+    title: "非法版心",
+    contentArea: { x: 0, y: 0, w: 1, h: 1 },
+    contentLayout: {
+      type: "two_column",
+      reference: "05 内容 二分栏",
+      modules: [
+        { role: "content_panel", title: "模块一", blocks: [{ type: "text", body: "旧版心字段应在 schema 解析前失败。" }] },
+        { role: "content_panel", title: "模块二", blocks: [{ type: "text", body: "固定版心由渲染器决定。" }] },
+      ],
+    },
+  }), /renderer-owned/, "contentLayout should reject page-region coordinates instead of silently ignoring them");
+}
+
 function assertPackageScriptsRunContractBeforeSmoke() {
   const pkg = JSON.parse(read("package.json"));
   assert.equal(pkg.scripts["test:visual-anchor-contract"], "node scripts/smoke/test_visual_anchor_content_contract.js");
@@ -427,6 +451,7 @@ function main() {
   collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicSchemaEscapeHatch, failures);
   collect("SKILL documents the current path", assertSkillDocumentsCurrentPath, failures);
   collect("content layout reference documents dense caption suppression", assertContentLayoutReferenceDocumentsDenseCaptionSuppression, failures);
+  collect("content layout does not expose page-region override", assertContentLayoutDoesNotExposePageRegionOverride, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 
   if (failures.length) {

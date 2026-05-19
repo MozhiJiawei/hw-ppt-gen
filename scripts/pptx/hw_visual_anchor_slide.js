@@ -281,6 +281,22 @@ function contentLayoutAreas(layout, contentArea) {
   });
 }
 
+function fixedContentLayoutArea(layout) {
+  const bottomPadding = layout.schema.special === "large_visual_with_side_cards" ? 0.35 : 0.17;
+  return {
+    x: HW_STYLE.slide.marginX,
+    y: HW_STYLE.summary.contentTop - 0.18,
+    w: 12.23,
+    h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - bottomPadding,
+  };
+}
+
+function rejectContentLayoutPageRegionOverrides(data) {
+  if (Object.prototype.hasOwnProperty.call(data, "contentArea") || Object.prototype.hasOwnProperty.call(data, "content_area")) {
+    throw new Error("contentLayout page-region coordinates are renderer-owned; pass only the fixed layout schema.");
+  }
+}
+
 function normalizePlainCaption(module) {
   const caption = module.visualAnchorCaption || module.visual_anchor_caption || module.caption || {};
   if (typeof caption === "string") return safeText(caption);
@@ -730,12 +746,7 @@ function addBiasedSideCard(slide, module, area) {
 }
 
 function renderBiasedContentLayout(slide, data, layout) {
-  const contentArea = data.contentArea || data.content_area || {
-    x: HW_STYLE.slide.marginX,
-    y: HW_STYLE.summary.contentTop - 0.18,
-    w: 12.23,
-    h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - 0.35,
-  };
+  const contentArea = fixedContentLayoutArea(layout);
   const areas = contentLayoutAreas(layout, contentArea);
   const anchorResults = [addBiasedVisualOnlyModule(slide, layout.modules[0], data, areas[0])];
   layout.modules.slice(1).forEach((module, idx) => addBiasedSideCard(slide, module, areas[idx + 1]));
@@ -758,12 +769,7 @@ function renderContentLayout(slide, data, layout, visualCaption) {
   if (layout.schema.special === "large_visual_with_side_cards") {
     return renderBiasedContentLayout(slide, data, layout);
   }
-  const contentArea = data.contentArea || data.content_area || {
-    x: HW_STYLE.slide.marginX,
-    y: HW_STYLE.summary.contentTop - 0.18,
-    w: 12.23,
-    h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - 0.17,
-  };
+  const contentArea = fixedContentLayoutArea(layout);
   const areas = contentLayoutAreas(layout, contentArea);
   const anchorResults = [];
   const moduleLayouts = [];
@@ -830,6 +836,7 @@ function fitAreaContain(area, imageWidth, imageHeight) {
 }
 
 function addVisualAnchorContentSlide(pptx, data = {}) {
+  if (data.contentLayout || data.content_layout || data.layout_schema) rejectContentLayoutPageRegionOverrides(data);
   const contentLayout = normalizeContentLayout(data.contentLayout || data.content_layout || data.layout_schema);
   if (!data.visual_anchor && !contentLayout) throw new Error("Content slide requires visual_anchor or contentLayout visual_anchor modules.");
   if (data.visual_anchor) validateVisualAnchorSpec(data.visual_anchor);

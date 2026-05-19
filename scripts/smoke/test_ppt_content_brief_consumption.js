@@ -7,6 +7,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..", "..");
 const {
   parsePptContentBrief,
+  recommendContentLayoutForSummary,
   validatePptContentBrief,
 } = require("../pptx/parse_ppt_content_brief");
 
@@ -46,8 +47,46 @@ function assertValidBriefMapsHardConstraints() {
     { label: "长尾错配", text: "低频模型需要保留服务能力，闲置成本被系统性放大。" },
     { label: "突发冗余", text: "热门模型峰值超过保守容量时，平台必须维持安全垫。" },
   ]);
+  assert.deepStrictEqual(parsed.slideContract.contentSlides[0].contentLayoutRecommendation, {
+    type: "two_column",
+    reference: "05 内容 二分栏",
+    viewpointCount: 2,
+  });
   assert.deepStrictEqual(parsed.slideContract.contentSlides[0].sections, parsed.sections);
   assert.equal(parsed.slideContract.contentSlides[0].currentSection, "浪费来自市场形态");
+  assert.deepStrictEqual(parsed.planContract.slides.map((slide) => ({
+    page: slide.page,
+    role: slide.role,
+    title: slide.title,
+    titleNote: slide.titleNote,
+    currentSection: slide.currentSection || "",
+    contentLayoutType: slide.contentLayout.type,
+  })), [
+    {
+      page: 2,
+      role: "summary",
+      title: "GPU Pooling",
+      titleNote: "面向模型市场长尾与突发并发，用 token 级共享降低保守预留。",
+      currentSection: "",
+      contentLayoutType: "three_column",
+    },
+    {
+      page: 4,
+      role: "content",
+      title: "市场型浪费",
+      titleNote: "长尾模型低频请求与热门模型 burst 共同推高 GPU 冗余预留。",
+      currentSection: "浪费来自市场形态",
+      contentLayoutType: "two_column",
+    },
+    {
+      page: 5,
+      role: "content",
+      title: "Token-Level 破局",
+      titleNote: "Aegaeon 在 token 间隙抢占换模，降低 request-level 等待带来的 SLO 风险。",
+      currentSection: "突破在 token 粒度",
+      contentLayoutType: "two_column",
+    },
+  ]);
 }
 
 function assertSummaryOnlyBriefDoesNotRequireToc() {
@@ -78,6 +117,46 @@ function assertSummaryOnlyBriefDoesNotRequireToc() {
   assert.equal(parsed.sections.length, 0);
   assert.equal(parsed.contentPages.length, 0);
   assert.equal(parsed.summaryPage.pageNumber, 1);
+  assert.deepStrictEqual(parsed.summaryPage.contentLayoutRecommendation, {
+    type: "biased_column",
+    reference: "06 内容 偏分栏",
+    viewpointCount: 1,
+  });
+}
+
+function assertAbsolutePathsAreAcceptedAsBriefSourceLocators() {
+  const brief = `# PPT Content Brief
+
+## Deck Metadata
+主题：一页总结
+目标读者：技术负责人
+页数口径：1 total PPT pages
+核心结论：用源图支撑一页总结。
+内容来源：测试材料
+关联审计文件：research_audit.md
+
+## Summary Page
+页码：Page 1
+页面标题：一页总结
+标题说明：参考图片可以用 Markdown 图片链接绑定源图文件。
+分析总结：
+- 判断：正文依赖源图说明。
+正文内容：
+- 判断：Figure 1 说明了关键趋势，源图位于 D:\\Agent Repo\\paper pack\\final\\images\\picture_001.png，因此下游应优先把这张源图作为论文插图使用。
+参考图片：
+- ![Figure 1: 关键趋势](<D:\\Agent Repo\\paper pack\\final\\images\\picture_001.png>)
+- Figure 1 说明了关键趋势。
+`;
+  assert.deepStrictEqual(validatePptContentBrief(brief, { expectedPages: 1 }), []);
+  const parsed = parsePptContentBrief(brief, { expectedPages: 1 });
+  assert(parsed.summaryPage.bodyContent[0].includes("D:\\Agent Repo\\paper pack\\final\\images\\picture_001.png"));
+  assert(parsed.summaryPage.referenceImages[0].includes("D:\\Agent Repo\\paper pack\\final\\images\\picture_001.png"));
+
+  const plainReferencePathBrief = brief.replace(
+    "- ![Figure 1: 关键趋势](<D:\\Agent Repo\\paper pack\\final\\images\\picture_001.png>)",
+    "- Figure 1: D:\\Agent Repo\\paper pack\\final\\images\\picture_001.png"
+  );
+  assert.deepStrictEqual(validatePptContentBrief(plainReferencePathBrief, { expectedPages: 1 }), []);
 }
 
 function assertInvalidBriefFailsContract() {
@@ -87,7 +166,7 @@ function assertInvalidBriefFailsContract() {
   assert(errors.some((error) => error.includes("正文内容 must explicitly support 分析总结 label '结论'")), "should require body support for every analysis label");
   assert(errors.some((error) => error.includes("所属章节 must match")), "should reject chapter names outside the TOC");
   assert(errors.some((error) => error.includes("Banned internal/layout token found")), "should reject audit/layout tokens");
-  assert(errors.some((error) => error.includes("Absolute local paths")), "should reject local absolute paths");
+  assert(!errors.some((error) => error.includes("Absolute local paths")), "should not reject local absolute paths");
 }
 
 function assertIssueContractIsDocumentedInSkillAndReferences() {
@@ -98,16 +177,40 @@ function assertIssueContractIsDocumentedInSkillAndReferences() {
   assert(skill.includes("ppt_content_brief.md"), "SKILL should document the optional ppt_content_brief input branch");
   assert(skill.includes("parse_ppt_content_brief.js"), "SKILL should require the parser before generation");
   assert(reference.includes("硬约束字段"), "reference should separate hard constraints from reference-only fields");
+  assert(skill.includes("Source evidence is TOP1"), "SKILL should state the evidence-first principle");
+  assert(reference.includes("Evidence-First Principle"), "reference should state the evidence-first principle");
+  assert(reference.includes("1 条 `分析总结`"), "reference should document summary-count-driven content layout");
+  assert(reference.includes("source locators"), "reference should document absolute paths as source locators");
   assert(reference.includes("research_audit.md"), "reference should document audit file as verification-only");
   assert(pkg.scripts.smoke.includes("test:ppt-content-brief"), "npm run smoke should cover content brief parsing");
+}
+
+function assertSummaryCountRecommendsContentLayout() {
+  assert.deepStrictEqual(recommendContentLayoutForSummary({ body: [{ label: "一", text: "一个观点" }] }), {
+    type: "biased_column",
+    reference: "06 内容 偏分栏",
+    viewpointCount: 1,
+  });
+  assert.deepStrictEqual(recommendContentLayoutForSummary({ body: [{ label: "一", text: "一个观点" }, { label: "二", text: "两个观点" }] }), {
+    type: "two_column",
+    reference: "05 内容 二分栏",
+    viewpointCount: 2,
+  });
+  assert.deepStrictEqual(recommendContentLayoutForSummary({ body: [{ label: "一", text: "一个观点" }, { label: "二", text: "两个观点" }, { label: "三", text: "三个观点" }] }), {
+    type: "three_column",
+    reference: "07 内容 三分栏",
+    viewpointCount: 3,
+  });
 }
 
 function main() {
   const failures = [];
   collect("valid brief maps hard constraints into slide contract", assertValidBriefMapsHardConstraints, failures);
   collect("summary-only brief does not require TOC or Page Content", assertSummaryOnlyBriefDoesNotRequireToc, failures);
+  collect("absolute paths are accepted as brief source locators", assertAbsolutePathsAreAcceptedAsBriefSourceLocators, failures);
   collect("invalid brief fails field, chapter, path, and banned-token checks", assertInvalidBriefFailsContract, failures);
   collect("runtime docs and smoke wiring mention the content brief contract", assertIssueContractIsDocumentedInSkillAndReferences, failures);
+  collect("analysis summary count recommends matching content layout", assertSummaryCountRecommendsContentLayout, failures);
 
   if (failures.length) {
     console.error(`ppt content brief consumption tests failed: ${failures.length} issue(s)`);

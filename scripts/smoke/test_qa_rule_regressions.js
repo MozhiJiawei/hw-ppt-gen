@@ -326,11 +326,78 @@ async function generateDeck() {
   return {
     manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")),
     qa: JSON.parse(fs.readFileSync(qaPath, "utf8")),
+    pptxPath,
   };
 }
 
 function issuesOf(result, type, slide) {
   return result.qa.issues.filter((item) => item.type === type && (slide === undefined || item.slide === slide));
+}
+
+function runBriefContractQaFixture(pptxPath) {
+  const briefPath = path.join(ROOT, "scripts", "smoke", "fixtures", "ppt_content_brief_valid.md");
+  const planPath = path.join(OUT_DIR, "ppt_content_brief_bad_plan.json");
+  const qaPath = path.join(OUT_DIR, "ppt_content_brief_bad_plan.qa.json");
+  const badPlan = {
+    slides: [
+      {
+        page: 2,
+        title: "GPU Pooling",
+        titleNote: "被模型改写的标题说明",
+        currentSection: "浪费来自市场形态",
+        layout_reference: "06 内容 偏分栏",
+        summary: {
+          body: [
+            { label: "场景", text: "长尾模型低频调用会放大固定 GPU 占用。" },
+            { label: "机制", text: "token 间隙抢占换模比 request 结束后释放更细。" },
+            { label: "判断", text: "适合多模型市场先做受控评估，而不是替代所有服务。" },
+          ],
+        },
+      },
+      {
+        page: 4,
+        title: "市场型浪费",
+        titleNote: "长尾模型低频请求与热门模型 burst 共同推高 GPU 冗余预留。",
+        currentSection: "浪费来自市场形态",
+        layout_reference: "06 内容 偏分栏",
+        summary: {
+          body: [
+            { label: "长尾错配", text: "低频模型需要保留服务能力，闲置成本被系统性放大。" },
+            { label: "突发冗余", text: "热门模型峰值超过保守容量时，平台必须维持安全垫。" },
+          ],
+        },
+      },
+      {
+        page: 5,
+        title: "Token-Level 破局",
+        titleNote: "Aegaeon 在 token 间隙抢占换模，降低 request-level 等待带来的 SLO 风险。",
+        currentSection: "突破在 token 粒度",
+        layout_reference: "05 内容 二分栏",
+        summary: {
+          body: [
+            { label: "调度", text: "prefill 和 decoding 分别服务 TTFT 与 TBT 目标。" },
+            { label: "换模", text: "组件复用和显式内存管理压缩换模阻塞路径。" },
+          ],
+        },
+      },
+    ],
+  };
+  fs.writeFileSync(planPath, JSON.stringify(badPlan, null, 2), "utf8");
+  try {
+    execFileSync("node", [
+      path.join(ROOT, "scripts", "qa", "check_huawei_pptx.js"),
+      pptxPath,
+      "--out",
+      qaPath,
+      "--require-plan",
+      planPath,
+      "--require-ppt-content-brief",
+      briefPath,
+    ], { cwd: ROOT, stdio: "pipe" });
+  } catch (error) {
+    if (!fs.existsSync(qaPath)) throw error;
+  }
+  return JSON.parse(fs.readFileSync(qaPath, "utf8"));
 }
 
 async function main() {
@@ -348,6 +415,12 @@ async function main() {
   assert(issuesOf(result, "content_visual_anchor_image_too_small", 6).length >= 1, "#11: evidence images that occupy too little visual area should be blocking QA issues");
   assert(issuesOf(result, "sparse_large_card").some((item) => item.severity === "error"), "#12: very sparse large cards should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_alignment", 8).length >= 1, "#13: misaligned column module content should be blocking QA issues");
+
+  const briefQa = runBriefContractQaFixture(result.pptxPath);
+  assert(briefQa.issues.some((item) => item.type === "ppt_content_brief_title_note_mismatch"), "#18: brief-backed titleNote rewrites should fail QA");
+  assert(briefQa.issues.some((item) => item.type === "ppt_content_brief_layout_mismatch"), "#18: brief-backed summary-count layout mismatches should fail QA");
+  assert(briefQa.issues.some((item) => item.type === "ppt_content_brief_visible_title_mismatch"), "#18: visible PPT title drift from brief should fail QA");
+  assert(briefQa.issues.some((item) => item.type === "ppt_content_brief_visible_summary_mismatch"), "#18: visible PPT summary drift from brief should fail QA");
 
   console.log("QA rule regression tests passed");
 }

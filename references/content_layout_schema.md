@@ -8,7 +8,7 @@ The schema follows a strict three-step contract:
 2. Each module `blocks` list declares visual rendering blocks.
 3. Text blocks, captions, legends, and interpretation stay as editable PPT annotations outside `visual_anchor.visual_spec`.
 
-The schema describes layout, visual anchors, and editable text only. It must not carry implementation-control fields. PPT text annotations remain editable PPT objects.
+The schema describes layout, visual anchors, and editable text only. It must not carry implementation-control fields. PPT text annotations remain editable PPT objects. Fixed Huawei content layouts own their page region; callers choose `contentLayout.type`, `modules`, and optional layout annotations such as `flowArrows`. The Chinese `reference` label may be recorded as a derived compatibility field, but `contentLayout.type` is the authoritative layout choice.
 
 ## Page Shape
 

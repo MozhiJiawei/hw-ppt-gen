@@ -1,6 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 const JSZip = require("jszip");
+const { parsePptContentBrief } = require("../pptx/parse_ppt_content_brief");
 const { resolveVisualAnchorRenderPath, validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
 const {
   estimateTextBoxHeight: estimateGeneratedTextBoxHeight,
@@ -75,11 +76,11 @@ const LANGUAGE_ALLOWLIST = new Set([
 ]);
 
 function usage() {
-  console.error("Usage: node scripts/qa/check_huawei_pptx.js <deck.pptx> [--out .tmp/report.json] [--require-plan .tmp/deck_plan.json] [--require-visual-anchor-manifest .tmp/deck_visual_anchor_manifest.json]");
+  console.error("Usage: node scripts/qa/check_huawei_pptx.js <deck.pptx> [--out .tmp/report.json] [--require-plan .tmp/deck_plan.json] [--require-ppt-content-brief path/to/ppt_content_brief.md] [--require-visual-anchor-manifest .tmp/deck_visual_anchor_manifest.json]");
 }
 
 function parseArgs(argv) {
-  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null, requireVisualAnchorManifest: null, requirePlan: null };
+  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null, requireVisualAnchorManifest: null, requirePlan: null, requirePptContentBrief: null };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--out") {
       args.out = argv[i + 1];
@@ -95,6 +96,9 @@ function parseArgs(argv) {
       i += 1;
     } else if (argv[i] === "--require-plan") {
       args.requirePlan = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--require-ppt-content-brief") {
+      args.requirePptContentBrief = argv[i + 1];
       i += 1;
     }
   }
@@ -1348,6 +1352,293 @@ function checkVisualAnchorSemantics(slide, entry, visibleText) {
   return issues;
 }
 
+function readJsonFile(fileName, label) {
+  try {
+    return JSON.parse(fs.readFileSync(fileName, "utf8"));
+  } catch (error) {
+    const err = new Error(`Could not parse ${label} JSON: ${error.message}`);
+    err.cause = error;
+    throw err;
+  }
+}
+
+function normalizeSummaryItems(summary) {
+  const body = summary?.body || summary?.items || [];
+  return Array.isArray(body)
+    ? body.map((item) => ({ label: safeText(item?.label || item?.title), text: safeText(item?.text || item?.body || item?.value) }))
+    : [];
+}
+
+function normalizeComparableText(value) {
+  return safeText(value).replace(/\s+/g, "");
+}
+
+function textContainsComparable(haystack, needle) {
+  const expected = normalizeComparableText(needle);
+  if (!expected) return true;
+  return normalizeComparableText(haystack).includes(expected);
+}
+
+function slideVisibleTextMap(slideEntries) {
+  return new Map(slideEntries.map((entry) => {
+    const slide = slideNumber(entry.name);
+    const text = extractShapes(entry.xml)
+      .map((shape) => safeText(shape.text))
+      .filter(Boolean)
+      .join("\n");
+    return [slide, text];
+  }));
+}
+
+function plannedLayoutReference(slide) {
+  const anchors = Array.isArray(slide?.visual_anchors) ? slide.visual_anchors : [];
+  return safeText(slide?.layout_reference)
+    || safeText(slide?.layoutReference)
+    || safeText(slide?.contentLayout?.reference)
+    || safeText(slide?.contentLayout?.layout_reference)
+    || safeText(slide?.content_layout?.reference)
+    || safeText(slide?.content_layout?.layout_reference)
+    || safeText(anchors.find((anchor) => safeText(anchor?.layout_reference))?.layout_reference);
+}
+
+function plannedContentLayoutType(slide) {
+  return safeText(slide?.contentLayout?.type)
+    || safeText(slide?.content_layout?.type)
+    || safeText(slide?.layout_schema?.type);
+}
+
+function expectedContentLayoutReference(expected) {
+  const type = safeText(expected?.contentLayout?.type);
+  return safeText(CONTENT_LAYOUT_SCHEMA_RULES[type]?.reference) || safeText(expected?.contentLayout?.reference);
+}
+
+function checkPptContentBriefPlanAlignment(briefFileName, planFileName) {
+  const issues = [];
+  if (!briefFileName) return issues;
+  if (!fs.existsSync(briefFileName)) {
+    return [issue(null, "ppt_content_brief_missing", "error", `Required PPT Content Brief not found: ${briefFileName}`)];
+  }
+  if (!planFileName || !fs.existsSync(planFileName)) {
+    return [issue(null, "ppt_content_brief_plan_missing", "error", "PPT Content Brief QA requires --require-plan so the brief contract can be compared against the deck plan.")];
+  }
+
+  let parsed;
+  let plan;
+  try {
+    parsed = parsePptContentBrief(fs.readFileSync(briefFileName, "utf8"));
+  } catch (error) {
+    return [issue(null, "ppt_content_brief_invalid", "error", error.message)];
+  }
+  try {
+    plan = readJsonFile(planFileName, "deck plan");
+  } catch (error) {
+    return [issue(null, "ppt_content_brief_plan_invalid", "error", error.message)];
+  }
+
+  const expectedSlides = parsed.planContract?.slides || [];
+  const plannedSlides = Array.isArray(plan.slides) ? plan.slides : [];
+  if (!Array.isArray(plan.slides)) {
+    return [issue(null, "ppt_content_brief_plan_invalid", "error", "Deck plan must contain a slides array for PPT Content Brief alignment.")];
+  }
+
+  const plannedByPage = new Map(plannedSlides
+    .filter((slide) => Number.isFinite(Number(slide?.page)))
+    .map((slide) => [Number(slide.page), slide]));
+  const expectedPages = expectedSlides.map((slide) => Number(slide.page)).filter(Number.isFinite);
+  const plannedExpectedPages = plannedSlides
+    .map((slide) => Number(slide?.page))
+    .filter((page) => expectedPages.includes(page));
+  if (JSON.stringify(plannedExpectedPages) !== JSON.stringify(expectedPages)) {
+    issues.push(issue(null, "ppt_content_brief_page_order_mismatch", "error", "Deck plan pages backed by PPT Content Brief must preserve Summary Page and Page Content order.", {
+      expected_pages: expectedPages,
+      planned_pages: plannedExpectedPages,
+    }));
+  }
+
+  for (const expected of expectedSlides) {
+    const page = Number(expected.page);
+    const planned = plannedByPage.get(page);
+    if (!planned) {
+      issues.push(issue(page, "ppt_content_brief_page_missing", "error", "Deck plan is missing a slide required by PPT Content Brief.", { page }));
+      continue;
+    }
+
+    for (const [field, type] of [
+      ["title", "ppt_content_brief_title_mismatch"],
+      ["titleNote", "ppt_content_brief_title_note_mismatch"],
+    ]) {
+      if (safeText(planned[field]) !== safeText(expected[field])) {
+        issues.push(issue(page, type, "error", `Deck plan ${field} must exactly match PPT Content Brief.`, {
+          expected: safeText(expected[field]),
+          actual: safeText(planned[field]),
+        }));
+      }
+    }
+
+    if (expected.role === "content" && safeText(planned.currentSection) !== safeText(expected.currentSection)) {
+      issues.push(issue(page, "ppt_content_brief_section_mismatch", "error", "Deck plan currentSection must exactly match PPT Content Brief 所属章节.", {
+        expected: safeText(expected.currentSection),
+        actual: safeText(planned.currentSection),
+      }));
+    }
+
+    const expectedSummary = normalizeSummaryItems(expected.summary);
+    const plannedSummary = normalizeSummaryItems(planned.summary);
+    if (JSON.stringify(plannedSummary) !== JSON.stringify(expectedSummary)) {
+      issues.push(issue(page, "ppt_content_brief_summary_mismatch", "error", "Deck plan summary.body must exactly match PPT Content Brief 分析总结 labels and text.", {
+        expected: expectedSummary,
+        actual: plannedSummary,
+      }));
+    }
+
+    const actualLayoutType = plannedContentLayoutType(planned);
+    const expectedLayoutType = safeText(expected.contentLayout?.type);
+    if (actualLayoutType !== expectedLayoutType) {
+      issues.push(issue(page, "ppt_content_brief_layout_mismatch", "error", "Deck plan contentLayout.type must match the parser-derived PPT Content Brief layout recommendation.", {
+        viewpoint_count: expected.viewpointCount,
+        expected_content_layout_type: expectedLayoutType,
+        actual_content_layout_type: actualLayoutType,
+      }));
+    }
+    const actualLayoutReference = plannedLayoutReference(planned);
+    const expectedLayoutReference = expectedContentLayoutReference(expected);
+    if (actualLayoutReference && actualLayoutReference !== expectedLayoutReference) {
+      issues.push(issue(page, "ppt_content_brief_layout_mismatch", "error", "Deck plan layout_reference conflicts with parser-derived contentLayout.type.", {
+        viewpoint_count: expected.viewpointCount,
+        expected_content_layout_type: expectedLayoutType,
+        expected_layout_reference: expectedLayoutReference,
+        actual_layout_reference: actualLayoutReference,
+      }));
+    }
+  }
+  return issues;
+}
+
+function checkPptContentBriefVisibleAlignment(parsed, slideEntries) {
+  const issues = [];
+  if (!parsed) return issues;
+  const visibleByPage = slideVisibleTextMap(slideEntries);
+  if (parsed.expectedPages && slideEntries.length !== Number(parsed.expectedPages)) {
+    issues.push(issue(null, "ppt_content_brief_page_count_mismatch", "error", "PPT slide count must match PPT Content Brief 页数口径.", {
+      expected_pages: Number(parsed.expectedPages),
+      actual_pages: slideEntries.length,
+    }));
+  }
+  if ((parsed.tocItems || []).length) {
+    const tocPage = 3;
+    const tocVisibleText = visibleByPage.get(tocPage) || "";
+    for (const item of parsed.tocItems) {
+      if (safeText(item.title) && !textContainsComparable(tocVisibleText, item.title)) {
+        issues.push(issue(tocPage, "ppt_content_brief_visible_toc_mismatch", "error", "Visible contents page must include each PPT Content Brief TOC 小标题.", {
+          expected: item.title,
+        }));
+      }
+      if (safeText(item.description) && !textContainsComparable(tocVisibleText, item.description)) {
+        issues.push(issue(tocPage, "ppt_content_brief_visible_toc_mismatch", "error", "Visible contents page must include each PPT Content Brief TOC 说明.", {
+          expected: item.description,
+        }));
+      }
+    }
+  }
+  for (const expected of parsed.planContract?.slides || []) {
+    const page = Number(expected.page);
+    const visibleText = visibleByPage.get(page) || "";
+    if (!visibleText) {
+      issues.push(issue(page, "ppt_content_brief_visible_slide_missing", "error", "PPT slide text could not be extracted for a PPT Content Brief-backed page.", { page }));
+      continue;
+    }
+
+    const visibleFields = [
+      ["title", "ppt_content_brief_visible_title_mismatch"],
+      ["titleNote", "ppt_content_brief_visible_title_note_mismatch"],
+    ];
+    if (expected.role === "content") {
+      visibleFields.push(["currentSection", "ppt_content_brief_visible_section_mismatch"]);
+    }
+    for (const [field, type] of visibleFields) {
+      if (safeText(expected[field]) && !textContainsComparable(visibleText, expected[field])) {
+        issues.push(issue(page, type, "error", `Visible PPT text must include the PPT Content Brief ${field} exactly.`, {
+          expected: safeText(expected[field]),
+          visible_text_sample: visibleText.slice(0, 240),
+        }));
+      }
+    }
+
+    for (const item of normalizeSummaryItems(expected.summary)) {
+      if (item.label && !textContainsComparable(visibleText, `${item.label}：`)) {
+        issues.push(issue(page, "ppt_content_brief_visible_summary_mismatch", "error", "Visible PPT text must include each PPT Content Brief 分析总结 label.", {
+          expected_label: item.label,
+        }));
+      }
+      if (item.text && !textContainsComparable(visibleText, item.text)) {
+        issues.push(issue(page, "ppt_content_brief_visible_summary_mismatch", "error", "Visible PPT text must include each PPT Content Brief 分析总结 text.", {
+          expected_text: item.text,
+        }));
+      }
+    }
+  }
+  return issues;
+}
+
+function briefHardTextFragments(parsed) {
+  if (!parsed) return new Map();
+  const byPage = new Map();
+  const globalFragments = [
+    parsed.metadata?.["主题"],
+    parsed.metadata?.["目标读者"],
+    parsed.metadata?.["页数口径"],
+    parsed.metadata?.["核心结论"],
+    parsed.metadata?.["内容来源"],
+    parsed.metadata?.["关联审计文件"],
+    ...(parsed.tocItems || []).flatMap((item) => [item.title, item.description]),
+  ].filter(Boolean);
+  for (const expected of parsed.planContract?.slides || []) {
+    const fragments = [
+      ...globalFragments,
+      expected.title,
+      expected.titleNote,
+      expected.currentSection,
+      ...(expected.sections || []),
+      ...normalizeSummaryItems(expected.summary).flatMap((item) => [item.label, item.text, `${item.label}：${item.text}`]),
+    ].filter(Boolean);
+    byPage.set(Number(expected.page), fragments.map(normalizeComparableText).filter(Boolean));
+  }
+  if ((parsed.tocItems || []).length) {
+    byPage.set(3, [
+      ...globalFragments,
+      ...(parsed.sections || []),
+      ...(parsed.tocItems || []).flatMap((item) => [item.title, item.description]),
+    ].filter(Boolean).map(normalizeComparableText).filter(Boolean));
+  }
+  return byPage;
+}
+
+function isBriefDerivedIssue(item, fragmentsByPage) {
+  if (!fragmentsByPage?.size || !Number.isFinite(Number(item.slide))) return false;
+  const fragments = fragmentsByPage.get(Number(item.slide)) || [];
+  if (!fragments.length) return false;
+  const issueText = normalizeComparableText([
+    item.text,
+    item.expected,
+    item.actual,
+    item.visible_text_sample,
+  ].filter(Boolean).join("\n"));
+  if (!issueText) return false;
+  return fragments.some((fragment) => fragment && (issueText.includes(fragment) || fragment.includes(issueText)));
+}
+
+function suppressBriefDerivedLowerPriorityIssues(issues, parsed) {
+  const fragmentsByPage = briefHardTextFragments(parsed);
+  const suppressibleTypes = new Set([
+    "language_excess_english",
+    "language_non_chinese",
+    "page_title_wrap",
+    "page_title_overflow_estimate",
+    "text_overflow_estimate",
+  ]);
+  return issues.filter((item) => !(suppressibleTypes.has(item.type) && isBriefDerivedIssue(item, fragmentsByPage)));
+}
+
 function textExplainsHighlight(visibleText, reason) {
   if (!reason) return false;
   const text = safeText(visibleText);
@@ -1436,6 +1727,14 @@ async function main() {
   const slides = await readXmlFiles(zip, "ppt/slides/slide");
   const presentationFiles = await readXmlFiles(zip, "ppt/");
   const issues = [];
+  let parsedBrief = null;
+  if (args.requirePptContentBrief && fs.existsSync(args.requirePptContentBrief)) {
+    try {
+      parsedBrief = parsePptContentBrief(fs.readFileSync(args.requirePptContentBrief, "utf8"));
+    } catch {
+      parsedBrief = null;
+    }
+  }
 
   for (const slide of slides) {
     issues.push(...checkSlideXml(slide.name, slide.xml));
@@ -1444,17 +1743,20 @@ async function main() {
   issues.push(...checkRenderEvidence(args.requireRenderDir, slides.length));
   issues.push(...checkReferenceReviewEvidence(args.requireReferenceReview));
   issues.push(...checkVisualAnchorManifest(args.requireVisualAnchorManifest, slides, args.requirePlan));
+  issues.push(...checkPptContentBriefPlanAlignment(args.requirePptContentBrief, args.requirePlan));
+  issues.push(...checkPptContentBriefVisibleAlignment(parsedBrief, slides));
 
   const presentationXml = presentationFiles.find((file) => file.name === "ppt/presentation.xml");
   if (presentationXml && /<p:transition\b|<p:timing\b/.test(presentationXml.xml)) {
     issues.push(issue(null, "presentation_motion", "error", "Presentation-level motion XML was found."));
   }
 
+  const filteredIssues = suppressBriefDerivedLowerPriorityIssues(issues, parsedBrief);
   const report = {
     file: path.resolve(args.input),
     generated_at: new Date().toISOString(),
-    summary: summarize(issues, slides.length),
-    issues,
+    summary: summarize(filteredIssues, slides.length),
+    issues: filteredIssues,
   };
 
   const text = JSON.stringify(report, null, 2);

@@ -176,6 +176,56 @@ function parseSummaryPage(block) {
   };
 }
 
+function recommendContentLayoutForSummary(summary) {
+  const count = Array.isArray(summary?.body) ? summary.body.length : 0;
+  if (count <= 1) {
+    return { type: "biased_column", reference: "06 内容 偏分栏", viewpointCount: Math.max(1, count) };
+  }
+  if (count === 2) {
+    return { type: "two_column", reference: "05 内容 二分栏", viewpointCount: count };
+  }
+  return { type: "three_column", reference: "07 内容 三分栏", viewpointCount: Math.min(3, count) };
+}
+
+function buildPptContentBriefPlanContract(parsed) {
+  const sections = parsed.sections || [];
+  const slides = [];
+  if (parsed.summaryPage) {
+    const recommendation = parsed.summaryPage.contentLayoutRecommendation || recommendContentLayoutForSummary(parsed.summaryPage.summary);
+    slides.push({
+      page: parsed.summaryPage.pageNumber,
+      role: "summary",
+      title: parsed.summaryPage.title,
+      titleNote: parsed.summaryPage.titleNote,
+      summary: parsed.summaryPage.summary,
+      sections,
+      contentLayout: { type: recommendation.type },
+      viewpointCount: recommendation.viewpointCount,
+    });
+  }
+  for (const page of parsed.contentPages || []) {
+    const recommendation = page.contentLayoutRecommendation || recommendContentLayoutForSummary(page.summary);
+    slides.push({
+      page: page.pageNumber,
+      role: "content",
+      title: page.title,
+      titleNote: page.titleNote,
+      summary: page.summary,
+      sections,
+      currentSection: page.currentSection,
+      contentLayout: { type: recommendation.type },
+      viewpointCount: recommendation.viewpointCount,
+    });
+  }
+  return {
+    source: "ppt_content_brief",
+    expectedPages: parsed.expectedPages,
+    sections,
+    toc: (parsed.tocItems || []).map((item) => ({ title: item.title, description: item.description })),
+    slides,
+  };
+}
+
 function parseTocItems(block) {
   const lines = block.split("\n");
   const items = [];
@@ -362,11 +412,6 @@ function validatePptContentBrief(input, options = {}) {
     }
   }
 
-  const absolutePaths = text.match(/[A-Za-z]:\\[^\r\n|,)]+|(?:\/mnt|\/home|\/Users)\/[^\r\n|,)]+/g) || [];
-  if (absolutePaths.length && !options.allowAbsolutePaths) {
-    errors.push(`Absolute local paths found in PPT Content Brief: ${absolutePaths.slice(0, 3).join(", ")}`);
-  }
-
   return errors;
 }
 
@@ -380,22 +425,30 @@ function parsePptContentBrief(input, options = {}) {
   }
   const metadata = parseMetadata(extractHeadingSection(text, "## Deck Metadata").body);
   const tocItems = parseTocItems(extractHeadingSection(text, "## Table of Contents").body);
-  const contentPages = extractContentPages(text).map((page) => ({
-    pageNumber: page.pageNumber,
-    title: page.title,
-    titleNote: page.titleNote,
-    currentSection: page.currentSection,
-    summary: page.summary,
-    bodyContent: page.bodyContent,
-    referenceImages: page.referenceImages,
-    notes: page.notes,
-  }));
+  const contentPages = extractContentPages(text).map((page) => {
+    const recommendation = recommendContentLayoutForSummary(page.summary);
+    return {
+      pageNumber: page.pageNumber,
+      title: page.title,
+      titleNote: page.titleNote,
+      currentSection: page.currentSection,
+      summary: page.summary,
+      contentLayoutRecommendation: recommendation,
+      bodyContent: page.bodyContent,
+      referenceImages: page.referenceImages,
+      notes: page.notes,
+    };
+  });
   const sections = tocItems.map((item) => item.title);
-  return {
+  const summaryPage = parseSummaryPage(extractHeadingSection(text, "## Summary Page").body);
+  const parsed = {
     metadata,
     expectedPages: options.expectedPages || detectExpectedPages(metadata),
     sections,
-    summaryPage: parseSummaryPage(extractHeadingSection(text, "## Summary Page").body),
+    summaryPage: {
+      ...summaryPage,
+      contentLayoutRecommendation: recommendContentLayoutForSummary(summaryPage.summary),
+    },
     tocItems,
     contentPages,
     slideContract: {
@@ -405,12 +458,16 @@ function parsePptContentBrief(input, options = {}) {
         audience: metadata["目标读者"],
         source: metadata["内容来源"],
       },
-      summary: parseSummaryPage(extractHeadingSection(text, "## Summary Page").body),
+      summary: {
+        ...summaryPage,
+        contentLayoutRecommendation: recommendContentLayoutForSummary(summaryPage.summary),
+      },
       toc: tocItems.map((item) => ({ title: item.title, description: item.description })),
       contentSlides: contentPages.map((page) => ({
         title: page.title,
         titleNote: page.titleNote,
         summary: page.summary,
+        contentLayoutRecommendation: page.contentLayoutRecommendation,
         sections,
         currentSection: page.currentSection,
         bodyContent: page.bodyContent,
@@ -419,6 +476,8 @@ function parsePptContentBrief(input, options = {}) {
       })),
     },
   };
+  parsed.planContract = buildPptContentBriefPlanContract(parsed);
+  return parsed;
 }
 
 function main(argv) {
@@ -455,6 +514,8 @@ if (require.main === module) {
 }
 
 module.exports = {
+  buildPptContentBriefPlanContract,
   parsePptContentBrief,
+  recommendContentLayoutForSummary,
   validatePptContentBrief,
 };

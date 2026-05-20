@@ -113,7 +113,7 @@ topic: huawei-content-aware-layout
 
 ## Dependencies / Assumptions
 
-- The implementation should remain consistent with `doc/architecture_design.md`: layout, visual anchors, and PPT text layer stay separate.
+- The implementation should remain consistent with `docs/architecture_design.md`: layout, visual anchors, and PPT text layer stay separate.
 - The reference families are `assets/slides_ref/05 内容 二分栏.png`, `assets/slides_ref/06 内容 偏分栏.png`, and `assets/slides_ref/07 内容 三分栏.png`; they should be interpreted as style references and layout families rather than fixed grids.
 - The archived HTML files and screenshots are design evidence for the Aegaeon content-aware layout family and can serve as regression references for future layout work.
 

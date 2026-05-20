@@ -425,7 +425,7 @@ These are concrete drift patterns this repository should avoid:
 - silent fallback: one template implementation quietly substitutes another to pass PowerPoint export;
 - first-anchor-only QA: multi-anchor pages validate only the first manifest entry;
 - unbounded helper exposure: low-level drawing helper becomes a schema-level escape hatch;
-- runtime doc carries development principles while `AGENTS.md` and `doc/` stay silent.
+- runtime docs carry development principles while `AGENTS.md` and `docs/` stay silent.
 
 ## Known Enhancement
 

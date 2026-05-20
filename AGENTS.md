@@ -2,7 +2,7 @@
 
 This repository contains the development-time source for the Huawei PPT generation skill.
 
-Before changing code, read [doc/architecture_design.md](doc/architecture_design.md). It is the architecture contract for maintainers and coding agents.
+Before changing code, read [docs/architecture_design.md](docs/architecture_design.md). It is the architecture contract for maintainers and coding agents.
 
 `SKILL.md` is runtime guidance for deck-generation agents. Do not use it as the primary place for development-time architecture notes. When architecture changes affect runtime behavior, update the implementation, QA/smoke tests, references, and then the runtime skill instructions together.
 

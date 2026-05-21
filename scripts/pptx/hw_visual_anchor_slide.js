@@ -455,6 +455,10 @@ function adjustedBlockSize(block, area, horizontal, options = {}) {
     const compactHeight = cards.length >= 3 ? 0.95 : 0.82;
     return Math.min(explicitSize > 0 ? explicitSize : compactHeight, compactHeight);
   }
+  if (!horizontal && isTableAnchor(visualAnchor)) {
+    const estimated = estimateTableBlockHeight(visualAnchor, area);
+    return explicitSize > 0 ? Math.max(explicitSize, estimated) : estimated;
+  }
   if (!horizontal && isTextBlock(block)) {
     return estimateTextBlockSize(block, area);
   }
@@ -505,7 +509,36 @@ function estimateTextBlockSize(block, area) {
 function normalizeEmphasisTerms(module = {}) {
   const terms = module.emphasis || module.emphasisTerms || module.emphasis_terms || module.redTerms || module.red_terms || [];
   const list = Array.isArray(terms) ? terms : [terms];
-  return list.map((term) => safeText(term)).filter(Boolean).sort((a, b) => b.length - a.length);
+  return list
+    .flatMap((term) => {
+      const value = safeText(term);
+      if (!/\s/.test(value)) return [value];
+      return value.split(/\s+/).filter((part) => part.length >= 2);
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+}
+
+function isTableAnchor(visualAnchor) {
+  return visualAnchor?.kind === "Matrix" && visualAnchor?.template === "table";
+}
+
+function estimateTableBlockHeight(visualAnchor, area = {}) {
+  const rows = visualAnchor?.visual_spec?.rows || [];
+  if (!Array.isArray(rows) || !rows.length) return 0.85;
+  const columnCount = Math.max(1, ...rows.map((row) => Array.isArray(row) ? row.length : 1));
+  const colWidth = Math.max(0.45, Number(area.w || 3) / columnCount);
+  const charsPerLine = Math.max(5, Math.floor(colWidth * 10));
+  const rowHeights = rows.map((row, rowIdx) => {
+    const cells = Array.isArray(row) ? row : [row];
+    const maxLines = cells.reduce((max, cell) => {
+      const text = safeText(typeof cell === "object" && cell !== null ? cell.text : cell);
+      return Math.max(max, Math.ceil(text.length / charsPerLine));
+    }, 1);
+    const minRow = rowIdx === 0 ? 0.34 : 0.38;
+    return Math.max(minRow, maxLines * 0.24 + 0.1);
+  });
+  return Math.ceil(rowHeights.reduce((sum, height) => sum + height, 0) * 20) / 20;
 }
 
 function buildEmphasisRuns(text, emphasisTerms, fontSize) {
@@ -651,6 +684,9 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
       descriptor.source_height = dimensions.height;
       descriptor.natural_height = Math.min(blockArea.h, blockArea.w / (dimensions.width / dimensions.height));
     }
+  } else if (isTableAnchor(visualAnchor)) {
+    descriptor.table_estimated_height = estimateTableBlockHeight(visualAnchor, blockArea || { w: 1, h: 1 });
+    descriptor.table_rows = Array.isArray(visualAnchor.visual_spec?.rows) ? visualAnchor.visual_spec.rows.length : 0;
   }
   if (options.suppressVisualAnchorCaptions) descriptor.caption_suppressed = true;
   return descriptor;

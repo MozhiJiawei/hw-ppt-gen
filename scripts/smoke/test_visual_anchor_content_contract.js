@@ -64,11 +64,12 @@ const expectedVisualAnchorQaRules = [
   "content_layout_module_alignment",
   "content_layout_module_inner_alignment",
   "content_layout_block_gap",
-    "content_layout_text_too_long",
-    "content_layout_module_text_wall",
-    "content_layout_text_missing_emphasis",
+  "content_layout_text_too_long",
+  "content_layout_module_text_wall",
+  "content_layout_text_missing_emphasis",
   "content_layout_text_frame_mismatch",
   "content_layout_visual_frame_gap",
+  "content_layout_table_frame_too_short",
 ];
 
 const imageVisualSpec = {

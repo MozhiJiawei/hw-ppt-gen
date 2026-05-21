@@ -1952,12 +1952,15 @@ function nativeSketchArrow(slide, x1, y1, x2, y2, options = {}) {
 function drawNativeTable(slide, visual, area) {
   const rows = visual.rows || [];
   if (!rows.length) throw new Error("Matrix/table native render requires visual_spec.rows.");
+  const rowHeight = Math.max(0.18, area.h / rows.length);
   addMatrixTable(slide, rows, {
     x: area.x,
     y: area.y,
     w: area.w,
     h: area.h,
+    rowH: rows.map(() => rowHeight),
     fontSize: 10,
+    margin: rowHeight < 0.3 ? 0.03 : 0.06,
     boldFirstColumn: true,
   });
 }

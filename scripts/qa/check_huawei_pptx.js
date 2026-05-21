@@ -1117,6 +1117,22 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
           }));
         }
       }
+      if (Number.isFinite(Number(block.table_estimated_height))) {
+        const estimated = Number(block.table_estimated_height);
+        const shortage = estimated - Number(area.h);
+        if (shortage > 0.65 || (Number(block.table_rows || 0) > 0 && Number(area.h) / Number(block.table_rows || 1) < 0.24)) {
+          issues.push(issue(slide, "content_layout_table_frame_too_short", "error", "Matrix/table block frame is too short for its rows; enlarge the table block, reduce rows/cell text, or move detail to another structured block.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            frame_height: Math.round(Number(area.h) * 1000) / 1000,
+            estimated_height: Math.round(estimated * 1000) / 1000,
+            shortage: Math.round(shortage * 1000) / 1000,
+            table_rows: Number(block.table_rows || 0),
+          }));
+        }
+      }
     }
   }
   return issues;

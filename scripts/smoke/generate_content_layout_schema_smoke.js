@@ -398,7 +398,7 @@ async function main() {
               { type: "visual_anchor", height: 0.95, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
               {
                 type: "visual_anchor",
-                height: 1.08,
+                height: 1.5,
                 visual_anchor: tableAnchor("layout_three_result_table", "三分栏结论表", [
                   ["环节", "判断"],
                   ["输入", "先收敛来源"],

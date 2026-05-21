@@ -393,7 +393,7 @@ async function main() {
                 weight: 1,
                 fontSize: 12,
                 emphasis: ["流程锚点", "结论清单"],
-                body: ["右列放流程锚点。", "处理环节收敛差异。", "输出结果进入质量检查。"],
+                body: ["右列放流程锚点。", "处理后进入质量检查。"],
               },
               { type: "visual_anchor", height: 0.95, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
               {
@@ -410,7 +410,7 @@ async function main() {
                 type: "text",
                 fontSize: 10,
                 emphasis: ["不是拉伸", "结构补足"],
-                body: ["结论：不是拉伸单个图形填满。", "做法：用结构补足底部密度。"],
+                body: ["结论：不是拉伸单图，而是结构补足。"],
               },
             ],
           },

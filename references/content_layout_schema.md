@@ -85,7 +85,7 @@ Text block rules:
 
 - Use 2-5 short lines by default.
 - Avoid more than 6 visible lines in one text block.
-- Avoid more than 6 total visible text lines inside one column module. If the module needs more, move the extra material into `Matrix/table`, KPI cards, or a conclusion note.
+- Avoid more than 4 total visible text lines inside a three-column module; other column modules should stay under 6. If the module needs more, move the extra material into `Matrix/table`, KPI cards, or a conclusion note.
 - Keep each line as `标签：判断` when possible.
 - Use `emphasis` for 1-3 decisive words, numbers, or labels. The renderer marks those terms Huawei red and bold.
 - Do not use `emphasis` to color a whole sentence.
@@ -95,6 +95,8 @@ For longer material, use another visual anchor instead of prose:
 - `Quantity/data_cards` for KPI readouts.
 - `Matrix/table` for dimensions, comparisons, TTFT/TBT splits, risks, boundaries, or decision paths.
 - A separate short `text` block for final conclusion or boundary.
+
+On three-column summary pages, keep the primary source figure readable before adding interpretation. Do not shrink a non-wide evidence figure below roughly one quarter of the module height just to add more text.
 
 ## Dense Caption Suppression
 

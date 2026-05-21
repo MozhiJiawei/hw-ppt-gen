@@ -1044,16 +1044,18 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     const textBlocks = blocks.filter((block) => block.type === "text");
     const totalTextLines = textBlocks.reduce((sum, block) => sum + Number(block.line_count || 0), 0);
     const totalTextLength = textBlocks.reduce((sum, block) => sum + Number(block.text_length || 0), 0);
-    if (totalTextLines > 6 || totalTextLength > 210) {
+    const maxModuleTextLines = schema.type === "three_column" ? 4 : 6;
+    const maxModuleTextLength = schema.type === "three_column" ? 150 : 210;
+    if (totalTextLines > maxModuleTextLines || totalTextLength > maxModuleTextLength) {
       issues.push(issue(slide, "content_layout_module_text_wall", "error", "Column module accumulates too much visible prose; replace excess lines with a source-grounded Matrix/table, KPI/readout cards, or a compact conclusion note.", {
         layout_type: schema.type,
         module_index: idx + 1,
         module_title: title,
         text_blocks: textBlocks.length,
         total_text_lines: totalTextLines,
-        max_total_text_lines: 6,
+        max_total_text_lines: maxModuleTextLines,
         total_text_length: totalTextLength,
-        max_total_text_length: 210,
+        max_total_text_length: maxModuleTextLength,
       }));
     }
     for (const [blockIdx, block] of blocks.entries()) {
@@ -1105,6 +1107,20 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       }
       if (isRectLike(block.visible_area) && block.type !== "text") {
         const verticalSlack = Number(area.h) - Number(block.visible_area.h);
+        const sourceWidth = Number(block.source_width || 0);
+        const sourceHeight = Number(block.source_height || 0);
+        const sourceRatio = sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 0;
+        if (schema.type === "three_column" && sourceRatio > 0 && sourceRatio < 3 && Number(block.visible_area.h) < 1.1) {
+          issues.push(issue(slide, "content_layout_evidence_too_small", "error", "Evidence figure is too small for a three-column Huawei summary; enlarge the source figure or move supporting text into a table/readout.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            visible_height: Math.round(Number(block.visible_area.h) * 1000) / 1000,
+            min_visible_height: 1.1,
+            source_ratio: Math.round(sourceRatio * 1000) / 1000,
+          }));
+        }
         if (verticalSlack > 0.32 && Number(area.h) / Math.max(Number(block.visible_area.h), 0.1) > 1.18) {
           issues.push(issue(slide, "content_layout_visual_frame_gap", "error", "Visual block frame is much taller than the visible rendered visual; size the visual block from source aspect ratio instead of hiding empty space inside the frame.", {
             layout_type: schema.type,

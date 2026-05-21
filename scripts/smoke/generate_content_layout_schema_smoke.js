@@ -192,6 +192,7 @@ async function main() {
                 type: "text",
                 height: 0.7,
                 fontSize: 10,
+                emphasis: ["上方白色内容框", "下方小框阵列"],
                 body: [
                   "第一段解释文字放在上方白色内容框，形成参考图 05 的段落密度。",
                   "第二段补充判断依据，并引导读者进入下方小框阵列。",
@@ -234,6 +235,7 @@ async function main() {
                 type: "text",
                 height: 0.62,
                 fontSize: 10,
+                emphasis: ["KPI", "红灰视觉层次"],
                 body: ["右侧先呈现 KPI 数据卡，再接结构图和下方判断文字。", "原生图形分支保留红灰视觉层次。"],
               },
             ],
@@ -264,17 +266,32 @@ async function main() {
           {
             role: "text",
             title: "主线承接",
-            body: "资料片承接上一阶段后续，左侧主视觉承担关键证据，右侧文字只解释它如何进入当前判断：先明确关系，再说明影响对象，最后给出可以复述的结论。",
+            emphasis: ["关键证据", "当前判断"],
+            body: [
+              "证据：左侧宽栏承担关键证据。",
+              "判断：右栏只解释它如何进入当前判断。",
+              "读法：先关系，再对象，最后给结论。",
+            ],
           },
           {
             role: "text",
             title: "传播抓手",
-            body: "第二张卡片承接用户最容易复述的结论，形成清晰的回归理由和下一步行动入口；文字密度贴近参考页右栏，而不挤占左侧大图空间。",
+            emphasis: ["复述结论", "行动入口"],
+            body: [
+              "抓手：保留最容易复述结论。",
+              "入口：给出下一步行动入口。",
+              "边界：不挤占左侧大图空间。",
+            ],
           },
           {
             role: "text",
             title: "风险边界",
-            body: "第三张卡片补充边界条件，避免把左侧图形误读为孤立故事，而是作为后续判断的证据；读者可以直接看到主视觉和解释卡之间的因果关系。",
+            emphasis: ["边界条件", "因果关系"],
+            body: [
+              "边界：补充边界条件。",
+              "避免：把图形误读为孤立故事。",
+              "关系：主视觉与解释卡形成因果关系。",
+            ],
           },
         ],
       },
@@ -297,7 +314,13 @@ async function main() {
             role: "content_panel",
             title: "这里是标题区域 样式",
             blocks: [
-              { type: "text", height: 0.7, fontSize: 10, body: ["左列以短说明开场，密度贴近参考图 07。", "下方三列小框承接细节。"] },
+              {
+                type: "text",
+                height: 0.7,
+                fontSize: 10,
+                emphasis: ["短说明", "三列小框"],
+                body: ["左列以短说明开场，密度贴近参考图 07。", "下方三列小框承接细节。"],
+              },
               {
                 type: "visual_anchor",
                 visual_anchor: matrixAnchor(
@@ -323,7 +346,7 @@ async function main() {
               {
                 type: "visual_anchor",
                 height: 0.78,
-                visual_anchor: matrixAnchor("layout_three_mid_top", "三分栏中列上矩阵", ["一", "二"], ["A", "B"], [["这里为内容区域", "内容区域"], ["这里为内容区", ""]]),
+                visual_anchor: matrixAnchor("layout_three_mid_top", "三分栏中列上矩阵", ["一", "二"], ["A", "B"], [["输入", "过滤"], ["聚合", ""]]),
               },
               {
                 type: "text",
@@ -339,7 +362,7 @@ async function main() {
                   "三分栏中列矩阵",
                   ["一", "二", "三"],
                   ["A", "B", "C"],
-                  [["内容区域", "内容区域", "内容区域"], ["内容区域", "内容区域", "内容区域"], ["内容区域", "内容区域", "内容区域"]],
+                  [["来源", "判断", "动作"], ["证据", "压缩", "复核"], ["指标", "结论", "沉淀"]],
                 ),
               },
               {
@@ -350,12 +373,13 @@ async function main() {
               },
               {
                 type: "visual_anchor",
+                height: 0.96,
                 visual_anchor: matrixAnchor(
                   "layout_three_mid_bottom",
                   "三分栏中列下矩阵",
                   ["一", "二"],
                   ["A", "B", "C"],
-                  [["内容区域", "内容区域", "内容区域"], ["这里为内容区", "内容区域", ""]],
+                  [["短句", "红字", "图表"], ["表格", "结论", ""]],
                 ),
               },
             ],
@@ -368,9 +392,26 @@ async function main() {
                 type: "text",
                 weight: 1,
                 fontSize: 12,
-                body: ["右列放流程锚点并给出结论清单。", "处理环节负责收敛差异。", "输出结果进入质量检查。"],
+                emphasis: ["流程锚点", "结论清单"],
+                body: ["右列放流程锚点。", "处理环节收敛差异。", "输出结果进入质量检查。"],
               },
-              { type: "visual_anchor", height: 2.8, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
+              { type: "visual_anchor", height: 0.95, visual_anchor: processAnchor("layout_three_process", "三分栏流程") },
+              {
+                type: "visual_anchor",
+                height: 1.08,
+                visual_anchor: tableAnchor("layout_three_result_table", "三分栏结论表", [
+                  ["环节", "判断"],
+                  ["输入", "先收敛来源"],
+                  ["处理", "再压缩差异"],
+                  ["输出", "最后检查质量"],
+                ]),
+              },
+              {
+                type: "text",
+                fontSize: 10,
+                emphasis: ["不是拉伸", "结构补足"],
+                body: ["结论：不是拉伸单个图形填满。", "做法：用结构补足底部密度。"],
+              },
             ],
           },
         ],

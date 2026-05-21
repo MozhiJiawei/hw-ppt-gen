@@ -42,6 +42,36 @@ Visible body text should become:
 
 Do not paste long paragraphs from the source or brief into large cards.
 
+## Layout Aesthetic
+
+Huawei density is made from layers, not paragraphs. A strong page can be scanned through:
+
+- title and title note;
+- `分析总结`;
+- red module headers;
+- source evidence;
+- KPI/readout cards;
+- compact tables;
+- short conclusion boxes;
+- red-bold keywords inside short lines.
+
+Use short claim lines. A normal text block should be 2-5 lines. Each line should usually be one label plus one judgment, for example:
+
+- `长尾错配：低频请求少，却长期占用固定 GPU 预算。`
+- `突发冗余：热门模型 burst 会超过 reserved capacity。`
+
+For dense text blocks, mark 1-3 decisive terms in red bold through `emphasis` in the text block. Emphasize nouns, numbers, and decisions: `长尾错配`, `17.7% GPU`, `82% 节省`, `未观察到 SLO violation`.
+
+A column module should not accumulate more than 6 visible prose lines across multiple text blocks. When a column needs more detail, split the information into a compact table, KPI row, or conclusion box instead of stacking another text block.
+
+Prefer structural compression over prose compression:
+
+- turn a list of facts into KPI cards;
+- turn dimensions into `Matrix/table`;
+- turn mechanism pairs into a 2x2 comparison table;
+- turn a final decision into a bordered conclusion note;
+- use arrows between columns when the page tells a scenario -> mechanism -> result story.
+
 ## Huawei Visual Language
 
 - White background.

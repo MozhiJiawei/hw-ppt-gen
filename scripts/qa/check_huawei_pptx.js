@@ -1041,6 +1041,21 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     }
 
     const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+    const textBlocks = blocks.filter((block) => block.type === "text");
+    const totalTextLines = textBlocks.reduce((sum, block) => sum + Number(block.line_count || 0), 0);
+    const totalTextLength = textBlocks.reduce((sum, block) => sum + Number(block.text_length || 0), 0);
+    if (totalTextLines > 6 || totalTextLength > 210) {
+      issues.push(issue(slide, "content_layout_module_text_wall", "error", "Column module accumulates too much visible prose; replace excess lines with a source-grounded Matrix/table, KPI/readout cards, or a compact conclusion note.", {
+        layout_type: schema.type,
+        module_index: idx + 1,
+        module_title: title,
+        text_blocks: textBlocks.length,
+        total_text_lines: totalTextLines,
+        max_total_text_lines: 6,
+        total_text_length: totalTextLength,
+        max_total_text_length: 210,
+      }));
+    }
     for (const [blockIdx, block] of blocks.entries()) {
       const area = block.area;
       if (!isRectLike(area)) continue;
@@ -1048,6 +1063,33 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
         const estimated = Number(block.estimated_height);
         const excess = Number(area.h) - estimated;
         const shortage = estimated - Number(area.h);
+        const textLength = Number(block.text_length || 0);
+        const lineCount = Number(block.line_count || 0);
+        const maxLineLength = Number(block.max_line_length || 0);
+        if (textLength > 170 || maxLineLength > 56 || lineCount > 6) {
+          issues.push(issue(slide, "content_layout_text_too_long", "error", "Text block is too prose-heavy for Huawei dense layout; compress into short claim lines, red-highlighted keywords, KPI/readout cards, or Matrix/table fragments.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            text_length: textLength,
+            max_text_length: 170,
+            line_count: lineCount,
+            max_line_count: 6,
+            max_line_length: maxLineLength,
+            max_allowed_line_length: 56,
+          }));
+        }
+        if (textLength >= 80 && Number(block.emphasis_count || 0) < 1) {
+          issues.push(issue(slide, "content_layout_text_missing_emphasis", "warning", "Dense text blocks should mark 1-3 decisive terms with red bold emphasis so the reader can scan the claim.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            text_length: textLength,
+            emphasis_count: Number(block.emphasis_count || 0),
+          }));
+        }
         if ((excess > 0.26 && excess / Math.max(estimated, 0.1) > 0.22) || shortage > 0.12) {
           issues.push(issue(slide, "content_layout_text_frame_mismatch", "error", "Text block frame height does not match the renderer's text-height estimate; fix the sizing rule or adjust content before relying on visual QA.", {
             layout_type: schema.type,

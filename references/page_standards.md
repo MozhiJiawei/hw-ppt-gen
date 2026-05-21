@@ -36,7 +36,8 @@ For a three-viewpoint summary, each column should normally contain:
 
 - one primary source evidence object or traceable crop;
 - a short module title;
-- optional compact KPI/readout text only when it does not shrink the evidence below readability.
+- optional compact KPI/readout text only when it does not shrink the evidence below readability;
+- 2-4 short claim lines with red-bold emphasis terms, not a paragraph.
 
 ## Content Page
 
@@ -47,6 +48,14 @@ Each content page has:
 - one primary evidence object;
 - compact explanation, caveat, KPI, or table content near the evidence;
 - footer source note.
+
+Prefer this visible structure:
+
+- evidence first;
+- then 2-5 short interpretation lines;
+- then a compact readout, table, or conclusion box if more density is needed.
+
+Avoid text blocks that read like paragraph notes. If a module needs more than 5 lines, convert part of it to KPI cards, `Matrix/table`, or a conclusion note.
 
 When a page cites several figures, choose the one that carries the page claim as the primary evidence. Secondary figures become short text, KPI/table readouts, speaker-note caveats, or another slide. Do not hide them inside a collage.
 

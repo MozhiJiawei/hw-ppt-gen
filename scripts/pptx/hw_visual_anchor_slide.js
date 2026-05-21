@@ -329,13 +329,26 @@ function normalizeModuleBody(module) {
 
 function addModuleBodyText(slide, text, area, module) {
   if (!safeText(text)) return;
-  textBox(slide, text, {
+  const options = {
     x: area.x,
     y: area.y,
     w: area.w,
     h: area.h,
     fontSize: module.fontSize || 12,
     color: HW_STYLE.color.text,
+  };
+  const emphasis = normalizeEmphasisTerms(module);
+  if (!emphasis.length) {
+    textBox(slide, text, options);
+    return;
+  }
+  slide.addText(buildEmphasisRuns(text, emphasis, options.fontSize), {
+    ...options,
+    fontFace: HW_STYLE.font.cn,
+    margin: 0.05,
+    valign: "top",
+    breakLine: false,
+    lineSpacingMultiple: 1.5,
   });
 }
 
@@ -435,12 +448,17 @@ function fitVerticalBlockSizes(sized, visibleBlocks, availableHeight, overflowed
 }
 
 function adjustedBlockSize(block, area, horizontal, options = {}) {
+  const visualAnchor = block.visual_anchor || block.visualAnchor;
   const explicitSize = Number(horizontal ? (block.width || block.w) : (block.height || block.h));
+  if (!horizontal && visualAnchor?.kind === "Quantity" && visualAnchor?.template === "data_cards") {
+    const cards = visualAnchor.visual_spec?.cards || [];
+    const compactHeight = cards.length >= 3 ? 0.95 : 0.82;
+    return Math.min(explicitSize > 0 ? explicitSize : compactHeight, compactHeight);
+  }
   if (!horizontal && isTextBlock(block)) {
     return estimateTextBlockSize(block, area);
   }
   if (explicitSize > 0) return explicitSize;
-  const visualAnchor = block.visual_anchor || block.visualAnchor;
   if (horizontal && isEvidenceAnchor(visualAnchor)) {
     const dimensions = readEvidenceSourceDimensions(visualAnchor);
     if (!dimensions) return Math.max(area.w * 0.36, 0.8);
@@ -482,6 +500,43 @@ function estimateTextBlockSize(block, area) {
   });
   const rounded = Math.ceil((estimated + 0.03) * 20) / 20;
   return Math.max(0.26, rounded);
+}
+
+function normalizeEmphasisTerms(module = {}) {
+  const terms = module.emphasis || module.emphasisTerms || module.emphasis_terms || module.redTerms || module.red_terms || [];
+  const list = Array.isArray(terms) ? terms : [terms];
+  return list.map((term) => safeText(term)).filter(Boolean).sort((a, b) => b.length - a.length);
+}
+
+function buildEmphasisRuns(text, emphasisTerms, fontSize) {
+  const value = safeText(text);
+  const runs = [];
+  let cursor = 0;
+  while (cursor < value.length) {
+    const match = findNextEmphasis(value, cursor, emphasisTerms);
+    if (!match) {
+      runs.push({ text: value.slice(cursor), options: { fontSize, color: HW_STYLE.color.text } });
+      break;
+    }
+    if (match.index > cursor) {
+      runs.push({ text: value.slice(cursor, match.index), options: { fontSize, color: HW_STYLE.color.text } });
+    }
+    runs.push({ text: match.term, options: { fontSize, color: HW_STYLE.color.red, bold: true } });
+    cursor = match.index + match.term.length;
+  }
+  return runs.length ? runs : [{ text: value, options: { fontSize, color: HW_STYLE.color.text } }];
+}
+
+function findNextEmphasis(text, cursor, emphasisTerms) {
+  let best = null;
+  for (const term of emphasisTerms) {
+    const index = text.indexOf(term, cursor);
+    if (index < 0) continue;
+    if (!best || index < best.index || (index === best.index && term.length > best.term.length)) {
+      best = { index, term };
+    }
+  }
+  return best;
 }
 
 function isEvidenceAnchor(visualAnchor) {
@@ -536,7 +591,7 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
   if (type === "table") {
     throw new Error("contentLayout table blocks were removed; use visual_anchor kind=Matrix/template=table with text annotations.");
   }
-  addModuleBodyText(slide, normalizeModuleBody(block), area, { ...module, fontSize: block.fontSize || module.fontSize });
+  addModuleBodyText(slide, normalizeModuleBody(block), area, { ...module, ...block, fontSize: block.fontSize || module.fontSize });
   return null;
 }
 
@@ -582,8 +637,13 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
     visible_area: visibleArea,
   };
   if (isTextBlock(block)) {
+    const body = normalizeModuleBody(block);
+    const lines = body.split(/\r?\n/).map((line) => safeText(line)).filter(Boolean);
     descriptor.estimated_height = estimateTextBlockSize(block, blockArea || { w: 1, h: 1 });
-    descriptor.text_length = safeText(normalizeModuleBody(block)).length;
+    descriptor.text_length = safeText(body).length;
+    descriptor.line_count = lines.length;
+    descriptor.max_line_length = lines.reduce((max, line) => Math.max(max, line.replace(/^-\s*/, "").length), 0);
+    descriptor.emphasis_count = normalizeEmphasisTerms(block).length;
   } else if (isEvidenceAnchor(visualAnchor)) {
     const dimensions = readEvidenceSourceDimensions(visualAnchor);
     if (dimensions && blockArea) {

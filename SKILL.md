@@ -29,6 +29,7 @@ Then load only what the task needs:
 3. Generated visuals are secondary. Use them only when evidence images are missing or when they replace long prose with a clearer visual explanation.
 4. Brief-backed hard fields are immutable: page count, page order, titles, title notes, analysis summary, TOC, content-slide sections, and parser-derived `contentLayout.type`.
 5. Huawei density means readable evidence plus compact interpretation, not pasted paragraphs or empty cards.
+6. Visible text must become short claim lines, red-bold emphasis terms, KPI/readout cards, compact tables, and conclusion boxes. Do not use long bullet stacks to fill space.
 
 ## Runtime Workflow
 
@@ -54,6 +55,7 @@ Then load only what the task needs:
    - Do not add standalone chapter divider pages.
    - Every content and summary page rendered through `addVisualAnchorContentSlide` must have `分析总结`, a page title, Huawei content framing, footer, and at least one visual anchor.
    - For each content/summary page, identify the primary evidence object first. Then choose a fixed layout and supporting text.
+   - Compress visible prose into short claim lines. Use `emphasis` in text blocks for 1-3 decisive terms, and move longer material into KPI cards, `Matrix/table`, or conclusion notes.
    - Use `contentLayout.type` from the brief parser when present. Otherwise choose a fixed Huawei layout from `references/layout_standards.md`.
 5. Generate with `pptxgenjs`:
    - Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, and footer primitives.

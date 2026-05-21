@@ -84,3 +84,16 @@ Rules:
 ## Density Standard
 
 Fill space with readable evidence, concise tables, KPI readouts, and short interpretation. Do not fill space with paragraphs. Do not leave large cards half-empty unless the card is dominated by readable evidence.
+
+## Text Rhythm
+
+Dense Huawei pages should alternate visual weights:
+
+- source figure;
+- short emphasized interpretation;
+- KPI/readout cards;
+- compact table or conclusion note.
+
+Do not fill a column by stretching a KPI card or writing a long bullet stack. If a column has empty bottom space, add a meaningful structure: 2x2 mechanism table, small KPI row, source-grounded conclusion note, or red arrow relationship.
+
+Use red-bold emphasis sparingly inside text blocks. Emphasize the claim handle, number, or decision term, not whole sentences.

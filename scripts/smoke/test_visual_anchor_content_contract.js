@@ -64,6 +64,9 @@ const expectedVisualAnchorQaRules = [
   "content_layout_module_alignment",
   "content_layout_module_inner_alignment",
   "content_layout_block_gap",
+    "content_layout_text_too_long",
+    "content_layout_module_text_wall",
+    "content_layout_text_missing_emphasis",
   "content_layout_text_frame_mismatch",
   "content_layout_visual_frame_gap",
 ];
@@ -399,6 +402,7 @@ function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
   assert(schema.includes("three_column"), "content layout reference should document three_column");
   assert(schema.includes("renderer suppresses module visual captions"), "content layout reference should document dense-column caption suppression");
   assert(schema.includes("Do not provide a `flow` field"), "content layout reference should make module flow renderer-owned");
+  assert(schema.includes("emphasis"), "content layout reference should document red/bold emphasis terms");
 }
 
 function assertContentLayoutDoesNotExposePageRegionOverride() {

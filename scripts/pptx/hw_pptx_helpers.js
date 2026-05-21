@@ -298,22 +298,25 @@ function addPageTitle(slide, title, options = {}) {
     });
   }
   const subtitleText = safeText(subtitle);
+  const titleText = safeText(title);
   if (subtitleText) {
+    const titlePair = chooseInlineTitlePair(titleText, subtitleText, titleW);
     slide.addText([
-      { text: safeText(title), options: { fontSize: HW_STYLE.size.pageTitle, bold: true } },
-      { text: ` - ${subtitleText}`, options: { fontSize: HW_STYLE.size.data, bold: true } },
+      { text: titleText, options: { fontSize: titlePair.titleFontSize, bold: true } },
+      { text: ` - ${subtitleText}`, options: { fontSize: titlePair.subtitleFontSize, bold: true } },
     ], cloneOptions({
       x: HW_STYLE.slide.marginX,
       y: titleY,
       w: titleW,
       h: 0.5,
       fontFace: HW_STYLE.font.cn,
-      fontSize: HW_STYLE.size.pageTitle,
+      fontSize: titlePair.titleFontSize,
       color: HW_STYLE.color.red,
       margin: 0.05,
       breakLine: false,
       lineSpacingMultiple: 1,
       valign: "top",
+      fit: "shrink",
     }));
   } else {
     textBox(slide, title, {
@@ -332,6 +335,21 @@ function addPageTitle(slide, title, options = {}) {
   addLine(slide, HW_STYLE.slide.marginX, titleRuleY, 12.78, titleRuleY, {
     line: { color: HW_STYLE.color.red, width: 0.5 },
   });
+}
+
+function chooseInlineTitlePair(title, subtitle, widthInches) {
+  const candidates = [
+    { titleFontSize: 24, subtitleFontSize: 18 },
+    { titleFontSize: 24, subtitleFontSize: 14 },
+    { titleFontSize: 18, subtitleFontSize: 14 },
+    { titleFontSize: 18, subtitleFontSize: 12 },
+    { titleFontSize: 14, subtitleFontSize: 12 },
+  ];
+  return candidates.find((candidate) => {
+    const width = estimateTextWidth(title, candidate.titleFontSize)
+      + estimateTextWidth(` - ${subtitle}`, candidate.subtitleFontSize);
+    return width <= widthInches * 1.02;
+  }) || candidates[candidates.length - 1];
 }
 
 function normalizeSectionTabs(sections, currentSection) {

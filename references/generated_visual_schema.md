@@ -71,6 +71,8 @@ Do not output implementation-control fields such as `visual_strategy` or `intent
 
 ### `Quantity/data_cards`
 
+Use data cards as compact KPI readouts. They should not become tall filler panels; place the explanatory density in adjacent short claim lines, a `Matrix/table`, or a conclusion note.
+
 ```json
 {
   "kind": "Quantity",

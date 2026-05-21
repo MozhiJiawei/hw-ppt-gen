@@ -74,11 +74,27 @@ Use `references/evidence_schema.md` for source evidence. Use `references/generat
     "读法：左图说明长尾模型数量占绝对多数。",
     "含义：低频调用被固定容量放大为闲置成本。"
   ],
+  "emphasis": ["读法", "长尾模型", "低频调用"],
   "fontSize": 12
 }
 ```
 
 Use text blocks for interpretation, caveats, conclusions, and compact reading guidance. Text remains editable PPT text.
+
+Text block rules:
+
+- Use 2-5 short lines by default.
+- Avoid more than 6 visible lines in one text block.
+- Avoid more than 6 total visible text lines inside one column module. If the module needs more, move the extra material into `Matrix/table`, KPI cards, or a conclusion note.
+- Keep each line as `标签：判断` when possible.
+- Use `emphasis` for 1-3 decisive words, numbers, or labels. The renderer marks those terms Huawei red and bold.
+- Do not use `emphasis` to color a whole sentence.
+
+For longer material, use another visual anchor instead of prose:
+
+- `Quantity/data_cards` for KPI readouts.
+- `Matrix/table` for dimensions, comparisons, TTFT/TBT splits, risks, boundaries, or decision paths.
+- A separate short `text` block for final conclusion or boundary.
 
 ## Dense Caption Suppression
 

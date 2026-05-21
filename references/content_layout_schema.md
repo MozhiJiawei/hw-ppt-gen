@@ -87,6 +87,7 @@ Text block rules:
 - Avoid more than 6 visible lines in one text block.
 - Avoid more than 4 total visible text lines inside a three-column module; other column modules should stay under 6. If the module needs more, move the extra material into `Matrix/table`, KPI cards, or a conclusion note.
 - Keep each line as `标签：判断` when possible.
+- Do not leave `标签：` alone as a visible line. The reader should get the judgment on the same line.
 - Use `emphasis` for 1-3 decisive words, numbers, or labels. The renderer marks those terms Huawei red and bold.
 - Do not use `emphasis` to color a whole sentence.
 

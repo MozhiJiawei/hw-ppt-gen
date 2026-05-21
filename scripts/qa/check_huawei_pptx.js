@@ -1068,6 +1068,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
         const textLength = Number(block.text_length || 0);
         const lineCount = Number(block.line_count || 0);
         const maxLineLength = Number(block.max_line_length || 0);
+        const labelOnlyLines = Number(block.label_only_lines || 0);
         if (textLength > 170 || maxLineLength > 56 || lineCount > 6) {
           issues.push(issue(slide, "content_layout_text_too_long", "error", "Text block is too prose-heavy for Huawei dense layout; compress into short claim lines, red-highlighted keywords, KPI/readout cards, or Matrix/table fragments.", {
             layout_type: schema.type,
@@ -1080,6 +1081,15 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
             max_line_count: 6,
             max_line_length: maxLineLength,
             max_allowed_line_length: 56,
+          }));
+        }
+        if (labelOnlyLines > 0) {
+          issues.push(issue(slide, "content_layout_label_without_claim", "error", "Text block contains label-only lines; keep the label and judgment on the same visible line, or convert the detail into a table/readout.", {
+            layout_type: schema.type,
+            module_index: idx + 1,
+            module_title: title,
+            block_index: blockIdx + 1,
+            label_only_lines: labelOnlyLines,
           }));
         }
         if (textLength >= 80 && Number(block.emphasis_count || 0) < 1) {

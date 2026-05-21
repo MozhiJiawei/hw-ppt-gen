@@ -676,6 +676,7 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
     descriptor.text_length = safeText(body).length;
     descriptor.line_count = lines.length;
     descriptor.max_line_length = lines.reduce((max, line) => Math.max(max, line.replace(/^-\s*/, "").length), 0);
+    descriptor.label_only_lines = lines.filter(isLabelOnlyLine).length;
     descriptor.emphasis_count = normalizeEmphasisTerms(block).length;
   } else if (isEvidenceAnchor(visualAnchor)) {
     const dimensions = readEvidenceSourceDimensions(visualAnchor);
@@ -690,6 +691,10 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
   }
   if (options.suppressVisualAnchorCaptions) descriptor.caption_suppressed = true;
   return descriptor;
+}
+
+function isLabelOnlyLine(line) {
+  return /^[\s-]*[\w\u4e00-\u9fff /-]{1,14}[：:]\s*$/.test(safeText(line));
 }
 
 function calculateBlockGaps(blockAreas = [], flow = "top_bottom") {

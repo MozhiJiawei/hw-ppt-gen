@@ -66,6 +66,7 @@ const expectedVisualAnchorQaRules = [
   "content_layout_block_gap",
   "content_layout_text_too_long",
   "content_layout_module_text_wall",
+  "content_layout_label_without_claim",
   "content_layout_text_missing_emphasis",
   "content_layout_text_frame_mismatch",
   "content_layout_visual_frame_gap",

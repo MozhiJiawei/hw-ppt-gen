@@ -329,12 +329,13 @@ function normalizeModuleBody(module) {
 
 function addModuleBodyText(slide, text, area, module) {
   if (!safeText(text)) return;
+  const fontSize = module.fontSize || 12;
   const options = {
     x: area.x,
     y: area.y,
     w: area.w,
     h: area.h,
-    fontSize: module.fontSize || 12,
+    fontSize,
     color: HW_STYLE.color.text,
   };
   const emphasis = normalizeEmphasisTerms(module);
@@ -342,14 +343,46 @@ function addModuleBodyText(slide, text, area, module) {
     textBox(slide, text, options);
     return;
   }
-  slide.addText(buildEmphasisRuns(text, emphasis, options.fontSize), {
+  addRichModuleBodyText(slide, text, area, { ...options, fontSize }, emphasis);
+}
+
+function addRichModuleBodyText(slide, text, area, options, emphasis) {
+  const lines = safeText(text).split(/\r?\n/);
+  if (lines.length <= 1) {
+    slide.addText(buildEmphasisRuns(text, emphasis, options.fontSize), richTextBoxOptions(options));
+    return;
+  }
+
+  const lineGap = Math.max(0.01, (options.fontSize / 72) * 0.14);
+  let cursorY = area.y;
+  for (const line of lines) {
+    const estimatedLineH = estimateTextBoxHeight(line || " ", {
+      ...options,
+      h: area.h,
+      margin: 0.05,
+      lineSpacingMultiple: 1.5,
+    });
+    const remainingH = Math.max(0.05, area.y + area.h - cursorY);
+    const lineH = Math.min(remainingH, Math.max(0.18, estimatedLineH));
+    slide.addText(buildEmphasisRuns(line, emphasis, options.fontSize), richTextBoxOptions({
+      ...options,
+      y: cursorY,
+      h: lineH,
+    }));
+    cursorY += lineH + lineGap;
+    if (cursorY >= area.y + area.h) break;
+  }
+}
+
+function richTextBoxOptions(options) {
+  return {
     ...options,
     fontFace: HW_STYLE.font.cn,
     margin: 0.05,
     valign: "top",
     breakLine: false,
     lineSpacingMultiple: 1.5,
-  });
+  };
 }
 
 function addTextModule(slide, module, area) {
@@ -676,7 +709,6 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
     descriptor.text_length = safeText(body).length;
     descriptor.line_count = lines.length;
     descriptor.max_line_length = lines.reduce((max, line) => Math.max(max, line.replace(/^-\s*/, "").length), 0);
-    descriptor.label_only_lines = lines.filter(isLabelOnlyLine).length;
     descriptor.emphasis_count = normalizeEmphasisTerms(block).length;
   } else if (isEvidenceAnchor(visualAnchor)) {
     const dimensions = readEvidenceSourceDimensions(visualAnchor);
@@ -691,10 +723,6 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
   }
   if (options.suppressVisualAnchorCaptions) descriptor.caption_suppressed = true;
   return descriptor;
-}
-
-function isLabelOnlyLine(line) {
-  return /^[\s-]*[\w\u4e00-\u9fff /-]{1,14}[：:]\s*$/.test(safeText(line));
 }
 
 function calculateBlockGaps(blockAreas = [], flow = "top_bottom") {

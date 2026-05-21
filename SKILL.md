@@ -56,6 +56,7 @@ Then load only what the task needs:
    - Use cover and contents pages for decks over four slides.
    - Do not add standalone chapter divider pages.
    - Every content and summary page rendered through `addVisualAnchorContentSlide` must have `分析总结`, a page title, Huawei content framing, footer, and at least one visual anchor.
+   - In `two_column`, `three_column`, and `four_column` content layouts, every module must include at least one `visual_anchor` block. Use text only as nearby interpretation for that module's anchor, not as a standalone column.
    - For each content/summary page, identify the primary evidence object first. Then choose a fixed layout and supporting text.
    - Compress visible prose into short conclusion lines. Each line should state the judgment the evidence supports, not explain how to read the slide.
    - Use `emphasis` in text blocks for 1-3 decisive terms, and move longer material into KPI cards or conclusion notes first. Use a table only when a real two-axis relationship would be lost as prose.

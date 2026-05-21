@@ -62,6 +62,7 @@ const expectedVisualAnchorQaRules = [
   "content_layout_schema_invalid",
   "content_layout_schema_anchor_missing",
   "content_layout_module_alignment",
+  "content_layout_module_anchor_missing",
   "content_layout_module_inner_alignment",
   "content_layout_block_gap",
   "content_layout_text_too_long",

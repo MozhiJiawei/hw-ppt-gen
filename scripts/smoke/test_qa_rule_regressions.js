@@ -399,6 +399,7 @@ async function main() {
   assert(issuesOf(result, "content_visual_anchor_image_too_small", 6).length >= 1, "#11: evidence images that occupy too little visual area should be blocking QA issues");
   assert(issuesOf(result, "sparse_large_card").some((item) => item.severity === "error"), "#12: very sparse large cards should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_alignment", 8).length >= 1, "#13: misaligned column module content should be blocking QA issues");
+  assert(issuesOf(result, "content_layout_module_anchor_missing", 7).length >= 1, "#19: text-only two/three/four-column modules should be blocking QA issues");
 
   const briefQa = runBriefContractQaFixture(result.pptxPath);
   assert(briefQa.issues.some((item) => item.type === "ppt_content_brief_title_note_mismatch"), "#18: brief-backed titleNote rewrites should fail QA");

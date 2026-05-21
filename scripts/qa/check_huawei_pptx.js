@@ -959,6 +959,11 @@ function checkContentLayoutSchema(slide, entries) {
   return issues;
 }
 
+function moduleHasVisualAnchorBlock(module = {}) {
+  const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+  return blocks.some((block) => block && block.type === "visual_anchor");
+}
+
 function estimatePageTitleLines(text, widthInches, titleFontSize = 24) {
   const value = safeText(text);
   if (!value.includes(" - ")) return estimateQaTitleWrappedLines(value, titleFontSize, widthInches);
@@ -1012,6 +1017,23 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     const title = module.title || `module_${idx + 1}`;
     const contentArea = module.content_area;
     const occupied = module.occupied_area;
+    const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+    if (!moduleHasVisualAnchorBlock(module)) {
+      issues.push(issue(slide, "content_layout_module_anchor_missing", "error", "Each two/three/four-column content module must include at least one visual-anchor block; text may explain evidence but cannot be a standalone column.", {
+        layout_type: schema.type,
+        module_index: idx + 1,
+        module_title: title,
+        block_count: blocks.length,
+      }));
+    }
+    if (!blocks.length) {
+      issues.push(issue(slide, "content_layout_module_inner_alignment", "error", "Column module records no measurable content blocks; route text through measured blocks or add a visual anchor instead of treating an empty module as filled.", {
+        layout_type: schema.type,
+        module_index: idx + 1,
+        module_title: title,
+      }));
+      continue;
+    }
     if (isRectLike(contentArea) && isRectLike(occupied)) {
       const topGap = Number(occupied.y) - Number(contentArea.y);
       const bottomGap = (Number(contentArea.y) + Number(contentArea.h)) - (Number(occupied.y) + Number(occupied.h));
@@ -1040,7 +1062,6 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       }));
     }
 
-    const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
     const textBlocks = blocks.filter((block) => block.type === "text");
     const totalTextLines = textBlocks.reduce((sum, block) => sum + Number(block.line_count || 0), 0);
     const totalTextLength = textBlocks.reduce((sum, block) => sum + Number(block.text_length || 0), 0);

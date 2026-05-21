@@ -976,31 +976,9 @@ function renderContentLayout(slide, data, layout, visualCaption) {
   };
   layout.modules.forEach((module, idx) => {
     const area = areas[idx];
-    const role = module.role || module.kind || "text";
-    if (module.blocks || module.children || role === "content_panel" || role === "visual_anchor") {
-      const result = addContentPanelModule(slide, module, data, area, visualCaption, moduleOptions);
-      anchorResults.push(...result.anchorResults);
-      moduleLayouts.push(result.moduleLayout);
-    } else {
-      addTextModule(slide, module, area);
-      moduleLayouts.push({
-        title: safeText(module.title || module.label || "模块"),
-        frame_area: area,
-        content_area: {
-          x: area.x + 0.13,
-          y: area.y + 0.48,
-          w: area.w - 0.26,
-          h: area.h - 0.62,
-        },
-        occupied_area: {
-          x: area.x + 0.13,
-          y: area.y + 0.48,
-          w: area.w - 0.26,
-          h: area.h - 0.62,
-        },
-        block_areas: [],
-      });
-    }
+    const result = addContentPanelModule(slide, module, data, area, visualCaption, moduleOptions);
+    anchorResults.push(...result.anchorResults);
+    moduleLayouts.push(result.moduleLayout);
   });
   addColumnFlowArrows(slide, areas, layout.flowArrows || layout.flow_arrows || {});
   return {

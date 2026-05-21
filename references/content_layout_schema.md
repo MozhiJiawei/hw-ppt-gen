@@ -40,6 +40,8 @@ Allowed block types:
 - `visual_anchor`
 - `text`
 
+For `two_column`, `three_column`, and `four_column`, every module must include at least one `visual_anchor` block. Text blocks are allowed only as nearby interpretation, conclusion, or caveat for that module's visual anchor; they must not become a standalone column. If a module is mainly a judgment, encode the judgment as a visual anchor such as `Quantity/data_cards` or `Matrix/table`, then add a short text block if needed.
+
 Do not provide page-region coordinates such as `contentArea`, `content_area`, `x`, `y`, `w`, or `h` at the `contentLayout` root. The renderer owns the fixed Huawei page region.
 
 Do not provide a `flow` field. The renderer owns internal visual/text flow based on module size and source image dimensions.
@@ -86,6 +88,7 @@ Use text blocks for source-grounded judgments, caveats, conclusions, and compact
 
 Text block rules:
 
+- In `two_column`, `three_column`, and `four_column`, do not use a text block as the only block in a module.
 - Use 2-5 short lines by default.
 - Avoid more than 6 visible lines in one text block.
 - Avoid more than 4 total visible text lines inside a three-column module; other column modules should stay under 6. If the module needs more, move the extra material into `Matrix/table`, KPI cards, or a conclusion note.

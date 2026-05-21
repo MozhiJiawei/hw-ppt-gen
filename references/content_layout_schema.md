@@ -44,6 +44,8 @@ Do not provide page-region coordinates such as `contentArea`, `content_area`, `x
 
 Do not provide a `flow` field. The renderer owns internal visual/text flow based on module size and source image dimensions.
 
+Do not provide manual column widths or gutter sizes. The renderer owns evidence-aware balancing inside the selected layout type: it can slightly rebalance two-column/three-column widths and biased-column visual share to keep source figures readable.
+
 ## Visual Anchor Block
 
 ```json
@@ -105,6 +107,7 @@ Weak table pairs include `口径 / 判断`, `维度 / 说明`, and `字段 / 含
 On `three_column` summary pages, use generated tables sparingly. Prefer source evidence plus conclusion lines in each column; add a table only for the one column whose claim depends on a real comparison or stage split.
 
 On three-column summary pages, keep the primary source figure readable before adding conclusion text. Do not shrink a non-wide evidence figure below roughly one quarter of the module height just to add more text.
+When evidence still feels tight, remove secondary prose or decorative structure first. The correct response is a stronger evidence-first composition, not more explanatory text.
 
 ## Dense Caption Suppression
 

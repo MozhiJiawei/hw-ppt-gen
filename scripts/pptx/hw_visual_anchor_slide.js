@@ -234,11 +234,64 @@ function countModuleVisualAnchors(module = {}) {
   }, 0);
 }
 
+function collectModuleEvidenceAnchors(module = {}) {
+  const anchors = [];
+  const directAnchor = module.visual_anchor || module.visualAnchor;
+  if (isEvidenceAnchor(directAnchor)) anchors.push(directAnchor);
+  const blocks = module.blocks || module.children || module.items || [];
+  if (Array.isArray(blocks)) {
+    blocks.forEach((block) => {
+      const anchor = block?.visual_anchor || block?.visualAnchor;
+      if (isEvidenceAnchor(anchor)) anchors.push(anchor);
+    });
+  }
+  return anchors;
+}
+
+function evidenceReadableHeightTarget(layoutType, imageRatio) {
+  if (layoutType === "two_column") return imageRatio >= 3 ? 1.45 : 1.75;
+  if (layoutType === "three_column") return imageRatio >= 3 ? 1.18 : 1.38;
+  return imageRatio >= 3 ? 1.2 : 1.45;
+}
+
+function moduleEvidenceWidthDemand(module, layoutType, baseModuleW) {
+  const anchors = collectModuleEvidenceAnchors(module);
+  if (!anchors.length) return baseModuleW;
+  const demands = anchors.map((anchor) => {
+    const dimensions = readEvidenceSourceDimensions(anchor);
+    if (!dimensions) return baseModuleW;
+    const imageRatio = dimensions.width / dimensions.height;
+    const targetH = evidenceReadableHeightTarget(layoutType, imageRatio);
+    return Math.max(baseModuleW * 0.72, targetH * imageRatio + 0.26);
+  });
+  return Math.max(...demands, baseModuleW);
+}
+
+function resolveEvidenceAwareColumnLayout(layout, contentArea, baseGap) {
+  const columnCount = layout.schema.columns.length;
+  const initialAvailableW = contentArea.w - baseGap * (columnCount - 1);
+  const baseModuleW = initialAvailableW / columnCount;
+  const maxFactor = layout.type === "two_column" ? 1.35 : 1.5;
+  const minFactor = layout.type === "two_column" ? 0.72 : 0.78;
+  const demands = layout.modules.map((module) => moduleEvidenceWidthDemand(module, layout.type, baseModuleW));
+  const rawFactors = demands.map((demand) => demand / Math.max(0.1, baseModuleW));
+  const largestDemand = Math.max(1, ...rawFactors);
+  const gap = largestDemand >= 1.28 ? 0.08 : (largestDemand >= 1.12 ? 0.11 : baseGap);
+  const availableW = contentArea.w - gap * (columnCount - 1);
+  const weights = layout.schema.columns.map((baseWeight, idx) => {
+    const factor = Math.min(maxFactor, Math.max(minFactor, rawFactors[idx] || 1));
+    return Math.max(0.1, baseWeight * factor);
+  });
+  return { gap, weights, availableW };
+}
+
 function contentLayoutAreas(layout, contentArea) {
   const gap = 0.18;
   if (layout.schema.special === "large_visual_with_side_cards") {
-    const sideGap = 0.38;
-    const visualW = contentArea.w * 0.59;
+    const visualDemand = moduleEvidenceWidthDemand(layout.modules[0], layout.type, contentArea.w * 0.59);
+    const visualShare = Math.min(0.68, Math.max(0.59, visualDemand / Math.max(0.1, contentArea.w)));
+    const sideGap = visualShare >= 0.64 ? 0.28 : 0.38;
+    const visualW = contentArea.w * visualShare;
     const sideW = contentArea.w - visualW - sideGap;
     const sideCount = Math.max(1, layout.modules.length - 1);
     const sideCardGap = 0.14;
@@ -270,13 +323,13 @@ function contentLayoutAreas(layout, contentArea) {
       };
     });
   }
-  const totalWeight = layout.schema.columns.reduce((sum, value) => sum + value, 0);
-  const availableW = contentArea.w - gap * (layout.schema.columns.length - 1);
+  const columnLayout = resolveEvidenceAwareColumnLayout(layout, contentArea, gap);
+  const totalWeight = columnLayout.weights.reduce((sum, value) => sum + value, 0);
   let x = contentArea.x;
-  return layout.schema.columns.map((weight) => {
-    const w = availableW * (weight / totalWeight);
+  return columnLayout.weights.map((weight) => {
+    const w = columnLayout.availableW * (weight / totalWeight);
     const area = { x, y: contentArea.y, w, h: contentArea.h };
-    x += w + gap;
+    x += w + columnLayout.gap;
     return area;
   });
 }
@@ -446,7 +499,7 @@ function splitVerticalBlockAreas(area, visibleBlocks, flow = "top_bottom", optio
     return fallbackSize;
   });
   const totalNeeded = sized.reduce((sum, size) => sum + size, 0) + gapTotal;
-  const finalSizes = fitVerticalBlockSizes(sized, visibleBlocks, Math.max(0.1, area.h - gapTotal), totalNeeded > area.h);
+  const finalSizes = fitVerticalBlockSizes(sized, visibleBlocks, area, Math.max(0.1, area.h - gapTotal), totalNeeded > area.h, options);
   let cursor = area.y;
   const areas = finalSizes.map((size) => {
     const blockArea = { x: area.x, y: cursor, w: area.w, h: Math.min(size, Math.max(0.22, area.y + area.h - cursor)) };
@@ -456,13 +509,13 @@ function splitVerticalBlockAreas(area, visibleBlocks, flow = "top_bottom", optio
   return flow === "bottom_top" ? areas.reverse() : areas;
 }
 
-function fitVerticalBlockSizes(sized, visibleBlocks, availableHeight, overflowed) {
+function fitVerticalBlockSizes(sized, visibleBlocks, area, availableHeight, overflowed, options = {}) {
   const finalSizes = [...sized];
   if (!overflowed) return finalSizes;
 
   let overflow = finalSizes.reduce((sum, size) => sum + size, 0) - availableHeight;
   const visualCandidates = finalSizes
-    .map((size, idx) => ({ idx, size, min: isTextBlock(visibleBlocks[idx]) ? size : 0.45 }))
+    .map((size, idx) => ({ idx, size, min: minimumVerticalBlockSize(visibleBlocks[idx], area, options, size) }))
     .filter((item) => item.size > item.min + 0.01);
   const shrinkCapacity = visualCandidates.reduce((sum, item) => sum + (item.size - item.min), 0);
   if (shrinkCapacity > 0) {
@@ -478,6 +531,21 @@ function fitVerticalBlockSizes(sized, visibleBlocks, availableHeight, overflowed
     return finalSizes.map((size) => Math.max(0.22, size * scale));
   }
   return finalSizes;
+}
+
+function minimumVerticalBlockSize(block, area, options = {}, currentSize = 0.45) {
+  if (isTextBlock(block)) return currentSize;
+  const visualAnchor = block?.visual_anchor || block?.visualAnchor;
+  if (isEvidenceAnchor(visualAnchor)) {
+    const dimensions = readEvidenceSourceDimensions(visualAnchor);
+    if (!dimensions) return Math.min(currentSize, Math.max(0.72, area.h * 0.22));
+    const imageRatio = dimensions.width / dimensions.height;
+    const readable = evidenceReadableHeightTarget(options.layoutType || "", imageRatio);
+    const natural = area.w / imageRatio;
+    return Math.min(currentSize, Math.max(0.72, Math.min(readable, natural, area.h * 0.52)));
+  }
+  if (isTableAnchor(visualAnchor)) return Math.min(currentSize, Math.max(0.62, area.h * 0.18));
+  return Math.min(currentSize, 0.45);
 }
 
 function adjustedBlockSize(block, area, horizontal, options = {}) {
@@ -904,6 +972,7 @@ function renderContentLayout(slide, data, layout, visualCaption) {
   const moduleLayouts = [];
   const moduleOptions = {
     suppressVisualAnchorCaptions: layout.type === "two_column" || layout.type === "three_column",
+    layoutType: layout.type,
   };
   layout.modules.forEach((module, idx) => {
     const area = areas[idx];

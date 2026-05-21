@@ -86,6 +86,8 @@ Rules:
 
 Fill space with readable evidence, concise tables, KPI readouts, and short conclusions. Do not fill space with paragraphs. Do not leave large cards half-empty unless the card is dominated by readable evidence.
 
+Evidence is the first layout claimant. In fixed two-column, biased-column, and three-column layouts, the renderer may narrow gutters and rebalance column widths inside the chosen layout family so source figures remain readable. Do not compensate for a small source figure by adding prose; reduce secondary text/tables before letting the evidence become a thumbnail.
+
 ## Text Rhythm
 
 Dense Huawei pages should alternate visual weights:

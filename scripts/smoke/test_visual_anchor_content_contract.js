@@ -407,6 +407,17 @@ function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
   assert(schema.includes("emphasis"), "content layout reference should document red/bold emphasis terms");
 }
 
+function assertContentLayoutProtectsEvidenceReadability() {
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  const schema = read("references/content_layout_schema.md");
+  const layoutStandards = read("references/layout_standards.md");
+  assert(contentSlide.includes("resolveEvidenceAwareColumnLayout"), "content layout should rebalance columns for readable source evidence");
+  assert(contentSlide.includes("moduleEvidenceWidthDemand"), "content layout should estimate width demand from Evidence source dimensions");
+  assert(contentSlide.includes("minimumVerticalBlockSize"), "overflow fitting should keep Evidence blocks from collapsing like decorative visuals");
+  assert(schema.includes("evidence-aware balancing"), "content layout schema should document renderer-owned evidence-aware balancing");
+  assert(layoutStandards.includes("Evidence is the first layout claimant"), "layout standards should make evidence readability the first density claimant");
+}
+
 function assertContentLayoutDoesNotExposePageRegionOverride() {
   const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
   const schema = read("references/content_layout_schema.md");
@@ -454,6 +465,7 @@ function main() {
   collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicSchemaEscapeHatch, failures);
   collect("SKILL documents the current path", assertSkillDocumentsCurrentPath, failures);
   collect("content layout reference documents dense caption suppression", assertContentLayoutReferenceDocumentsDenseCaptionSuppression, failures);
+  collect("content layout protects evidence readability", assertContentLayoutProtectsEvidenceReadability, failures);
   collect("content layout does not expose page-region override", assertContentLayoutDoesNotExposePageRegionOverride, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 

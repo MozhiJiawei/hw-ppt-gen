@@ -28,15 +28,17 @@ Then load only what the task needs:
 2. One page has one primary evidence object. Do not hide multiple source figures inside one unreadable collage.
 3. Generated visuals are secondary. Use them only when evidence images are missing or when they replace long prose with a clearer visual explanation.
 4. Brief-backed hard fields are immutable: page count, page order, titles, title notes, analysis summary, TOC, content-slide sections, and parser-derived `contentLayout.type`.
-5. Huawei density means readable evidence plus compact interpretation, not pasted paragraphs or empty cards.
-6. Visible text must become short claim lines, red-bold emphasis terms, KPI/readout cards, compact tables, and conclusion boxes. Do not use long bullet stacks to fill space.
+5. Huawei density means readable evidence plus compact conclusions, not pasted paragraphs or empty cards.
+6. Visible text must become short claim lines, red-bold emphasis terms, KPI/readout cards, and conclusion boxes. Do not use long bullet stacks or decorative tables to fill space.
+7. Write the slide as conclusions, not as instructions for reading the slide. Avoid meta labels such as `读法`, `含义`, `说明`, and `可见`; use claim handles such as `问题定性`, `机制变化`, `业务收益`, `边界条件`, and `决策口径`.
+8. Tables are exceptional compression, not the default density tool. On a three-column summary, prefer evidence + conclusion lines; use at most one generated table unless the brief explicitly requires multiple real comparisons.
 
 ## Runtime Workflow
 
 1. Read the source material and identify audience, purpose, storyline, and evidence.
    - Visible text created by you must be Chinese.
    - Keep source figures/tables as-is; translate slide titles, subtitles, card titles, body text, captions, footers, contents, and QA notes.
-   - Keep necessary technical acronyms inline, for example `首 Token 时延（TTFT）`, `服务等级目标（SLO）`, `GPU`, and `KV cache`.
+   - Keep necessary technical acronyms, product names, metric names, and source-specific terms inline when the brief or evidence requires them.
 2. If `ppt_content_brief.md` is present:
    - Read `references/brief_contract.md`.
    - Run `node scripts/pptx/parse_ppt_content_brief.js <brief> --json`.
@@ -55,7 +57,9 @@ Then load only what the task needs:
    - Do not add standalone chapter divider pages.
    - Every content and summary page rendered through `addVisualAnchorContentSlide` must have `分析总结`, a page title, Huawei content framing, footer, and at least one visual anchor.
    - For each content/summary page, identify the primary evidence object first. Then choose a fixed layout and supporting text.
-   - Compress visible prose into short claim lines. Use `emphasis` in text blocks for 1-3 decisive terms, and move longer material into KPI cards, `Matrix/table`, or conclusion notes.
+   - Compress visible prose into short conclusion lines. Each line should state the judgment the evidence supports, not explain how to read the slide.
+   - Use `emphasis` in text blocks for 1-3 decisive terms, and move longer material into KPI cards or conclusion notes first. Use a table only when a real two-axis relationship would be lost as prose.
+   - Do not use `Matrix/table` as a disguised `标签：正文` list. A table must express a real relationship: before/after, option/constraint/judgment, risk/boundary/action, or metric/evidence/decision.
    - Use `contentLayout.type` from the brief parser when present. Otherwise choose a fixed Huawei layout from `references/layout_standards.md`.
 5. Generate with `pptxgenjs`:
    - Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, and footer primitives.

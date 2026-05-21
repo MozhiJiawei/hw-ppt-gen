@@ -10,7 +10,7 @@ Evidence anchors route source visuals through the unified content-slide path and
 {
   "id": "figure_01_workload",
   "title": "Figure 1 Workload Evidence",
-  "claim": "Figure 1 supports the long-tail and burst workload claim.",
+  "claim": "Figure 1 supports the slide's primary evidence claim.",
   "kind": "Evidence",
   "template": "source_figure",
   "source": {
@@ -76,6 +76,6 @@ Evidence modules need nearby editable PPT text:
 
 - a Chinese figure/table legend when layout space permits;
 - a source note or footer source;
-- 1-3 short interpretation lines, table rows, KPI readouts, or caveats.
+- 1-3 short conclusion lines, table rows, KPI readouts, or caveats.
 
-For dense `two_column` and `three_column` layouts, captions may be omitted under the image so the evidence can occupy the visual region. In that case, put reading guidance in adjacent text, module title, or footer source.
+For dense `two_column` and `three_column` layouts, captions may be omitted under the image so the evidence can occupy the visual region. In that case, put the conclusion, boundary, or source note in adjacent text, module title, or footer source.

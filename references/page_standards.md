@@ -39,6 +39,8 @@ For a three-viewpoint summary, each column should normally contain:
 - optional compact KPI/readout text only when it does not shrink the evidence below readability;
 - 2-4 short claim lines with red-bold emphasis terms, not a paragraph.
 
+Do not make all three columns table-driven. Use generated tables sparingly; on a three-column summary, one mechanism/comparison table is usually enough. Scenario/result columns should usually read as evidence + conclusion lines or KPI readouts.
+
 ## Content Page
 
 Each content page has:
@@ -46,16 +48,17 @@ Each content page has:
 - one viewpoint in the title/title note;
 - one `分析总结` band under the title;
 - one primary evidence object;
-- compact explanation, caveat, KPI, or table content near the evidence;
+- compact judgment, caveat, KPI, or table content near the evidence;
 - footer source note.
 
 Prefer this visible structure:
 
 - evidence first;
-- then 2-5 short interpretation lines;
+- then 2-5 short conclusion lines;
 - then a compact readout, table, or conclusion box if more density is needed.
 
-Avoid text blocks that read like paragraph notes. If a module needs more than 5 lines, convert part of it to KPI cards, `Matrix/table`, or a conclusion note.
+Avoid text blocks that read like paragraph notes. If a module needs more than 5 lines, convert part of it to KPI cards or a conclusion note. Use `Matrix/table` only when comparison or stage split is the actual point.
+Avoid text blocks that merely tell the reader how to read the figure. Replace `读法/含义/说明` with a claim handle and judgment the page can stand behind.
 
 When a page cites several figures, choose the one that carries the page claim as the primary evidence. Secondary figures become short text, KPI/table readouts, speaker-note caveats, or another slide. Do not hide them inside a collage.
 

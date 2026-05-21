@@ -23,36 +23,36 @@ Every summary/content page rendered by `addVisualAnchorContentSlide` keeps:
 - red module headers;
 - thin gray frames;
 - evidence or generated visual anchors inside modules;
-- nearby interpretation text;
+- nearby conclusion text;
 - footer source and page number.
 
 ## `05 内容 二分栏`
 
 Two balanced modules.
 
-Use when the page has two viewpoint modules or one evidence module plus one interpretation/table module.
+Use when the page has two viewpoint modules or one evidence module plus one conclusion/table module.
 
 Good:
 
-- one readable source figure on the left, compact reading text/table on the right;
+- one readable source figure on the left, compact conclusion text or real comparison table on the right;
 - two readable evidence modules when both are equally important and both remain legible.
 
 Reject:
 
 - two unrelated tiny figures in one module;
 - a large empty text card;
-- direct source-image box with no reading guidance.
+- direct source-image box with no nearby conclusion or boundary text.
 
 ## `06 内容 偏分栏`
 
-One wide visual region plus one to three stacked interpretation cards.
+One wide visual region plus one to three stacked conclusion cards.
 
 Use when one evidence object is clearly dominant.
 
 Rules:
 
 - left region is visual-first;
-- right cards explain reading, boundary, KPI, or action;
+- right cards state judgment, boundary, KPI, or action;
 - do not put long prose into the visual region;
 - do not shrink the dominant evidence to make room for secondary evidence.
 
@@ -68,6 +68,7 @@ Rules:
 - evidence must remain readable in each column;
 - if a column source figure is too dense, crop to the relevant region or use a compact readout beside the evidence;
 - do not use three KPI-only columns when source figures are available.
+- do not use three table-heavy columns; use at most one generated table when it carries a real mechanism/comparison.
 
 ## `08 内容 四分栏`
 
@@ -83,17 +84,18 @@ Rules:
 
 ## Density Standard
 
-Fill space with readable evidence, concise tables, KPI readouts, and short interpretation. Do not fill space with paragraphs. Do not leave large cards half-empty unless the card is dominated by readable evidence.
+Fill space with readable evidence, concise tables, KPI readouts, and short conclusions. Do not fill space with paragraphs. Do not leave large cards half-empty unless the card is dominated by readable evidence.
 
 ## Text Rhythm
 
 Dense Huawei pages should alternate visual weights:
 
 - source figure;
-- short emphasized interpretation;
+- short emphasized conclusion;
 - KPI/readout cards;
-- compact table or conclusion note.
+- conclusion note, with a compact table only for real comparison.
 
 Do not fill a column by stretching a KPI card or writing a long bullet stack. If a column has empty bottom space, add a meaningful structure: 2x2 mechanism table, small KPI row, source-grounded conclusion note, or red arrow relationship.
 
 Use red-bold emphasis sparingly inside text blocks. Emphasize the claim handle, number, or decision term, not whole sentences.
+Do not use tables as decorative rewrites of `标签：正文`. A table earns its place only when both axes matter.

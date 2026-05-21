@@ -71,38 +71,46 @@ Use `references/evidence_schema.md` for source evidence. Use `references/generat
 {
   "type": "text",
   "body": [
-    "读法：左图说明长尾模型数量占绝对多数。",
-    "含义：低频调用被固定容量放大为闲置成本。"
+    "资源错配：非关键环节仍占用固定投入。",
+    "弹性不足：异常波动会抬高安全垫。",
+    "判断：优化起点是需求形态，不是单点效率。"
   ],
-  "emphasis": ["读法", "长尾模型", "低频调用"],
+  "emphasis": ["资源错配", "弹性不足", "优化起点"],
   "fontSize": 12
 }
 ```
 
-Use text blocks for interpretation, caveats, conclusions, and compact reading guidance. Text remains editable PPT text.
+Use text blocks for source-grounded judgments, caveats, conclusions, and compact business decisions. Text remains editable PPT text.
 
 Text block rules:
 
 - Use 2-5 short lines by default.
 - Avoid more than 6 visible lines in one text block.
 - Avoid more than 4 total visible text lines inside a three-column module; other column modules should stay under 6. If the module needs more, move the extra material into `Matrix/table`, KPI cards, or a conclusion note.
-- Keep each line as `标签：判断` when possible.
+- Keep each line as `结论柄：判断` when possible.
+- Avoid meta labels such as `读法`, `含义`, `说明`, and `可见` as repeated body rhythm. They describe how the slide is read, not what the audience should conclude.
+- If those words appear in the brief, translate them into claim handles before writing visible body text.
 - Use `emphasis` for 1-3 decisive words, numbers, or labels. The renderer marks those terms Huawei red and bold.
 - Do not use `emphasis` to color a whole sentence.
 
-For longer material, use another visual anchor instead of prose:
+For longer material, use another visual anchor instead of prose, but do not turn every column into a table:
 
 - `Quantity/data_cards` for KPI readouts.
-- `Matrix/table` for dimensions, comparisons, TTFT/TBT splits, risks, boundaries, or decision paths.
+- `Matrix/table` for real dimensions, comparisons, stage splits, risks, boundaries, or decision paths.
 - A separate short `text` block for final conclusion or boundary.
 
-On three-column summary pages, keep the primary source figure readable before adding interpretation. Do not shrink a non-wide evidence figure below roughly one quarter of the module height just to add more text.
+Do not use `Matrix/table` as a disguised `标签：正文` list. If a two-column table can be read row-by-row as `字段：一句话`, it should usually stay as short conclusion lines. A useful table must make the row/column intersection carry meaning, such as `基线 vs 改进`, `阶段A vs 阶段B`, `风险 vs 收敛动作`, or `指标 vs 证据 vs 判断`.
+Weak table pairs include `口径 / 判断`, `维度 / 说明`, and `字段 / 含义`; these are usually better as conclusion lines or a bordered note.
+
+On `three_column` summary pages, use generated tables sparingly. Prefer source evidence plus conclusion lines in each column; add a table only for the one column whose claim depends on a real comparison or stage split.
+
+On three-column summary pages, keep the primary source figure readable before adding conclusion text. Do not shrink a non-wide evidence figure below roughly one quarter of the module height just to add more text.
 
 ## Dense Caption Suppression
 
-For dense `two_column` and `three_column` pages, the renderer suppresses module visual captions so the evidence can occupy the visual region. Put source notes and reading guidance in nearby text blocks, module titles, or the footer.
+For dense `two_column` and `three_column` pages, the renderer suppresses module visual captions so the evidence can occupy the visual region. Put source notes, conclusions, and boundaries in nearby text blocks, module titles, or the footer.
 
-For `biased_column`, the first module is visual-only and interpretation belongs in right-side stacked cards/modules.
+For `biased_column`, the first module is visual-only and conclusions belong in right-side stacked cards/modules.
 
 ## Flow Arrows
 

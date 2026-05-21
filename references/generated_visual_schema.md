@@ -58,7 +58,7 @@ Do not put slide-level prose inside `visual_spec`, including:
 - `note` / `notes`
 - `callout`
 
-Put captions, source notes, reading guidance, and interpretation in editable PPT text boxes or supporting cards.
+Put captions, source notes, conclusions, and boundaries in editable PPT text boxes or supporting cards.
 
 Do not output implementation-control fields such as `visual_strategy` or `intent`.
 
@@ -71,7 +71,7 @@ Do not output implementation-control fields such as `visual_strategy` or `intent
 
 ### `Quantity/data_cards`
 
-Use data cards as compact KPI readouts. They should not become tall filler panels; place the explanatory density in adjacent short claim lines, a `Matrix/table`, or a conclusion note.
+Use data cards as compact KPI readouts. They should not become tall filler panels; place the explanatory density in adjacent short conclusion lines or a conclusion note. Use a `Matrix/table` only when the missing structure is a real comparison.
 
 ```json
 {
@@ -79,12 +79,12 @@ Use data cards as compact KPI readouts. They should not become tall filler panel
   "template": "data_cards",
   "visual_spec": {
     "cards": [
-      { "id": "before", "label": "原 H20", "value": "1,192", "unit": "个" },
-      { "id": "after", "label": "现 H20", "value": "213", "unit": "个" }
+      { "id": "baseline", "label": "基线", "value": "120", "unit": "项" },
+      { "id": "improved", "label": "改进后", "value": "45", "unit": "项" }
     ],
-    "highlight": "after"
+    "highlight": "improved"
   },
-  "highlight_reason": "高亮现 H20，因为它承载生产侧资源收敛结果。"
+  "highlight_reason": "高亮改进后，因为它承载资源收敛结果。"
 }
 ```
 
@@ -95,14 +95,14 @@ Use data cards as compact KPI readouts. They should not become tall filler panel
   "kind": "Quantity",
   "template": "bar_chart",
   "visual_spec": {
-    "y_label": "GPU 数量",
-    "categories": ["部署前", "部署后"],
+    "y_label": "资源投入",
+    "categories": ["基线", "改进后"],
     "series": [
-      { "name": "H20", "values": [1192, 213] }
+      { "name": "投入项", "values": [120, 45] }
     ],
-    "highlight": { "category": "部署后", "series": "H20" }
+    "highlight": { "category": "改进后", "series": "投入项" }
   },
-  "highlight_reason": "高亮部署后，因为它对应最终资源需求。"
+  "highlight_reason": "高亮改进后，因为它对应资源收敛结果。"
 }
 ```
 
@@ -114,14 +114,14 @@ Use data cards as compact KPI readouts. They should not become tall filler panel
   "template": "process",
   "visual_spec": {
     "steps": [
-      { "id": "prefill", "label": "prefill" },
-      { "id": "decode", "label": "decoding" },
-      { "id": "switch", "label": "token 间隙换模" }
+      { "id": "input", "label": "输入" },
+      { "id": "process", "label": "处理" },
+      { "id": "release", "label": "过程窗口释放" }
     ],
     "orientation": "horizontal",
-    "highlight": "switch"
+    "highlight": "release"
   },
-  "highlight_reason": "高亮 token 间隙换模，因为它是机制突破点。"
+  "highlight_reason": "高亮过程窗口释放，因为它是机制变化点。"
 }
 ```
 
@@ -129,15 +129,19 @@ Use data cards as compact KPI readouts. They should not become tall filler panel
 
 Generated or transcribed tables must use `Matrix/table`; do not call a page-level table helper directly.
 
+Use `Matrix/table` only when rows and columns jointly create meaning. Do not use it as a cosmetic replacement for `标签：正文` lines.
+Do not use multiple generated tables on the same summary page just to increase density. If the table is not the clearest way to see the relationship, use conclusion lines, KPI cards, or a conclusion note.
+Avoid weak two-column tables such as `口径 / 判断`, `字段 / 含义`, or `维度 / 说明`; they are usually prose in table clothing.
+
 ```json
 {
   "kind": "Matrix",
   "template": "table",
   "visual_spec": {
     "rows": [
-      ["维度", "证据", "含义"],
-      ["成本", "1,192 -> 213 H20", "生产 GPU 需求下降"],
-      ["稳定", "未观察到 SLO violation", "只按观测口径表述"]
+      ["方案", "释放窗口", "判断口径"],
+      ["基线", "等批次结束", "等待被末端步骤锁住"],
+      ["改进", "过程窗口释放", "释放点前移，等待缩短"]
     ]
   }
 }

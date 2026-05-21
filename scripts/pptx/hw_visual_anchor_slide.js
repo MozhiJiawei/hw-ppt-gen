@@ -382,7 +382,7 @@ function normalizeModuleBody(module) {
 
 function addModuleBodyText(slide, text, area, module) {
   if (!safeText(text)) return;
-  const fontSize = module.fontSize || 12;
+  const fontSize = module.fontSize || module.contentFontSize || HW_STYLE.size.body;
   const options = {
     x: area.x,
     y: area.y,
@@ -455,7 +455,7 @@ function normalizeModuleBlocks(module, data = {}) {
       body: module.body,
     }].filter((block) => block.visual_anchor);
   }
-  return [{ type: "text", body: normalizeModuleBody(module), fontSize: module.fontSize }];
+  return [{ type: "text", body: normalizeModuleBody(module), fontSize: module.fontSize || module.contentFontSize }];
 }
 
 function splitBlockAreas(area, blocks, flow = "top_bottom", options = {}) {
@@ -594,7 +594,7 @@ function isTextBlock(block = {}) {
 function estimateTextBlockSize(block, area) {
   const body = normalizeModuleBody(block);
   if (!safeText(body)) return 0;
-  const fontSize = Number(block.fontSize || HW_STYLE.size.body);
+  const fontSize = Number(block.fontSize || block.contentFontSize || HW_STYLE.size.body);
   const lineSpacingMultiple = Number(block.lineSpacingMultiple || 1.5);
   const estimated = estimateTextBoxHeight(body, {
     w: area.w,

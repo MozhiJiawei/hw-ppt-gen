@@ -101,3 +101,7 @@ Do not fill a column by stretching a KPI card or writing a long bullet stack. If
 
 Use red-bold emphasis sparingly inside text blocks. Emphasize the claim handle, number, or decision term, not whole sentences.
 Do not use tables as decorative rewrites of `标签：正文`. A table earns its place only when both axes matter.
+
+## Content Typography
+
+Within one content page, editable text blocks inside content modules should use the same body-size tier. Visual anchors, including KPI cards, tables, generated diagrams, and source images, own their internal typography. Do not make one module's explanatory text look like 12pt body while another module's explanatory text is visibly smaller.

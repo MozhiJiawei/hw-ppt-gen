@@ -419,6 +419,14 @@ function assertContentLayoutProtectsEvidenceReadability() {
   assert(layoutStandards.includes("Evidence is the first layout claimant"), "layout standards should make evidence readability the first density claimant");
 }
 
+function assertContentLayoutUnifiesTypographyContext() {
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  const layoutStandards = read("references/layout_standards.md");
+  assert(contentSlide.includes("module.contentFontSize || HW_STYLE.size.body"), "content layout text blocks should share the body-size text tier");
+  assert(layoutStandards.includes("Content Typography"), "layout standards should document same-tier content typography");
+  assert(layoutStandards.includes("Visual anchors, including KPI cards, tables, generated diagrams, and source images, own their internal typography"), "layout standards should keep visual-anchor typography separate from text-block typography");
+}
+
 function assertContentLayoutDoesNotExposePageRegionOverride() {
   const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
   const schema = read("references/content_layout_schema.md");
@@ -467,6 +475,7 @@ function main() {
   collect("SKILL documents the current path", assertSkillDocumentsCurrentPath, failures);
   collect("content layout reference documents dense caption suppression", assertContentLayoutReferenceDocumentsDenseCaptionSuppression, failures);
   collect("content layout protects evidence readability", assertContentLayoutProtectsEvidenceReadability, failures);
+  collect("content layout unifies typography context", assertContentLayoutUnifiesTypographyContext, failures);
   collect("content layout does not expose page-region override", assertContentLayoutDoesNotExposePageRegionOverride, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 

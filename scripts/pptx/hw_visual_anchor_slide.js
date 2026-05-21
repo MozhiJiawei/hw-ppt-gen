@@ -217,7 +217,7 @@ function normalizeContentLayout(layout) {
   }
   return {
     type,
-    reference: safeText(layout.reference || layout.layout_reference || schema.reference),
+    reference: safeText(layout.reference || schema.reference),
     modules,
     schema,
     flowArrows: layout.flowArrows || layout.flow_arrows || null,
@@ -854,9 +854,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   const hasSideCards = supportingCards.length > 0;
   const visualCaption = normalizeVisualAnchorCaption(data);
   const highlightReason = normalizeHighlightReason(data);
-  const relationshipTest = safeText(data.relationshipTest ?? data.relationship_test ?? data.visual_anchor?.relationship_test ?? "");
   const scoreBasis = safeText(data.scoreBasis ?? data.score_basis ?? data.visual_anchor?.score_basis ?? "");
-  const layoutReference = safeText(data.layoutReference ?? data.layout_reference ?? data.visual_anchor?.layout_reference ?? "");
   let anchorResults = [];
   let layoutInfo = null;
   let resolvedLayoutType = null;
@@ -886,11 +884,10 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
         w: 12.78 - (anchorArea.x + anchorArea.w + 0.18),
         h: anchorArea.h,
       });
-      const layoutReferenceForCards = layoutReference || "06 内容 偏分栏";
       resolvedLayoutType = "biased_column";
       layoutInfo = {
         type: "biased_column",
-        reference: layoutReferenceForCards,
+        reference: CONTENT_LAYOUT_SCHEMAS.biased_column.reference,
         modules_count: Math.min(4, supportingCards.length + 1),
         image_modules_count: 0,
         table_modules_count: 0,
@@ -921,9 +918,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     visual_anchor_caption: anchorResult.captionResult,
     supporting_cards_count: supportingCards.length,
     resolved_layout_type: resolvedLayoutType || undefined,
-    layout_reference: layoutReference || undefined,
     highlight_reason: highlightReason || undefined,
-    relationship_test: relationshipTest || undefined,
     score_basis: scoreBasis || undefined,
     content_layout_schema: layoutInfo || undefined,
   }));

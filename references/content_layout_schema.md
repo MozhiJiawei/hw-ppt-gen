@@ -1,14 +1,8 @@
 # Content Layout Schema
 
-Use this schema for Huawei content pages that need richer 图文并茂 layouts than a single large visual plus side cards.
+Use this reference when writing `contentLayout` data for `addVisualAnchorContentSlide`.
 
-The schema follows a strict three-step contract:
-
-1. `contentLayout.type` chooses the fixed page layout.
-2. Each module `blocks` list declares visual rendering blocks.
-3. Text blocks, captions, legends, and interpretation stay as editable PPT annotations outside `visual_anchor.visual_spec`.
-
-The schema describes layout, visual anchors, and editable text only. It must not carry implementation-control fields. PPT text annotations remain editable PPT objects. Fixed Huawei content layouts own their page region; callers choose `contentLayout.type`, `modules`, and optional layout annotations such as `flowArrows`. The Chinese `reference` label may be recorded as a derived compatibility field, but `contentLayout.type` is the authoritative layout choice.
+Design standards live in `references/layout_standards.md`. This file only defines the JSON shape.
 
 ## Page Shape
 
@@ -22,76 +16,79 @@ The schema describes layout, visual anchors, and editable text only. It must not
 }
 ```
 
-Supported fixed layouts:
+`contentLayout.type` is authoritative. The Chinese `reference` label is optional derived compatibility metadata.
 
-- `two_column`: `05 内容 二分栏`, two equal columns.
-- `biased_column`: `06 内容 偏分栏`, one wide visual-only region on the left and one to three stacked interpretation cards on the right.
-- `three_column`: `07 内容 三分栏`, three equal columns.
-- `four_column`: `08 内容 四分栏`, four panels arranged as 2x2.
+Supported types:
 
-Module counts match the references: `two_column` has 2 modules, `biased_column` has 2-4 modules, `three_column` has 3 modules, and `four_column` has 4 modules. A page may contain one or more visual anchors, but hard QA requires at least one manifest-backed rendered anchor.
+- `two_column`: 2 modules.
+- `biased_column`: 2-4 modules; first module must be `visual_anchor`.
+- `three_column`: 3 modules.
+- `four_column`: 4 modules.
 
-## Module Blocks
-
-A normal content module is a layout container. It may stack or place multiple visual and text blocks within one column/panel.
+## Module Shape
 
 ```json
 {
   "role": "content_panel",
-  "title": "这里是标题区域 样式",
-  "blocks": [
-    {
-      "type": "text",
-      "height": 1.1,
-      "body": ["解释文字一。", "解释文字二。"]
-    },
-    {
-      "type": "visual_anchor",
-      "visual_anchor": {
-        "id": "stable_id",
-        "title": "Review title",
-        "claim": "一句中文核心观点。",
-        "kind": "Matrix",
-        "template": "capability_matrix",
-        "visual_spec": {}
-      }
-    }
-  ]
+  "title": "模块标题",
+  "blocks": []
 }
 ```
 
-The renderer owns block placement inside the module. Do not provide a `flow` field.
-When a module contains source evidence plus text, the renderer uses the available
-panel size and source image dimensions to choose the internal relationship:
-wide evidence normally stacks above text, while tall/narrow evidence can sit
-beside its reading text. Block sizing uses `height` in inches for fixed vertical
-blocks and `weight` for flexible remaining space; horizontal visual/text sizing is
-resolved by the renderer.
+Allowed block types:
 
-## Visual Blocks
+- `visual_anchor`
+- `text`
 
-Use existing visual-anchor semantics before creating new categories:
+Do not provide page-region coordinates such as `contentArea`, `content_area`, `x`, `y`, `w`, or `h` at the `contentLayout` root. The renderer owns the fixed Huawei page region.
 
-- KPI strips: `Quantity / data_cards`.
-- Dense small-box grids: `Matrix / capability_matrix` or, for true tables, `Matrix / table`.
-- Sectioned grids: multiple `Matrix` visual blocks separated by short `text` annotation blocks.
-- Process/flow evidence: `Sequence / process` or `Quantity / data_cards` when the object is a compact numbered card sequence.
-- Generated/transcribed tables: `Matrix / table`, always a manifest-backed visual anchor.
-- Source figures/tables/screenshots: `Evidence`.
+Do not provide a `flow` field. The renderer owns internal visual/text flow based on module size and source image dimensions.
 
-Generated and transcribed tables must remain editable. Do not add `type: "table"` or `role: "table"` blocks to `contentLayout`; use a `type: "visual_anchor"` block whose anchor is `Matrix/table`.
+## Visual Anchor Block
 
-## Text Annotations
+```json
+{
+  "type": "visual_anchor",
+  "visual_anchor": {
+    "id": "stable_id",
+    "title": "Evidence title",
+    "claim": "一句中文核心观点。",
+    "kind": "Evidence",
+    "template": "source_figure",
+    "source": {
+      "path": ".tmp/deck/images/figure_1_crop.png",
+      "caption": "Figure 1: workload"
+    }
+  }
+}
+```
 
-Use `type: "text"` blocks for module interpretation, section labels, conclusions, and reading guidance. Use `visualAnchorCaption` / `visual_anchor_caption` beside a visual block for editable figure legends only when the layout has enough visual space.
+Use `references/evidence_schema.md` for source evidence. Use `references/generated_visual_schema.md` for generated visuals.
 
-For dense `two_column` (`05 内容 二分栏`) and `three_column` (`07 内容 三分栏`) pages, omit visual captions and source notes under module visuals. The renderer suppresses module visual captions in these layouts so the image or chart can occupy the full block. Put the evidence reading and source reference in the adjacent text block, the page footer, or the brief-backed narrative.
+## Text Block
 
-For `biased_column`, the first module remains visual-only. Put interpretation in the right-side stacked cards, not inside the left visual box.
+```json
+{
+  "type": "text",
+  "body": [
+    "读法：左图说明长尾模型数量占绝对多数。",
+    "含义：低频调用被固定容量放大为闲置成本。"
+  ],
+  "fontSize": 12
+}
+```
+
+Use text blocks for interpretation, caveats, conclusions, and compact reading guidance. Text remains editable PPT text.
+
+## Dense Caption Suppression
+
+For dense `two_column` and `three_column` pages, the renderer suppresses module visual captions so the evidence can occupy the visual region. Put source notes and reading guidance in nearby text blocks, module titles, or the footer.
+
+For `biased_column`, the first module is visual-only and interpretation belongs in right-side stacked cards/modules.
 
 ## Flow Arrows
 
-`flowArrows` is a page-level layout annotation for the red column-to-column markers in `07 内容 三分栏`; it is not a visual object inside a module.
+`flowArrows` is an optional page-level annotation for red column-to-column markers in `three_column` layouts.
 
 ```json
 {
@@ -103,6 +100,6 @@ For `biased_column`, the first module remains visual-only. Put interpretation in
 }
 ```
 
-## Smoke Checks
+## Smoke Check
 
-`npm run content-layout-smoke` generates the review deck, runs hard QA, and writes the PPTX, plan, and manifest files under `.tmp/content_layout_schema_smoke/`.
+`npm run content-layout-smoke` generates a review deck and runs hard QA under `.tmp/content_layout_schema_smoke/`.

@@ -80,7 +80,7 @@ Checks:
 
 Checks:
 
-- Hard QA was run with required plan, visual-anchor manifest, reference-review, and render evidence.
+- Hard QA was run with required plan, visual-anchor manifest, and render evidence.
 - Exported slide PNGs were inspected.
 - Visual-QA notes identify actual issues rather than only claiming success.
 - Remaining caveats are concrete and bounded.

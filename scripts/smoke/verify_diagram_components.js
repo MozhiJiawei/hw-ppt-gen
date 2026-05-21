@@ -6,7 +6,7 @@ const { createVisualAnchorImage, renderVisualAnchorPptNative, resolveVisualAncho
 
 const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 const ROOT = path.resolve(__dirname, "..", "..");
-const DEFAULT_SPEC = path.join(ROOT, "references", "visual_diagram_test_cases.js");
+const DEFAULT_SPEC = path.join(ROOT, "scripts", "smoke", "fixtures", "visual_diagram_test_cases.js");
 const DEFAULT_OUT = path.join(ROOT, ".tmp", "diagram_component_smoke");
 
 function parseArgs(argv) {

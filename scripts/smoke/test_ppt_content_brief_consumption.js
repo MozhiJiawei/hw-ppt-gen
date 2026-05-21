@@ -171,15 +171,15 @@ function assertInvalidBriefFailsContract() {
 
 function assertIssueContractIsDocumentedInSkillAndReferences() {
   const skill = read("SKILL.md");
-  const reference = read("references/ppt_content_brief_consumption.md");
+  const reference = read("references/brief_contract.md");
   const pkg = JSON.parse(read("package.json"));
 
   assert(skill.includes("ppt_content_brief.md"), "SKILL should document the optional ppt_content_brief input branch");
   assert(skill.includes("parse_ppt_content_brief.js"), "SKILL should require the parser before generation");
-  assert(reference.includes("硬约束字段"), "reference should separate hard constraints from reference-only fields");
+  assert(reference.includes("Hard Fields"), "reference should separate hard constraints from reference-only fields");
   assert(skill.includes("Source evidence is TOP1"), "SKILL should state the evidence-first principle");
-  assert(reference.includes("Evidence-First Principle"), "reference should state the evidence-first principle");
-  assert(reference.includes("1 条 `分析总结`"), "reference should document summary-count-driven content layout");
+  assert(reference.includes("`参考图片`: source evidence"), "reference should state the evidence-first principle");
+  assert(reference.includes("Layout Family"), "reference should document summary-count-driven content layout");
   assert(reference.includes("source locators"), "reference should document absolute paths as source locators");
   assert(reference.includes("research_audit.md"), "reference should document audit file as verification-only");
   assert(pkg.scripts.smoke.includes("test:ppt-content-brief"), "npm run smoke should cover content brief parsing");

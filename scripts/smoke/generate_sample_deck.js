@@ -29,11 +29,11 @@ async function main() {
         id: data.visual_anchor.id,
         kind: data.visual_anchor.kind,
         template: data.visual_anchor.template,
-        why_this_visual: data.visual_anchor.why_this_visual || `${data.visual_anchor.title}承载本页核心信息关系。`,
-        layout_reference: data.layoutReference || data.layout_reference || "05 内容 二分栏",
-        relationship_test: data.visual_anchor.relationship_test || `${data.visual_anchor.kind}/${data.visual_anchor.template}与本页总结中的信息关系一致。`,
       },
-      layout_reference: data.layoutReference || data.layout_reference || "05 内容 二分栏",
+      content_layout: data.contentLayout ? {
+        type: data.contentLayout.type,
+        reference: data.contentLayout.reference,
+      } : undefined,
     });
     addVisualAnchorContentSlide(pptx, data);
   }
@@ -67,7 +67,6 @@ async function main() {
         { label: "入口统一", text: "页面骨架、分析总结、主视觉和页脚由同一个正文页入口组合。" },
       ],
     },
-    layoutReference: "06 内容 偏分栏",
     visual_anchor: {
       id: "sample_generation_flow",
       title: "Generation Flow",
@@ -103,7 +102,6 @@ async function main() {
         { label: "红色克制", text: "红色只标注主要指标，其他数据保持灰阶呈现。" },
       ],
     },
-    layoutReference: "05 内容 二分栏",
     visual_anchor: {
       id: "sample_quantity_cards",
       title: "Quantity Cards",
@@ -135,14 +133,12 @@ async function main() {
         { label: "结构清晰", text: "能力栈帮助读者理解各层职责，视觉锚点是关键，因为它承接骨架并支撑解释模块。" },
       ],
     },
-    layoutReference: "05 内容 二分栏",
     visual_anchor: {
       id: "sample_capability_stack",
       title: "Capability Stack",
       claim: "页面能力以层级方式组合。",
       kind: "Hierarchy",
       template: "capability_stack",
-      relationship_test: "页面骨架是底层承载，视觉锚点是上层主对象，解释模块依赖视觉锚点展开，构成明确支撑关系。",
       visual_spec: {
         levels: [
           { label: "页面骨架" },
@@ -172,7 +168,6 @@ async function main() {
         { label: "检查闭环", text: "硬规则检查读取 manifest，检查步骤是关键，因为缺失或未渲染都作为阻塞项。" },
       ],
     },
-    layoutReference: "05 内容 二分栏",
     visual_anchor: {
       id: "sample_qa_loop",
       title: "QA Loop",

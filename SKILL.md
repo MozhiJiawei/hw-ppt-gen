@@ -5,272 +5,105 @@ description: Generate new Huawei-style PPTX decks from arbitrary readable source
 
 # Huawei PPTX Generator
 
-Generate a new Huawei-style `.pptx` deck from readable input material. Use `pptxgenjs` as the generation path, the bundled components as the visual system, and the bundled checker for hard compliance gates.
+Generate a new Huawei-style `.pptx` deck from readable input material. The runtime goal is not to "make slides"; it is to deliver dense, evidence-first, fact-presenting Huawei business material.
 
-## Core Principle
+## Load First
 
-This PPT style is dense, evidence-first, and fact-presenting. Source evidence is TOP1: when source figures, tables, screenshots, or charts establish a slide's claim, treat them as first-class evidence objects, not optional decoration or background material. Redrawn diagrams, KPI cards, and hand-drawn Huawei-style visuals may coexist with source evidence to improve readability, but they do not replace the source evidence when the text depends on it.
+Always read:
 
-## Required Workflow
+- `references/delivery_standard.md`
+- `references/page_standards.md`
 
-1. Read the user's source material and identify the audience, purpose, story line, and evidence.
-   - All visible deck text that you create must be Chinese. Keep source figures/tables as-is, but translate slide titles, subtitles, card titles, body text, captions, footers, contents, and QA notes into Chinese.
-   - Keep necessary technical acronyms in parentheses or inline, for example `首 Token 时延（TTFT）`, `每 Token 时延（TPOT）`, `服务等级目标（SLO）`, `GPU`, `KV cache`, and `SM`.
-   - If the user provides `ppt_content_brief.md` or a `ppt_content_brief` input, treat it as an optional upstream content contract. Load `references/ppt_content_brief_consumption.md`, run `node scripts/pptx/parse_ppt_content_brief.js <brief> --json` before planning, and do not reinvent the story line. Preserve the brief's `页面标题`, `标题说明`, `分析总结`, `Table of Contents` order, content-slide `所属章节`, and page count in the deck plan and visible text. Use `正文内容`, `参考图片`, and `备注` only as content material for layout compression, visual-anchor selection, supporting cards, captions, notes, and caveats. Absolute local paths in the brief are source locators for non-visible `Evidence/source_figure` binding; do not copy them into visible PPT text. If the parser rejects the brief, fix or request a revised brief instead of silently taking slide copy from `research_audit.md`.
-2. Choose a filesystem-safe deck name `<deck>` before creating any artifacts. Create the deck workspace `.tmp/<deck>/` and save every deck-specific generated or temporary file under that directory. Use this pattern consistently:
-   - Final PPTX: `.tmp/<deck>/<deck>.pptx`
-   - Deck-specific generation script: `.tmp/<deck>/generate_<deck>.js`
-   - Plans, inventories, manifests, QA notes, and scratch JSON: `.tmp/<deck>/<deck>_*.json` or `.tmp/<deck>/<deck>_*.md`
-   - Derived images and screenshots: `.tmp/<deck>/images/` or another subdirectory inside `.tmp/<deck>/`
-   - Exported slide PNGs: `.tmp/<deck>/slides/`
-3. For parsed PDF/XML/HTML directories, create a source inventory before planning. Save it under `.tmp/<deck>/` and include:
-   - Source title, authors/date when available, and source file paths.
-   - Major sections and the one-sentence role each section plays in the story.
-   - Figure/table image paths, captions, and which ones are worth using as evidence.
-   - Headline numeric claims that will appear in the deck.
-4. Inspect the bundled reference images in `assets/slides_ref/` before writing generation code. This is a blocking gate:
-   - Run `node scripts/pptx/prepare_reference_review.js --out .tmp/<deck>/<deck>_reference_review.json`.
-   - Open the reference images and fill every `observations` and `applied_to_slides` entry in that JSON before writing generation code.
-   - Use the notes to calibrate density, card shapes, grid proportions, red/gray usage, table treatment, chart treatment, and footer language.
-   - Do not merely say the images were referenced; leave review evidence in `.tmp/<deck>/<deck>_reference_review.json`.
-5. Plan the deck slide by slide before coding. Save the plan as `.tmp/<deck>/<deck>_plan.json`. Keep the plan separate from visual construction:
-   - Define the deck outline once as `sections`, using the same top-level chapter names as the contents page. Use the real chapter names; do not shorten them just to fit the indicator.
-   - Do not insert standalone chapter divider slides. The top-right chapter indicator on each正文内容页 is the only chapter/progress marker.
-   - Every正文内容页 must show a compact top-right chapter indicator that mirrors the reference images: white tabs for sibling sections and a Huawei-red tab for the current section. Pass `sections` and `currentSection` to the helper for each content page so the reader can see where the page sits in the outline. The helper dynamically sizes each tab by label length, right-aligns the full indicator to the content edge, and caps total width so the indicator does not collide with the page title.
-   - Order正文内容页 by the contents-page chapter sequence. Do not jump from a later chapter back to an earlier chapter; finish all pages for one chapter before moving to the next unless the user explicitly asks for a non-linear appendix.
-   - Use a two-part title on content pages: a short 24 pt main title states the page type or viewpoint, and an optional 18 pt subtitle explains the nuance. Do not put long explanatory clauses entirely in the 24 pt title.
-   - Every正文内容页 must include a top `分析总结` block under the page title. Cover and contents slides do not use this block.
-   - The `分析总结` block summarizes the page's core viewpoint in no more than three points. Each point must start with a meaning-specific short label such as `规划先行：` or `风险收敛：`; do not use generic labels like `结论1：`.
-   - Each slide has at most three core messages.
-   - Choose a layout by content count and relationship, not by decoration.
-   - Record the source evidence for important claims and figures.
-   - Choose the visual anchor's semantic `kind` and `template`; the shared helper turns that structure into the final visual.
-   - Every正文内容页 must plan at least one primary `visual_anchor` before rendering（至少一个锚点）. A dense content-layout page may have multiple anchors when multiple visual/text panels are necessary. Each visual anchor must use `kind`: `Evidence`, `Quantity`, `Sequence`, `Loop`, `Hierarchy`, `Matrix`, or `Network`.
-   - Choose `Evidence` when a source figure, source table, source screenshot, or source chart directly supports the slide claim. Otherwise choose the single dominant information relationship from the six conceptual kinds.
-   - If the brief or source text builds a point with language such as `Figure X shows`, `Figure X 说明`, `Figure X 展示`, `如图 X`, or equivalent wording, that figure is part of the slide's evidence structure. Put it on the same slide as an `Evidence/source_figure` or `Evidence/source_chart` anchor unless the figure is unreadable, unrelated to the claim, or would mislead in isolation. If you also need a redrawn diagram or KPI cards, place them alongside the source evidence in the same content layout instead of substituting them for it.
-   - For each content slide, record `visual_anchor.kind`, `template`, source/data basis, `why_this_visual`, `layout_reference`, and `relationship_test`. `relationship_test` must prove the selected visual relationship is real, not decorative: for example, `Hierarchy` requires containment, decomposition, layered dependency, or bottom-to-top support; parallel mechanisms, parallel risks, or unrelated indicators must use `Matrix`, `Sequence`, `Network`, `Quantity`, or `Evidence` instead.
-   - `layout_reference` is the visual composition choice, separate from `visual_anchor.kind`. For important source figures/charts/tables, use `05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, or `08 内容 四分栏` through `contentLayout` when the page needs multiple 图文 modules. Load `references/content_layout_schema.md` before writing that schema. Do not let semantic checks turn a content page into a picture-only composition.
-   - Only use `visual_spec.highlight` when the highlighted item is the argument's focus. If used, record a `highlight_reason` outside `visual_spec` and echo that reason in `分析总结`, `visualAnchorCaption`, or a supporting card. If you cannot write a specific reason for why this item matters more than the alternatives, omit `highlight`.
-   - For risk, priority, capability, maturity, or importance matrices, do not invent decimal scores. Use qualitative labels such as `高 / 中 / 低` in a `Matrix/table` visual anchor unless the source provides numeric values or the plan records a clear `score_basis` / scoring method. Never make a subjective judgment look like sourced measurement.
-   - Never put implementation-control fields such as `visual_strategy` or old `intent` fields on slides, `contentLayout`, plans, manifests, or individual visual anchors.
-   - When a slide needs a visual anchor beyond ordinary cards, load `references/visual_diagram_rules.md`. Load `references/visual_diagram_spec_schema.md` before writing a structured `visual_anchor`. Do not load the diagram rules for simple text-card-only pages.
-   - Every embedded source figure or table must be treated as an evidence module, not a picture-only box. Prefer `visual + Chinese figure legend + 1-3 short interpretation lines` inside the same module when space permits. If the module would otherwise look empty, add source-grounded observations, conclusions, or reading guidance instead of leaving blank space.
-   - Every embedded source figure or table must have a Chinese figure-legend description tightly attached below the visual, not pinned to the bottom of the card. By default, center the visual within its available visual area; the legend follows the visual's actual bottom edge. Use 12 pt, bold, italic text for the legend, for example `semi-PD 实验结果：Llama3-8B / 70B 的实验结果`. Keep the smaller source/caption note directly below the legend at 10 pt, then place optional interpretation lines below the source note. Leave extra whitespace beneath the interpretation, not between the visual and legend.
-   - For tables that you create or transcribe on正文内容页, always use a `Matrix/table` visual anchor so the table enters the plan, manifest, and QA. Do not call `slide.addTable` or a table helper directly from deck-specific scripts or `contentLayout`. Do not simulate a table by stacking rectangles, text boxes, SVG, or image output. Use source table screenshots only when the table is being cited as visual evidence from the paper.
-6. Create deck-specific generation scripts and all generated files under `.tmp/<deck>/`. Do not write generated `.pptx`, deck-specific scripts, images, extracted text, QA reports, or scratch JSON outside that deck workspace.
-7. Generate the PPTX with `pptxgenjs`. Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, and footer primitives; use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页 so the visual anchor, supporting cards, and manifest evidence stay on one path.
-8. Run content QA manually against the source material: missing text, ordering mistakes, placeholders, stale examples, unsourced numeric claims, and obvious wording errors. Save a concise QA note to `.tmp/<deck>/<deck>_content_qa.json` or `.tmp/<deck>/<deck>_content_qa.md`.
-9. Run hard style QA:
+Then load only what the task needs:
+
+- `references/brief_contract.md` when the input includes `ppt_content_brief.md`.
+- `references/evidence_schema.md` before placing source figures, charts, tables, or screenshots.
+- `references/layout_standards.md` before choosing or coding `05`-`08` content layouts.
+- `references/content_layout_schema.md` before writing `contentLayout`.
+- `references/generated_visual_schema.md` only when the source lacks a usable evidence image or a generated visual replaces long prose.
+
+## Hard Priorities
+
+1. Source evidence is TOP1. If source evidence supports the slide claim, it must appear as readable evidence.
+2. One page has one primary evidence object. Do not hide multiple source figures inside one unreadable collage.
+3. Generated visuals are secondary. Use them only when evidence images are missing or when they replace long prose with a clearer visual explanation.
+4. Brief-backed hard fields are immutable: page count, page order, titles, title notes, analysis summary, TOC, content-slide sections, and parser-derived `contentLayout.type`.
+5. Huawei density means readable evidence plus compact interpretation, not pasted paragraphs or empty cards.
+
+## Runtime Workflow
+
+1. Read the source material and identify audience, purpose, storyline, and evidence.
+   - Visible text created by you must be Chinese.
+   - Keep source figures/tables as-is; translate slide titles, subtitles, card titles, body text, captions, footers, contents, and QA notes.
+   - Keep necessary technical acronyms inline, for example `首 Token 时延（TTFT）`, `服务等级目标（SLO）`, `GPU`, and `KV cache`.
+2. If `ppt_content_brief.md` is present:
+   - Read `references/brief_contract.md`.
+   - Run `node scripts/pptx/parse_ppt_content_brief.js <brief> --json`.
+   - Copy hard fields from parser output into the plan. Do not hand-map them from memory.
+3. Choose a deck name `<deck>` and write all run-specific artifacts under `.tmp/<deck>/`:
+   - `.tmp/<deck>/<deck>.pptx`
+   - `.tmp/<deck>/generate_<deck>.js`
+   - `.tmp/<deck>/<deck>_plan.json`
+   - `.tmp/<deck>/<deck>_visual_anchor_manifest.json`
+   - `.tmp/<deck>/<deck>_content_qa.json` or `.md`
+   - `.tmp/<deck>/<deck>.qa.json`
+   - `.tmp/<deck>/images/`
+   - `.tmp/<deck>/slides/`
+4. Plan the deck before coding:
+   - Use cover and contents pages for decks over four slides.
+   - Do not add standalone chapter divider pages.
+   - Every content and summary page rendered through `addVisualAnchorContentSlide` must have `分析总结`, a page title, Huawei content framing, footer, and at least one visual anchor.
+   - For each content/summary page, identify the primary evidence object first. Then choose a fixed layout and supporting text.
+   - Use `contentLayout.type` from the brief parser when present. Otherwise choose a fixed Huawei layout from `references/layout_standards.md`.
+5. Generate with `pptxgenjs`:
+   - Use `scripts/pptx/hw_pptx_helpers.js` for cover, contents, page shell, and footer primitives.
+   - Use `scripts/pptx/hw_visual_anchor_slide.js` for every summary/content page so evidence, generated visuals, content layout, and manifest entries stay on one path.
+   - Use `Evidence` anchors for source figures/charts/tables/screenshots; do not bypass the manifest with direct `addImage`.
+   - Use generated visual anchors only after loading `references/generated_visual_schema.md`.
+6. Run content QA against the source material. Save concise notes under `.tmp/<deck>/`.
+7. Run hard QA:
 
    ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-plan .tmp/<deck>/<deck>_plan.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json
+   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-plan .tmp/<deck>/<deck>_plan.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json
    ```
 
-   If the deck consumed `ppt_content_brief.md`, add `--require-ppt-content-brief <path/to/ppt_content_brief.md>` to every hard-QA run so title, title note, summary, content-slide section, page order, and parser-derived content layout drift fails.
-   Brief consistency is the top priority for brief-backed decks. Do not shorten, rewrite, hide, or substitute `页面标题`, `标题说明`, `分析总结`, TOC chapters, page count, content-slide section order, or parser-derived `contentLayout.type` to satisfy ordinary style, language, title-wrap, density, or visual-QA feedback. This does not excuse sparse pages: fix density by using `正文内容`, source evidence, notes, modules, cards, charts, tables, or denser composition while keeping brief hard fields unchanged. If a brief hard field creates an unreasonable style problem, keep the brief text unchanged and record it as an upstream brief issue for `ppt-deep-search` to regenerate.
+   If the deck consumed a brief, add:
 
-10. Export slide images with the target PPT renderer:
+   ```bash
+   --require-ppt-content-brief <path/to/ppt_content_brief.md>
+   ```
+
+8. Export slide PNGs:
 
    ```bash
    node scripts/pptx/export_pptx_images.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/slides
    ```
 
-   On Windows, this script defaults to PowerPoint COM when PowerPoint is available so the exported PNGs match the actual PPTX rendering. LibreOffice is only a fallback. Check `.tmp/<deck>/slides/render_manifest.json`; if `renderer` is `libreoffice`, record that final PowerPoint visual rendering was unavailable.
-
-   If fallback rendering needs `soffice`, `pdfinfo`, or `pdftoppm` and they are not on PATH, run:
-
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/pptx/setup_render_tools_path.ps1
-   ```
-
-   The export script must call command names from PATH; do not hardcode executable paths in deck scripts.
-11. Re-run hard QA with render evidence:
+   On Windows this defaults to PowerPoint COM when available. LibreOffice is only a fallback; record that residual risk when used.
+9. Re-run hard QA with render evidence:
 
    ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-reference-review .tmp/<deck>/<deck>_reference_review.json --require-plan .tmp/<deck>/<deck>_plan.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>/slides
+   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-plan .tmp/<deck>/<deck>_plan.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>/slides
    ```
 
-12. Triage hard-QA output. Treat errors as blockers. For every warning, either fix it or record why it is accepted in the QA note. Re-run hard QA after fixes.
-13. Run independent LLM visual QA from the exported PNGs. This is a blocking gate:
-   - Limit visual-QA-driven regeneration to **two total visual QA iterations** per deck. The first exported deck counts as iteration 1; one regenerated-and-rechecked deck counts as iteration 2. After iteration 2, do not keep looping. Record any remaining non-blocking concerns in `.tmp/<deck>/<deck>_visual_qa.json` or `.tmp/<deck>/<deck>_visual_qa.md`, and report unresolved blocking issues explicitly instead of starting another regeneration cycle.
-   - Tell the visual reviewer this iteration cap in its prompt: "最多进行两轮视觉 QA 迭代；若第二轮后仍有问题，只报告问题，不要求继续重做。"
-   - Use a separate reviewer subagent when subagents are available. Give it only the exported slide PNGs, the reference images, and the visual QA rubric; do not give it the generation script, prior QA pass/fail result, or your intended fixes.
-   - If subagents are unavailable, perform a fresh independent review pass yourself after clearing generation assumptions from the prompt context. Treat the pass as adversarial review, not author self-check.
-   - Inspect every `.tmp/<deck>/slides/slide_XX.png` at original size, not only a contact sheet.
-   - Save `.tmp/<deck>/<deck>_visual_qa.json` or `.tmp/<deck>/<deck>_visual_qa.md` with one entry per slide. Each entry must include `language_status`, `title_status`, `overflow_status`, `overlap_status`, `reference_match_status`, and `blocking_findings`.
-   - Fail visual QA if any created visible text is not Chinese, any page title wraps to multiple lines, any text leaves its card/text box, any module overlaps another module, or any footer/title/card is visibly clipped.
-   - If image export fails, visual QA is not complete; report `visual_qa_status: failed_or_unavailable`, not `completed`.
-14. Fix the first version and regenerate when content QA, hard style QA, or visual QA finds issues, while respecting the two-iteration cap for visual-QA-driven regeneration. Content QA and hard style QA errors remain blockers, but visual QA must not become an unbounded loop.
-
-## Output Rules
-
-- Save each generated deck and every deck-specific temporary artifact under `.tmp/<deck>/`.
-- Save the plan as `.tmp/<deck>/<deck>_plan.json` whenever the deck has正文内容页, so hard QA can compare planned visual-anchor kind/template against the rendered manifest.
-- Save generated decks to `.tmp/<deck>/<deck>.pptx`.
-- Save generated plans, deck-specific scripts, intermediate JSON, screenshots, extracted images, slide exports, and QA reports inside `.tmp/<deck>/` or its child directories.
-- Keep reusable skill files in `scripts/`, `references/`, and `assets/`; keep run-specific artifacts out of those folders.
-- When embedding source figures or tables, the source images may remain in their original input directory, but any derived or edited copies must be written inside `.tmp/<deck>/`.
-
-## Huawei Style Contract
-
-- Use 16:9 widescreen layout.
-- Use Microsoft YaHei for Chinese and Arial for English-compatible text. Use Impact only for large numeric data.
-- Use Chinese for all generated visible text. English source material must be translated or summarized in Chinese; only technical acronyms, model names, product names, arXiv identifiers, and source-figure text may remain in English.
-- Use Huawei red `C00000`, black, white, and restrained grays as the default palette.
-- Do not use animations or transitions.
-- Use 0.5 pt lines for normal card outlines, separators, arrows, and chart axes.
-- Keep typography to a small fixed scale: 10 pt, 12 pt, 14 pt, 18 pt, and 24 pt. Do not use any other font size.
-- Use these size bands:
-  - Page title: 24 pt bold, Huawei red `C00000`.
-  - Page subtitle/title note: 18 pt bold, Huawei red `C00000`, placed after the main title on the same line.
-  - Analysis summary: 14 pt; left label is bold white text on Huawei red; in the gray body only the meaning-specific point labels are bold, and the explanatory text after each colon is regular weight.
-  - First-level card title: 14 pt.
-  - Second-level title: 14 pt.
-  - Body: 12 pt by default; use 14 pt for conclusion, interpretation, or other large text boxes.
-  - KPI/data emphasis: 18 pt.
-  - Footers and compact source captions: 10 pt.
-  - Never use a font size outside 10/12/14/18/24 pt; 10 pt is the minimum.
-- Use 1.5x line spacing for body text boxes by default (`lineSpacingMultiple: 1.5` in pptxgenjs).
-- Page title area must fit on one line: keep the 24 pt main title short, and move explanatory text into the 18 pt `titleNote` / `titleSubtitle`. Do not rely on wrapping, shrinking, or hiding overflow.
-- Every正文内容页 must include a top-right chapter indicator flush with the top page edge and right-aligned to the same content edge as the title rule. Keep enough vertical distance between the indicator and the page title so the title never visually touches the tabs. Use thin black tab borders, white inactive tabs, one Huawei-red active tab, and 10 pt bold labels matching the contents-page section names. Tab widths must adapt to label length with a reasonable maximum total width; do not pre-truncate normal section names such as `semi-PD 设计`.
-- Every正文内容页 must reserve the first content band below the title for `分析总结`: red left label and gray right body, with no outer border around the whole summary band. Keep it high on the slide, then place detailed cards/charts/tables below it.
-- Generated tables must be real PPT table objects, not card grids made from manually aligned rectangles. Use a Huawei-red header row, 0.5 pt cell borders, restrained white/light-gray body rows, and bold first-column labels when they identify row entities.
-- Keep expression dense and restrained: viewpoint in the title, limited red emphasis, no generic AI decoration, no ornamental gradients.
-- Do not use giant empty cards. A large gray card is acceptable only when it contains a real table, chart, source figure, process, dense list, or compact evidence block.
-- Match text amount to the text-box size. If a card is large, write enough source-grounded interpretation, implications, or conclusion text to visually fill it at 12/14 pt with 1.5x line spacing; otherwise shrink the card or choose a more compact layout.
-- Treat `assets/slides_ref/05 内容 二分栏.png`, `06 内容 偏分栏.png`, `07 内容 三分栏.png`, and `08 内容 四分栏.png` as the fixed content-layout references. A content page may have one or more dominant figure/table/chart/diagram regions, but each must remain inside the Huawei page system: title, section indicator, `分析总结`, red first-level bars, thin gray frames, interpretation text, and footer. Do not turn a content slide into a full-bleed illustration or a standalone hand-drawn poster.
-- For 图文并茂 pages, use `contentLayout` as a layout container with `blocks`: first choose exactly one of the four fixed page layouts (`05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, `08 内容 四分栏`), then declare one or more `visual_anchor` blocks, then add editable PPT text annotations. Express generated/transcribed tables as `Matrix/table` visual anchors and source figures/tables as `Evidence` visual anchors. Image placement must use proportional contain placement only; never stretch width and height independently.
-- Treat `06 内容 偏分栏` as a special layout, not an ordinary two-column card layout: the left wide region is visual-only, with optional editable caption/source below the image; the right narrow region is one to three stacked interpretation cards. Do not put explanatory body text inside the left visual box.
-- Do not create layout-specific visual roles such as mini-card grids or metric rows in the layout layer. Express repeated boxes, KPI strips, sectioned grids, tables, and process cards with existing `visual_anchor.kind` / `template` semantics whenever possible: `Quantity/data_cards`, `Matrix/capability_matrix`, `Matrix/table`, `Sequence/process`, or `Evidence`. Every meaningful visual block must be declared as a visual anchor and recorded in the manifest; text annotations remain editable PPT text outside `visual_spec`.
+10. Inspect every exported `.tmp/<deck>/slides/slide_XX.png` at original size. Regenerate when content QA, hard QA, or visual inspection finds blocking issues: unreadable evidence, evidence collage, broken image, text overflow, title clipping, footer clipping, module overlap, non-Chinese generated text, sparse cards, or drift from Huawei layout references.
 
 ## Built-In Components
 
-Use `scripts/pptx/hw_pptx_helpers.js` only for stable page primitives:
+- `createHuaweiDeck(metadata)`: creates a 16:9 deck.
+- `addCoverSlide(pptx, data)`: creates a Huawei red-band cover.
+- `addTocSlide(pptx, data)`: creates a numbered contents page.
+- `addVisualAnchorContentSlide(pptx, data)`: creates summary/content pages with title, section tabs, `分析总结`, visual anchors, optional `contentLayout`, footer, and manifest entries.
+- `writeVisualAnchorManifest(pptx, fileName)`: writes rendered visual-anchor evidence for QA.
 
-- `createHuaweiDeck(metadata)` creates a 16:9 deck.
-- `addCoverSlide(pptx, data)` creates a red-band cover.
-- `addTocSlide(pptx, data)` creates a numbered contents page.
-- `addPageTitle`, `addAnalysisSummary`, `addSectionTabs`, `addFooter`, `redTitleCard`, `grayCard`, `textBox`, and `safeText` are low-level building blocks for the unified content-slide path.
+## Runtime Script Map
 
-Use `scripts/pptx/hw_visual_anchor_slide.js` for every正文内容页:
+Use these repository scripts; do not reimplement their jobs inside a deck script:
 
-- `addVisualAnchorContentSlide(pptx, data)` creates the page title, top-right chapter indicator, `分析总结`, one or more visual anchors, optional supporting cards or `contentLayout` modules, footer, and manifest entries.
-- `addEvidenceModule(slide, visualAnchor, area)` renders a source-backed evidence anchor inside an existing content region.
-- `addSupportingCards(slide, cards, area)` adds interpretation cards that explain the primary visual anchor.
-- `writeVisualAnchorManifest(pptx, fileName)` writes `.tmp/<deck>/<deck>_visual_anchor_manifest.json`; hard QA uses this as evidence that every正文内容页 has at least one rendered visual anchor.
+- `scripts/pptx/parse_ppt_content_brief.js`: parses `ppt_content_brief.md` into the immutable slide contract and parser-derived layout types.
+- `scripts/pptx/hw_pptx_helpers.js`: page shell, cover, contents, title, section tabs, footer, text measurement, and Huawei primitive helpers.
+- `scripts/pptx/hw_visual_anchor_slide.js`: the only supported summary/content-page entrypoint; routes evidence, generated visuals, layout modules, and manifest data through one path.
+- `scripts/pptx/export_pptx_images.js`: exports the generated deck to slide PNGs for visual inspection.
+- `scripts/qa/check_huawei_pptx.js`: hard QA for deck structure, layout rules, text fit, plan alignment, visual-anchor manifest alignment, and render evidence.
 
-For `addVisualAnchorContentSlide`, pass the 24 pt title as `title` and the 18 pt explanatory subtitle as `titleNote` or `titleSubtitle`. Pass `summary` as a string, array, or `{ body/items, fill }`. Prefer `summary.body` entries as `{ label, text }`, for example `{ label: "规划先行", text: "先完成页面级观点规划，再进入生成脚本。" }`. The helper keeps the left label fixed as `分析总结`; do not use `summary.title` to replace that label. Use `visualAnchorCaption` or `visual_anchor_caption` for the editable Chinese figure-legend text below the visual anchor. This caption is PPT text-layer content and must stay outside `visual_anchor.visual_spec`. For richer pages, pass `contentLayout` with `type` and `modules`; `reference` may be present as a derived compatibility label, but `contentLayout.type` is the layout source of truth. The renderer decides each module's internal 图文 relationship from the blocks, panel size, and source visual dimensions.
-
-Also pass `sections` and `currentSection`. `sections` should be an array of top-level contents-page chapter names, and `currentSection` may be a matching string or a 1-based index. The helper draws the top-right chapter indicator, dynamically sizes each tab from the visible label length, caps total width, right-aligns the indicator, and highlights the active tab in Huawei red.
-
-For structured visual anchors, use `scripts/pptx/hw_diagram_helpers.js` as the shared validator and `addVisualAnchorContentSlide` as the content-page entrypoint. Do not call low-level drawing helpers directly from deck-specific scripts. Express local custom work behind `visual_anchor` data and supporting cards. Validate final deck composition through exported PNGs.
-
-Do not duplicate visual-anchor kind or template rules in deck-specific prompts or scripts. `references/visual_diagram_rules.md` is the single source of truth for kind/template selection. `references/visual_diagram_spec_schema.md` is the single source of truth for field-level schema examples. The skill workflow only decides when to load those references.
-
-Use `scripts/pptx/parse_ppt_content_brief.js` only when a `ppt_content_brief.md` upstream input is present. It validates the brief and returns normalized `metadata`, `sections`, `summaryPage`, `tocItems`, `contentPages`, `slideContract`, and `planContract` data. Copy the hard fields from `planContract.slides` into the deck plan: `title`, `titleNote`, `summary.body`, `sections`, content-slide `currentSection`, and `contentLayout.type`. Summary Page is standalone and does not get `currentSection`. Do not hand-map these fields from memory. Keep the top `分析总结` band unchanged; the parser-derived lower content-area layout is mandatory: one summary viewpoint uses `contentLayout.type = "biased_column"`, two use `"two_column"`, and three use `"three_column"`. The fixed Huawei reference label is derived from the type by scripts and QA. The parser does not choose `visual_anchor.kind`, `template`, font size, color, or visual renderer.
-
-Generated visual anchors are not miniature PPT pages. They may include relationship-native labels, axis text, values, and time labels, but must not include page titles, slide claims, figure legends, source notes, standalone captions, interpretation paragraphs, node notes, bottom slogans, side callouts, or empty placeholder boxes. Put those in editable PPT text boxes, `分析总结`, supporting cards, or evidence legends. Do not use standalone explanation fields anywhere under `visual_spec`, including `annotation`, `note`, `notes`, `summary`, `callout`, `callout_title`, `caption`, `description`, `detail`, `figure_legend`, `source_note`, `interpretation`, `insight`, `rationale`, `reading_guide`, `takeaway`, or `conclusion`. The `visual_spec` top-level schema is closed per template; do not add ad hoc prose keys.
-
-When embedding generated image output in PPT, preserve the image aspect ratio with proportional contain placement. Do not stretch an image to fill a region. If a visual looks too sparse after proportional placement, redesign the slide layout or regenerate the visual content instead of forcing the image to scale non-proportionally.
-
-## pptxgenjs Guardrails
-
-- Pass colors without `#`, for example `C00000`.
-- Do not use 8-digit hex colors to express transparency.
-- Do not use Unicode bullets. Use plain lines, numbered labels, or ASCII hyphens.
-- Do not reuse an options object after passing it to `pptxgenjs`; clone or create a fresh object each time.
-- Prefer explicit `x`, `y`, `w`, `h`, `fontFace`, `fontSize`, `color`, `margin`, and `fit` values.
-- Prefer `fit: "shrink"` only for source images and dense figure/table evidence. Do not rely on text autofit or shrink-to-fit to make prose fit; shorten, split, or resize text boxes instead.
-- Use helper functions for cards, titles, charts, and footers so mechanical style rules remain enforceable. Tables on正文内容页 must be expressed as `Matrix/table` visual anchors, not direct helper calls.
-
-## Planning Heuristics
-
-- Use a cover and contents page for decks over four slides.
-- Do not add standalone chapter divider pages; begin each chapter with a normal content slide whose top-right indicator highlights the current chapter.
-- Use `Quantity` anchors for KPI summaries, quantitative comparisons, scorecards, and compact performance views.
-- Use `Sequence` anchors for workflows, timelines, delivery plans, and operating mechanisms.
-- Use `Hierarchy` anchors only for architectures, capability stacks, classification trees, and layered systems with explicit hierarchy. Do not use a pyramid/stack merely because there are several mechanisms or takeaways.
-- Use `Matrix` anchors for comparisons, heatmaps, prioritization quadrants, and structured tables.
-- Use `Loop` anchors for feedback cycles, iteration mechanisms, flywheels, and closed-loop governance.
-- Use `Network` anchors for dependencies, module relationships, stakeholder maps, and causal influence graphs.
-- Use `Matrix/table` visual anchors for generated or transcribed structured comparisons. Only embed a table as an image when preserving the original paper table as source evidence is the point of the slide.
-- Merge related content when one dense slide can carry it cleanly.
-- For paper or technical-report inputs, default to this story arc unless the user asks otherwise: problem and trade-off, key insight, architecture/mechanism, algorithm or workflow, evaluation setup, key results, implementation or deployment notes, conclusion.
-- For every正文内容页, choose the page's `visual_anchor.kind` and `template` before choosing text card geometry. Use `Evidence` when source figures/tables/screenshots carry the claim; otherwise choose the dominant relationship kind. Before coding, run a quick rejection check: if the chosen template's required relationship is not stated in the source, summary, or `relationship_test`, change the template.
-- Use the 图文并茂 reference layouts when the visual anchor is important: `05 内容 二分栏` for two balanced content modules, `06 内容 偏分栏` for one large visual-only region plus side interpretation cards, `07 内容 三分栏` for three parallel columns with optional red flow arrows, and `08 内容 四分栏` for a 2x2 evidence panel. Keep the visual framed and explained; do not let the diagram float without the matching red title bar, module structure, or nearby reading guidance.
-- Use original figures/tables as evidence when they carry important technical details; pair them with short interpretation cards rather than retyping every label. When using `addVisualAnchorContentSlide`, pass those cards through `supportingCards` / `supporting_cards`; this is how the helper produces the reference 10 large-visual-plus-side-cards layout.
-- Avoid using source figures as decoration. Each embedded figure must support a slide message and have a short caption or source note.
-- Every embedded source figure/table must be an evidence module, not a picture-only box. Include a figure-legend description directly below the visual: 12 pt, bold, italic, Chinese, with a meaning-specific prefix such as `semi-PD 实验结果：` or `semi-PD 架构图：`. The legend should sit close to the image/table bottom edge; do not place it at the bottom of a large empty image card. Put original figure/table number and source notes immediately below it in 10 pt. When the module has visible empty space, add 1-3 concise Chinese interpretation lines in the same module.
-- Prefer compact cards plus a chart/table/diagram/evidence region over full-height empty cards. If a card contains fewer than three substantive lines, do not stretch it to fill a column.
-- For conclusion and interpretation slides, use fewer but fuller text boxes with 14 pt body when the layout has enough space. Do not leave large cards half-empty just to keep wording short.
-- For supporting text regions, match the reference-image density: combine red title bars, compact text, numbered lists, small modules, chart/table interpretation, process explanations, or source-figure reading guidance.
-
-## QA Checklist
-
-Content QA:
-
-- Verify every planned slide appears in the deck.
-- If the deck consumed `ppt_content_brief.md`, verify parser output was used as the source of truth for every brief-backed slide. Check that each brief `页面标题`, `标题说明`, `分析总结` label/text, TOC `小标题`, content-slide `所属章节`, page count, page order, and parser-derived `contentLayout.type` appears unchanged in the plan and visible slide copy. Treat brief drift as higher priority than style, language, title-wrap, or visual-density concerns, but still fix sparse pages through stronger use of `正文内容`, source evidence, notes, and denser composition.
-- Verify every正文内容页 has a top-right chapter indicator and that the active tab matches the slide's section in the contents outline.
-- Verify正文内容页 proceed monotonically through the contents outline: chapter 1 pages, then chapter 2 pages, then chapter 3 pages. Do not bounce between sections.
-- Verify every正文内容页 has the top `分析总结` block, and verify cover and contents slides do not have it.
-- Verify the plan and manifest describe visual anchors by semantic `kind` and `template`.
-- Verify every正文内容页 records at least one primary `visual_anchor` in the plan. If a slide has no visual anchor, justify why the page is not a正文内容页 or redesign it. If a slide has several meaningful visual regions, declare them as separate anchors inside `contentLayout` modules instead of hiding them from QA.
-- Verify every正文内容页 records a `layout_reference` in the plan, and that every value is exactly one of `05 内容 二分栏`, `06 内容 偏分栏`, `07 内容 三分栏`, or `08 内容 四分栏`. No other evidence layout option exists.
-- Verify the implemented `visual_anchor.kind` and `template` match the plan before running QA. If the implementation changes a visual anchor, update the plan first and keep the reason fields aligned.
-- Verify every `visual_anchor` uses the new `kind`/`template` contract and does not include implementation-control fields such as `visual_strategy` or `intent`. Verify `Evidence` is used whenever source figure/table/screenshot evidence is the anchor.
-- Verify every conceptual `visual_anchor` has a `relationship_test`, and reject `Hierarchy/capability_stack` when the elements are merely parallel mechanisms, risks, factors, or metrics.
-- Verify every `visual_spec.highlight` has `highlight_reason` and that visible slide text tells the reader why that item is highlighted. Remove highlight when the reason is generic or absent.
-- Verify numeric matrix/heatmap scores are sourced or method-defined. If the values are subjective, convert them to a `Matrix/table` visual anchor with qualitative labels and observable signals.
-- Verify all generated visible text is Chinese, with only necessary technical acronyms/model names/source identifiers left in English.
-- Compare slide titles and key claims against the source material.
-- Verify numeric claims in titles, data cards, and conclusion slides against the source inventory.
-- Remove placeholders such as `TBD`, `TODO`, `XX`, `示例`, and accidental lorem ipsum unless the source material intentionally uses them.
-- Check that ordering matches the story line.
-- Check that every embedded source figure/table has a reason to appear and is referenced by the slide message.
-
-Visual QA:
-
-- Use the PowerPoint-rendered PNGs when available. LibreOffice-rendered PNGs are fallback evidence and must be marked as such.
-- Check titles, cards, tables, charts, and footers align to a consistent grid.
-- Check every正文内容页 has at least one visible primary visual anchor and that all anchors are integrated into the Huawei page structure rather than replacing it. The page must still show the title area, section indicator, `分析总结`, content framing, and footer.
-- Check 图文并茂 pages against `05 内容 二分栏.png`, `06 内容 偏分栏.png`, `07 内容 三分栏.png`, and `08 内容 四分栏.png`: use the matching fixed module count, keep red first-level title bars, preserve thin gray outlines, and place explanatory text close enough to the visual that the reading path is obvious. `08 内容 四分栏` is a 2x2 panel layout.
-- Check generated visual anchors stay in the content area rather than becoming full-slide posters. Their labels must be readable, but titles, page claims, figure legends, source notes, standalone captions, and detailed interpretation should remain in editable PPT text boxes.
-- Check generated image anchors are proportionally contained in their image region, not stretched to match the region. If proportional placement creates excessive whitespace, mark it as a layout/content redesign issue rather than accepting image distortion.
-- Check the top-right chapter indicator is present on正文内容页, mirrors the contents-page section order, is flush with the top page edge, is right-aligned to the title rule, uses one active red tab, and leaves clear vertical distance from the page title.
-- Check page title area is one line and does not enter the content area: main title is 24 pt, optional subtitle/title note is 18 pt.
-- Check every正文内容页 places the `分析总结` block directly below the title: red label on the left, gray summary text on the right, no more than three meaning-specific points. Only the point label before `：` is bold; the explanatory text after it is regular weight.
-- Check no text obviously overflows its card or table cell.
-- Check page main titles are 24 pt Huawei red, optional title notes are 18 pt Huawei red, not black.
-- Check body text uses 1.5x line spacing and 12/14 pt sizing, with conclusion or interpretation boxes using the larger body size when space allows.
-- Check large text boxes are filled with content length appropriate to their size; if a box looks sparse, add grounded explanation or reduce the box height.
-- Check red is used for hierarchy and emphasis, not as a page-wide accent everywhere.
-- Check chart labels, notes, and table values remain readable at final size.
-- Check every source figure/table Evidence anchor is visibly large enough to act as evidence. If proportional contain placement makes the figure occupy only a small fraction of its visual module, redesign the module aspect ratio, crop to the relevant source region inside `.tmp/<deck>/`, or choose a better-fitted evidence anchor. Do not accept tiny source figures just because they preserve aspect ratio.
-- Check generated/transcribed tables are editable PPT tables, not rectangle/text-box composites, SVG, or image output. It is acceptable for source paper tables to remain as images when they are evidence modules with legends and source notes.
-- Check every embedded source figure/table has a 12 pt bold italic Chinese figure-legend description tightly below the visual, plus any original source note in 10 pt immediately beneath it; fail the visual QA if a large gap appears between the visual and its legend. If a figure/table module has large unused space and no interpretation text, mark it as a layout issue rather than accepting it as true 图文并茂.
-- Compare against `assets/slides_ref/` for density and restraint before declaring done.
-- Use exported PNGs from `scripts/pptx/export_pptx_images.js` as the primary visual QA artifact.
-- The visual QA reviewer must be independent from the generation pass whenever subagents are available.
-- If visual rendering is unavailable, do not mark visual QA complete. Record the failed tool command, missing command, and residual risk.
-
-Hard QA:
-
-- Run `scripts/qa/check_huawei_pptx.js`.
-- Treat errors as blockers.
-- Treat `analysis_summary_missing` as a blocker for正文内容页.
-- Treat `analysis_summary_generic_label` as a blocker; replace `结论1：` style labels with content-specific labels.
-- Treat `section_divider_slide_present` as a blocker; remove standalone chapter divider pages and rely on the top-right chapter indicator.
-- Treat `section_indicator_missing` as a blocker for正文内容页; pass `sections` and `currentSection` to the helper and regenerate.
-- Treat `section_indicator_alignment` as a blocker; keep the chapter indicator right-aligned to the title/content edge.
-- Treat `section_order_regression` as a blocker; reorder slides so content follows the contents-page chapter sequence without jumping backward.
-- Treat `content_visual_anchor_manifest_missing`, `content_visual_anchor_missing`, `content_visual_anchor_unrendered`, `content_visual_anchor_template_invalid`, and `content_visual_anchor_manifest_invalid` as blockers; every正文内容页 must have at least one manifest-backed, rendered, schema-valid visual anchor.
-- Treat `content_visual_anchor_plan_missing`, `content_visual_anchor_plan_invalid`, and `content_visual_anchor_plan_mismatch` as blockers; the saved plan and rendered manifest must agree on visual-anchor kind/template.
-- Treat visual-anchor layout, plan, semantic relationship, score-basis, highlight, table-boundary, and render-evidence errors as blockers.
-- Treat `content_visual_anchor_highlight_unexplained`, `content_visual_anchor_subjective_scores`, and `content_visual_anchor_relationship_unproven` as blockers; every highlight, score, and diagram relationship must have a recorded semantic basis.
-- Treat `content_visual_anchor_layout_unintegrated` as a blocker; source-figure/source-chart Evidence slides must remain 图文并茂 pages using one of the four fixed reference layouts with adjacent interpretation.
-- Treat `content_visual_anchor_image_missing` and `content_visual_anchor_image_too_small` as blockers; fix broken source paths, replace placeholder evidence, or redesign/crop the evidence area so the primary visual is readable at final slide size.
-- Treat `sparse_large_card` errors as blockers; add source-grounded explanation, interpretation, reading guidance, or move content from another sparse module into the card. Fix warnings of the same type unless the large card is intentionally dominated by a readable visual anchor. If no more evidence-backed content belongs there, shrink the card or choose a denser layout instead of leaving large empty space.
-- Fix warnings when they indicate visible drift from the Huawei style contract.
-- Record accepted warnings with a concrete reason. Common accepted warnings include helper-generated font-size variety caused by a page title, card title, body, footer, and labels coexisting on a dense page; do not accept warnings that mask low contrast, tiny text, off-palette colors, or animation.
-- Run hard QA with `--require-reference-review`, `--require-visual-anchor-manifest`, and `--require-render-dir` before final delivery so missing reference-image review, missing visual-anchor evidence, and missing exported PNGs fail the workflow.
+PowerPoint COM export is part of the delivery quality bar on Windows.

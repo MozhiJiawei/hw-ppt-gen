@@ -21,16 +21,13 @@ function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
-function baseProcessAnchor(id, layoutReference = "06 内容 偏分栏") {
+function baseProcessAnchor(id) {
   return {
     id,
     title: "规则复现",
     claim: "用于复现 QA 规则边界。",
     kind: "Sequence",
     template: "process",
-    why_this_visual: "流程锚点能稳定触发布局与 QA 检查。",
-    layout_reference: layoutReference,
-    relationship_test: "步骤之间存在先后依赖，适合用流程关系呈现。",
     visual_spec: {
       steps: [
         { id: "input", label: "输入" },
@@ -50,9 +47,6 @@ function tableAnchor(id, rows) {
     claim: "小模块内表格需要容量约束。",
     kind: "Matrix",
     template: "table",
-    why_this_visual: "表格用于复现四分栏模块内的高度容量风险。",
-    layout_reference: "08 内容 四分栏",
-    relationship_test: "多行多列指标存在结构化比较关系，适合表格呈现。",
     visual_spec: { rows },
   };
 }
@@ -64,9 +58,6 @@ function evidenceAnchor(id, imagePath) {
     claim: "源图必须在视觉区域内保持可读尺寸。",
     kind: "Evidence",
     template: "source_figure",
-    why_this_visual: "源图直接承载页面证据，缩放过小时会失去论证价值。",
-    layout_reference: "05 内容 二分栏",
-    relationship_test: "源图与结论存在直接证据关系，必须作为 Evidence 呈现。",
     source: {
       path: imagePath,
       caption: "极宽源图用于复现缩放过小的证据图问题。",
@@ -74,16 +65,13 @@ function evidenceAnchor(id, imagePath) {
   };
 }
 
-function compactTableAnchor(id, layoutReference = "07 内容 三分栏") {
+function compactTableAnchor(id) {
   return {
     id,
     title: "对齐复现表",
     claim: "用于复现分栏内容上下边界不齐的问题。",
     kind: "Matrix",
     template: "table",
-    why_this_visual: "表格锚点能稳定渲染并触发分栏模块几何记录。",
-    layout_reference: layoutReference,
-    relationship_test: "多项判断存在结构化比较关系，适合表格呈现。",
     visual_spec: {
       rows: [
         ["项", "判断"],
@@ -171,7 +159,6 @@ async function generateDeck() {
       sections,
       currentSection: "规则复现",
       summary: { body: [{ label: "兼容路径", text: "supportingCards 生成偏分栏时也应留下可校验布局语义。" }] },
-      layoutReference: "06 内容 偏分栏",
       visual_anchor: baseProcessAnchor("supporting_cards_resolved_layout"),
       supportingCards: [
         { title: "判断一", body: "左图说明输入路径。" },
@@ -345,7 +332,6 @@ function runBriefContractQaFixture(pptxPath) {
         title: "GPU Pooling",
         titleNote: "被模型改写的标题说明",
         currentSection: "浪费来自市场形态",
-        layout_reference: "06 内容 偏分栏",
         summary: {
           body: [
             { label: "场景", text: "长尾模型低频调用会放大固定 GPU 占用。" },
@@ -359,7 +345,6 @@ function runBriefContractQaFixture(pptxPath) {
         title: "市场型浪费",
         titleNote: "长尾模型低频请求与热门模型 burst 共同推高 GPU 冗余预留。",
         currentSection: "浪费来自市场形态",
-        layout_reference: "06 内容 偏分栏",
         summary: {
           body: [
             { label: "长尾错配", text: "低频模型需要保留服务能力，闲置成本被系统性放大。" },
@@ -372,7 +357,6 @@ function runBriefContractQaFixture(pptxPath) {
         title: "Token-Level 破局",
         titleNote: "Aegaeon 在 token 间隙抢占换模，降低 request-level 等待带来的 SLO 风险。",
         currentSection: "突破在 token 粒度",
-        layout_reference: "05 内容 二分栏",
         summary: {
           body: [
             { label: "调度", text: "prefill 和 decoding 分别服务 TTFT 与 TBT 目标。" },

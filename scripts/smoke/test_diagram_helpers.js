@@ -14,7 +14,7 @@ const {
   writeVisualAnchorImage,
 } = require("../pptx/hw_diagram_helpers");
 const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
-const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("../../references/visual_diagram_test_cases");
+const { cases: generatedCaseMatrix, DEFAULT_LAYOUT } = require("./fixtures/visual_diagram_test_cases");
 
 function baseSpec(overrides) {
   return {

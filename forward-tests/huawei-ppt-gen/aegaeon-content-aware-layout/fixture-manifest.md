@@ -62,7 +62,6 @@ Expected artifacts are judged after the run, but should be required by the Skill
 - generated `.pptx`;
 - deck plan JSON;
 - visual-anchor manifest JSON;
-- reference-review JSON;
 - exported slide PNGs;
 - hard-QA report;
 - visual-QA notes.

@@ -17,7 +17,6 @@
     "content-layout-smoke": "node scripts/smoke/generate_content_layout_schema_smoke.js && node scripts/qa/check_huawei_pptx.js .tmp/content_layout_schema_smoke/content_layout_schema_smoke.pptx --out .tmp/content_layout_schema_smoke/content_layout_schema_smoke.qa.json --require-plan .tmp/content_layout_schema_smoke/content_layout_schema_smoke_plan.json --require-visual-anchor-manifest .tmp/content_layout_schema_smoke/content_layout_schema_smoke_visual_anchor_manifest.json",
     "test:powerpoint-com": "node scripts/smoke/test_powerpoint_com_export.js",
     "diagram-smoke": "node scripts/smoke/verify_diagram_components.js",
-    "reference-review-template": "node scripts/pptx/prepare_reference_review.js --out .tmp/reference_review.json",
     "smoke": "npm run test:ppt-content-brief && npm run test:visual-anchor-contract && npm run test:text-height && npm run test:qa-rules && npm run content-layout-smoke && npm run sample && npm run check-sample && npm run diagram-smoke && npm run test:powerpoint-com"
   },
   "dependencies": {

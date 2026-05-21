@@ -47,7 +47,6 @@ const CONTENT_LAYOUT_SCHEMA_RULES = Object.freeze({
   three_column: { reference: "07 内容 三分栏", moduleCount: 3 },
   four_column: { reference: "08 内容 四分栏", moduleCount: 4 },
 });
-const CONTENT_LAYOUT_REFERENCES = new Set(Object.values(CONTENT_LAYOUT_SCHEMA_RULES).map((rule) => rule.reference));
 const LANGUAGE_ALLOWLIST = new Set([
   "ai",
   "api",
@@ -80,16 +79,13 @@ function usage() {
 }
 
 function parseArgs(argv) {
-  const args = { input: argv[2], out: null, requireRenderDir: null, requireReferenceReview: null, requireVisualAnchorManifest: null, requirePlan: null, requirePptContentBrief: null };
+  const args = { input: argv[2], out: null, requireRenderDir: null, requireVisualAnchorManifest: null, requirePlan: null, requirePptContentBrief: null };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--out") {
       args.out = argv[i + 1];
       i += 1;
     } else if (argv[i] === "--require-render-dir") {
       args.requireRenderDir = argv[i + 1];
-      i += 1;
-    } else if (argv[i] === "--require-reference-review") {
-      args.requireReferenceReview = argv[i + 1];
       i += 1;
     } else if (argv[i] === "--require-visual-anchor-manifest") {
       args.requireVisualAnchorManifest = argv[i + 1];
@@ -774,36 +770,6 @@ function checkRenderEvidence(renderDir, expectedSlides) {
   return issues;
 }
 
-function checkReferenceReviewEvidence(fileName) {
-  if (!fileName) return [];
-  if (!fs.existsSync(fileName)) {
-    return [issue(null, "reference_review_missing", "error", `Required reference review file not found: ${fileName}`)];
-  }
-  try {
-    const review = JSON.parse(fs.readFileSync(fileName, "utf8"));
-    const refs = Array.isArray(review.references) ? review.references : [];
-    const refDir = path.resolve("assets", "slides_ref");
-    const expectedFiles = fs.existsSync(refDir)
-      ? fs.readdirSync(refDir).filter((name) => name.toLowerCase().endsWith(".png")).sort((a, b) => a.localeCompare(b, "zh-Hans-CN", { numeric: true })).map((name) => path.relative(process.cwd(), path.join(refDir, name)).replace(/\\/g, "/"))
-      : [];
-    const reviewedFiles = new Set(refs.map((ref) => String(ref.file || "").replace(/\\/g, "/")));
-    const missingFiles = expectedFiles.filter((file) => !reviewedFiles.has(file));
-    const incomplete = refs.filter((ref) => !ref.loaded || !Array.isArray(ref.observations) || ref.observations.length === 0 || !Array.isArray(ref.applied_to_slides) || ref.applied_to_slides.length === 0);
-    if (expectedFiles.length && missingFiles.length) {
-      return [issue(null, "reference_review_missing_images", "error", `Reference review does not cover every bundled reference image.`, { missing_files: missingFiles })];
-    }
-    if (!expectedFiles.length && refs.length < 5) {
-      return [issue(null, "reference_review_too_few", "error", `Reference review contains only ${refs.length} images.`)];
-    }
-    if (incomplete.length) {
-      return [issue(null, "reference_review_incomplete", "error", `${incomplete.length} reference images lack observations or slide applications.`)];
-    }
-  } catch (error) {
-    return [issue(null, "reference_review_invalid", "error", `Could not parse reference review JSON: ${error.message}`)];
-  }
-  return [];
-}
-
 function contentSlideNumbers(slideEntries) {
   return slideEntries
     .map((entry) => {
@@ -1118,21 +1084,12 @@ function checkVisualAnchorLayout(slide, entry) {
   const spec = entry.visual_anchor || {};
   const template = safeText(spec.template);
   const hasSideCards = Number(entry.supporting_cards_count || 0) > 0;
-  const layoutReference = safeText(entry.layout_reference || spec.layout_reference || "");
   const isEvidenceFigure = spec.kind === "Evidence" && /source_(figure|chart)/.test(template);
-  if (layoutReference && !CONTENT_LAYOUT_REFERENCES.has(layoutReference)) {
-    return [issue(slide, "content_visual_anchor_layout_invalid", "error", "Visual-anchor layout_reference must be one of the four fixed Huawei content layouts.", {
-      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
-      layout_reference: layoutReference,
-      allowed_layout_references: [...CONTENT_LAYOUT_REFERENCES],
-    })];
-  }
   const hasContentLayout = Boolean(entry.content_layout_schema);
-  if (isEvidenceFigure && (!CONTENT_LAYOUT_REFERENCES.has(layoutReference) || (!hasSideCards && !hasContentLayout))) {
+  if (isEvidenceFigure && !hasSideCards && !hasContentLayout) {
     return [issue(slide, "content_visual_anchor_layout_unintegrated", "error", "Evidence source figures/charts must use one of the four fixed 图文并茂 layouts with adjacent interpretation, not a picture-only composition.", {
       visual_anchor_id: entry.visual_anchor_id || spec.id || "",
       template,
-      layout_reference: layoutReference,
     })];
   }
   return [];
@@ -1196,26 +1153,6 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
           planned_template: planned.template || "",
         }));
         return;
-      }
-      for (const [field, type] of [
-        ["why_this_visual", "content_visual_anchor_plan_reason_missing"],
-        ["layout_reference", "content_visual_anchor_layout_missing"],
-        ["relationship_test", "content_visual_anchor_relationship_unproven"],
-      ]) {
-        if (!safeText(planned[field])) {
-          issues.push(issue(page, type, "error", `Planned visual anchor must declare ${field}.`, {
-            planned_index: idx,
-            planned_id: planned.id || "",
-          }));
-        }
-      }
-      if (safeText(planned.layout_reference) && !CONTENT_LAYOUT_REFERENCES.has(safeText(planned.layout_reference))) {
-        issues.push(issue(page, "content_visual_anchor_layout_invalid", "error", "Planned layout_reference must be one of the four fixed Huawei content layouts.", {
-          planned_index: idx,
-          planned_id: planned.id || "",
-          layout_reference: planned.layout_reference,
-          allowed_layout_references: [...CONTENT_LAYOUT_REFERENCES],
-        }));
       }
       const actualEntry = planned.id && actualById.has(planned.id) ? actualById.get(planned.id) : actualEntries[idx];
       const actual = actualEntry?.visual_anchor || {};
@@ -1330,16 +1267,6 @@ function checkVisualAnchorSemantics(slide, entry, visibleText) {
     }
   }
 
-  if (spec.kind === "Hierarchy" && spec.template === "capability_stack") {
-    const relation = safeText(entry.relationship_test || spec.relationship_test || "");
-    if (!/(支撑|包含|分层|层级|依赖|构成|自下而上|底层|上层|抽象|拆解)/.test(relation)) {
-      issues.push(issue(slide, "content_visual_anchor_relationship_unproven", "error", "Hierarchy/capability_stack requires a relationship_test proving a real layered, containment, dependency, or support relationship.", {
-        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
-        relationship_test: relation,
-      }));
-    }
-  }
-
   if ((spec.template === "capability_matrix" || spec.template === "heatmap") && hasSubjectiveDecimalGrid(visual)) {
     const scoreBasis = safeText(entry.score_basis || spec.score_basis || "");
     if (scoreBasis.length < 12 || !hasCjk(scoreBasis)) {
@@ -1390,26 +1317,10 @@ function slideVisibleTextMap(slideEntries) {
   }));
 }
 
-function plannedLayoutReference(slide) {
-  const anchors = Array.isArray(slide?.visual_anchors) ? slide.visual_anchors : [];
-  return safeText(slide?.layout_reference)
-    || safeText(slide?.layoutReference)
-    || safeText(slide?.contentLayout?.reference)
-    || safeText(slide?.contentLayout?.layout_reference)
-    || safeText(slide?.content_layout?.reference)
-    || safeText(slide?.content_layout?.layout_reference)
-    || safeText(anchors.find((anchor) => safeText(anchor?.layout_reference))?.layout_reference);
-}
-
 function plannedContentLayoutType(slide) {
   return safeText(slide?.contentLayout?.type)
     || safeText(slide?.content_layout?.type)
     || safeText(slide?.layout_schema?.type);
-}
-
-function expectedContentLayoutReference(expected) {
-  const type = safeText(expected?.contentLayout?.type);
-  return safeText(CONTENT_LAYOUT_SCHEMA_RULES[type]?.reference) || safeText(expected?.contentLayout?.reference);
 }
 
 function checkPptContentBriefPlanAlignment(briefFileName, planFileName) {
@@ -1498,16 +1409,6 @@ function checkPptContentBriefPlanAlignment(briefFileName, planFileName) {
         viewpoint_count: expected.viewpointCount,
         expected_content_layout_type: expectedLayoutType,
         actual_content_layout_type: actualLayoutType,
-      }));
-    }
-    const actualLayoutReference = plannedLayoutReference(planned);
-    const expectedLayoutReference = expectedContentLayoutReference(expected);
-    if (actualLayoutReference && actualLayoutReference !== expectedLayoutReference) {
-      issues.push(issue(page, "ppt_content_brief_layout_mismatch", "error", "Deck plan layout_reference conflicts with parser-derived contentLayout.type.", {
-        viewpoint_count: expected.viewpointCount,
-        expected_content_layout_type: expectedLayoutType,
-        expected_layout_reference: expectedLayoutReference,
-        actual_layout_reference: actualLayoutReference,
       }));
     }
   }
@@ -1741,7 +1642,6 @@ async function main() {
   }
   issues.push(...checkSectionOrder(slides));
   issues.push(...checkRenderEvidence(args.requireRenderDir, slides.length));
-  issues.push(...checkReferenceReviewEvidence(args.requireReferenceReview));
   issues.push(...checkVisualAnchorManifest(args.requireVisualAnchorManifest, slides, args.requirePlan));
   issues.push(...checkPptContentBriefPlanAlignment(args.requirePptContentBrief, args.requirePlan));
   issues.push(...checkPptContentBriefVisibleAlignment(parsedBrief, slides));

@@ -54,12 +54,8 @@ const expectedVisualAnchorQaRules = [
   "content_visual_anchor_image_too_small",
   "content_visual_anchor_highlight_unexplained",
   "content_visual_anchor_subjective_scores",
-  "content_visual_anchor_relationship_unproven",
-  "content_visual_anchor_plan_reason_missing",
   "content_visual_anchor_plan_mismatch",
   "content_visual_anchor_layout_unintegrated",
-  "content_visual_anchor_layout_missing",
-  "content_visual_anchor_layout_invalid",
   "content_visual_anchor_manifest_mismatch",
   "content_visual_anchor_table_contract_mismatch",
   "content_visual_anchor_table_overflow",
@@ -207,7 +203,6 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
     supportingCards: [
       { title: "解读", body: ["侧边卡用于形成图文并茂阅读路径。"] },
     ],
-    layoutReference: "06 内容 偏分栏",
     visual_anchor: {
       ...imageVisualSpec,
       id: "caption_outside_visual_spec",
@@ -219,7 +214,8 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
   const slide = manifest.slides[0];
   assert(slide.visual_anchor_caption, "manifest should record PPT-layer visual anchor caption placement");
   assert.equal(slide.supporting_cards_count, 1, "manifest should record side interpretation cards for 图文并茂 layouts");
-  assert.equal(slide.layout_reference, "06 内容 偏分栏", "manifest should record the intended content layout reference");
+  assert.equal(slide.resolved_layout_type, "biased_column", "manifest should record the resolved content layout family");
+  assert.equal(slide.content_layout_schema.reference, "06 内容 偏分栏", "manifest should record the derived reference template");
   assert.equal(slide.visual_anchor_caption.text, "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。");
   assert(!slide.visual_anchor.visual_spec.caption, "caption must stay outside visual_spec");
   assert(!slide.visual_anchor.visual_spec.figure_legend, "figure legend must stay outside visual_spec");
@@ -388,12 +384,13 @@ function assertTableHelperIsNotPublicSchemaEscapeHatch() {
 
 function assertSkillDocumentsCurrentPath() {
   const skill = read("SKILL.md");
+  const layoutStandards = read("references/layout_standards.md");
   assert(skill.includes("addVisualAnchorContentSlide"), "SKILL should document the unified content-slide entrypoint");
   assert(skill.includes("--require-visual-anchor-manifest"), "SKILL should require manifest-backed visual-anchor QA");
   assert(skill.includes("--require-plan"), "SKILL should require plan-backed visual-anchor alignment QA");
-  assert(skill.includes("05 内容 二分栏"), "SKILL should document the fixed content-layout references");
-  assert(skill.includes("至少一个"), "SKILL should document that content pages may have one or more visual anchors");
-  assert(skill.includes("Choose the visual anchor's semantic `kind` and `template`"), "SKILL should document semantic visual-anchor selection");
+  assert(layoutStandards.includes("05 内容 二分栏"), "layout standards should document the fixed content-layout references");
+  assert(skill.includes("one primary evidence object"), "SKILL should document the primary evidence standard");
+  assert(skill.includes("Evidence"), "SKILL should document source-evidence visual anchors");
 }
 
 function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
@@ -412,7 +409,7 @@ function assertContentLayoutDoesNotExposePageRegionOverride() {
   const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
   assert(!contentSlide.includes("data.contentArea || data.content_area"), "contentLayout must not let deck scripts override the fixed page region");
   assert(contentSlide.includes("rejectContentLayoutPageRegionOverrides"), "contentLayout should fail fast when deck scripts pass page-region coordinates");
-  assert(schema.includes("`contentLayout.type` is the authoritative layout choice"), "content layout reference should describe the positive minimal schema");
+  assert(schema.includes("`contentLayout.type` is authoritative"), "content layout reference should describe the positive minimal schema");
   assert(!skill.includes("contentArea"), "SKILL should avoid documenting removed content-layout page-region fields");
   assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
     title: "非法版心",

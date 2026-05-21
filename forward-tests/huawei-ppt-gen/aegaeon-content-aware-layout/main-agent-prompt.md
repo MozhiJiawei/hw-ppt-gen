@@ -81,7 +81,6 @@ Collect the candidate's output directory and inspect:
 - generated `.pptx`
 - deck plan JSON
 - visual-anchor manifest JSON
-- reference-review JSON
 - hard-QA report
 - exported slide PNGs
 - visual-QA notes

@@ -51,11 +51,7 @@ function planEntry(page, data) {
       id: anchor.id,
       kind: anchor.kind,
       template: anchor.template,
-      why_this_visual: `${anchor.title || anchor.id}用于验证内容布局模块中的视觉锚点渲染。`,
-      layout_reference: data.layoutReference,
-      relationship_test: `${anchor.kind}/${anchor.template}与该模块的信息关系一致。`,
     })),
-    layout_reference: data.layoutReference,
     content_layout: {
       type: data.contentLayout.type,
       reference: data.contentLayout.reference,
@@ -180,7 +176,6 @@ async function main() {
       title: "二分栏布局",
       titleNote: "两侧模块等宽承载图文信息",
       currentSection: "二分栏",
-      layoutReference: "05 内容 二分栏",
       summary: { body: [
         { label: "左右均衡", text: "两列都带红色标题栏，左侧解释背景，右侧放置主数据关系。" },
         { label: "图文并置", text: "图片模块与视觉锚点并列，形成一页多个信息对象的阅读路径。" },
@@ -251,7 +246,6 @@ async function main() {
       title: "偏分栏布局",
       titleNote: "左侧大视觉区加右侧解释栏",
       currentSection: "偏分栏",
-      layoutReference: "06 内容 偏分栏",
       summary: { body: [
         { label: "主次分明", text: "左侧宽栏承载大图或结构关系，右侧窄栏放两段可读解释。" },
         { label: "靠近解读", text: "解释栏紧贴主视觉，避免图片和文字彼此脱节。" },
@@ -290,7 +284,6 @@ async function main() {
       title: "三分栏布局",
       titleNote: "三列并列形成解释、图形和结论",
       currentSection: "三分栏",
-      layoutReference: "07 内容 三分栏",
       summary: { body: [
         { label: "三段递进", text: "左列铺垫，中列承载流程锚点，右列给出结论清单。" },
         { label: "密度一致", text: "每列使用相同红色标题栏和灰色内容区，保证横向扫描稳定。" },
@@ -388,7 +381,6 @@ async function main() {
       title: "四分栏布局",
       titleNote: "四个面板以 2x2 组合承载多证据",
       currentSection: "四分栏",
-      layoutReference: "08 内容 四分栏",
       summary: { body: [
         { label: "四块组合", text: "四分栏按 2x2 面板组织，不是简单四列拉伸。" },
         { label: "多锚点", text: "同页允许多个视觉锚点，硬 QA 只要求至少一个锚点落入 manifest。" },

@@ -134,24 +134,28 @@ Constraints:
 
 Owned by:
 
+- `references/delivery_standard.md`
+- `references/page_standards.md`
+- `references/brief_contract.md`
+- `references/layout_standards.md`
 - `references/content_layout_schema.md`
-- `references/visual_diagram_rules.md`
-- `references/visual_diagram_spec_schema.md`
-- `references/huawei_style_rules.md`
-- `references/reference_images.md`
-- `references/visual_diagram_test_cases.js`
+- `references/evidence_schema.md`
+- `references/generated_visual_schema.md`
 
 Responsibility:
 
-- define model-facing schemas and examples;
-- explain semantic choices such as `visual_anchor.kind` and `template`;
-- define field-level rules and reference layout choices.
+- define the delivery standard a generated deck must satisfy;
+- define immutable brief fields and how brief evidence is consumed;
+- define page, layout, evidence, and generated-visual schemas;
+- keep runtime-facing rules separate from implementation details and test fixtures.
 
 Constraints:
 
-- reference docs must describe schema, not implementation shortcuts;
+- reference docs must describe schema and quality standards, not implementation shortcuts;
+- evidence visuals and generated visuals are separate contracts;
 - visual templates are semantic categories, not renderer-specific categories;
-- new schema fields require matching implementation and QA support.
+- new schema fields require matching implementation and QA support;
+- smoke fixtures such as `scripts/smoke/fixtures/visual_diagram_test_cases.js` are development assets, not runtime references.
 
 ### Deck Plan
 

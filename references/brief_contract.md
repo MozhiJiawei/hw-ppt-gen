@@ -26,7 +26,7 @@ Preserve these fields in the plan and visible deck:
 - content-slide `所属章节` -> `currentSection`;
 - parser-derived `contentLayout.type`.
 
-Do not shorten, rewrite, hide, or substitute hard fields to satisfy style, density, title-wrap, or visual-QA feedback. If a hard field creates a visible design issue, keep it and record an upstream brief issue.
+Do not shorten, rewrite, hide, or substitute hard fields to satisfy style, density, or visual-QA feedback. If a hard field creates a visible design issue, keep it, let the layout allocate the needed space, and record an upstream brief issue only when the page still cannot fit.
 
 ## Layout Family
 
@@ -48,6 +48,10 @@ Use these fields as material for layout and compression:
 - `research_audit.md`: verification-only source. Do not copy Claim/Evidence/Implication scaffolding into visible slides.
 
 Local paths and Markdown image URLs inside `正文内容` or `参考图片` are source locators. Use them to find and route evidence; do not render the raw path text on the slide.
+
+`核心结论` is deck-level source material, not a cover subtitle. Use it to guide the summary page and speaker notes. If the cover needs a subtitle, use the Summary Page `标题说明` or a shorter positioning phrase that fits one line. The hard-field immutability rule applies to summary/content page `titleNote`; it does not require rendering the full `核心结论` inside the cover.
+
+When a brief captions a source figure with what it proves, preserve that evidence relationship. A source image cited for one page section may be reused or cropped if it proves another local module claim, but it must not be borrowed as a generic image placeholder for an unrelated claim.
 
 ## Forbidden Patterns
 

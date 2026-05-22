@@ -132,6 +132,69 @@ function safeText(value) {
   return String(value ?? "").trim();
 }
 
+function normalizeSemanticText(value) {
+  return safeText(value)
+    .toLowerCase()
+    .replace(/[\u3000\s]+/g, " ")
+    .replace(/[，。；：、！？“”‘’（）《》【】()[\]{}<>.,;:!?/\\|+=*_~`"'%-]+/g, " ");
+}
+
+function collectTextValues(value, out = []) {
+  if (value === null || value === undefined) return out;
+  if (typeof value === "string" || typeof value === "number") {
+    const text = safeText(value);
+    if (text) out.push(text);
+    return out;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTextValues(item, out));
+    return out;
+  }
+  if (typeof value === "object") {
+    Object.entries(value).forEach(([key, item]) => {
+      if (["path", "source", "id", "type", "kind", "template", "treatment"].includes(key)) return;
+      collectTextValues(item, out);
+    });
+  }
+  return out;
+}
+
+function semanticTokens(value) {
+  const text = normalizeSemanticText(value);
+  const tokens = new Set();
+  for (const match of text.matchAll(/[a-z0-9]+(?:\.[a-z0-9]+)?/g)) {
+    const token = match[0];
+    if (token.length >= 2) tokens.add(token);
+  }
+  for (const match of text.matchAll(/[\u4e00-\u9fff]{2,}/g)) {
+    const segment = match[0];
+    if (segment.length <= 4) {
+      tokens.add(segment);
+    }
+    for (let i = 0; i < segment.length - 1; i += 1) {
+      tokens.add(segment.slice(i, i + 2));
+    }
+    for (let i = 0; i < segment.length - 2; i += 1) {
+      tokens.add(segment.slice(i, i + 3));
+    }
+  }
+  [
+    "evidence", "baseline", "method", "result", "risk", "latency", "throughput", "quality", "cost",
+    "cache", "retention", "routing", "training", "inference", "memory", "batch", "table", "figure",
+    "证据", "基线", "方法", "结果", "风险", "延迟", "吞吐", "质量", "成本", "缓存", "保留", "路由", "训练", "推理", "内存", "批量", "表", "图",
+  ].forEach((phrase) => {
+    if (text.includes(phrase.toLowerCase())) tokens.add(phrase.toLowerCase());
+  });
+  return tokens;
+}
+
+function semanticOverlap(left, right) {
+  const leftTokens = semanticTokens(left);
+  const rightTokens = semanticTokens(right);
+  const common = [...leftTokens].filter((token) => rightTokens.has(token));
+  return common;
+}
+
 function emuToIn(value) {
   return Number(value || 0) / 914400;
 }
@@ -643,13 +706,14 @@ function checkSlideXml(name, xml) {
         issues.push(issue(slide, "page_title_color", "error", `Page title should be Huawei red (C00000), found ${[...titleColors].join(", ")}.`, { text: title.text }));
       }
       const titleLines = estimatePageTitleLines(title.text, title.w || 12.2, maxSize || 24);
-      if (titleLines > 1) {
-        issues.push(issue(slide, "page_title_wrap", "error", "Page title is estimated to wrap beyond one line; shorten the Chinese viewpoint title.", { estimated_lines: titleLines, text: title.text }));
-      }
       if (title.h && availableTextLines(title, maxSize || 24, 1.15) < titleLines) {
         issues.push(issue(slide, "page_title_overflow_estimate", "error", "Page title text is estimated to exceed its text box height.", { estimated_lines: titleLines, available_lines: Math.round(availableTextLines(title, maxSize || 24, 1.15) * 10) / 10, text: title.text }));
       }
     }
+  }
+
+  if (slide === 1) {
+    issues.push(...checkCoverSubtitle(shapes));
   }
 
   if (isSectionSlide(shapes)) {
@@ -816,11 +880,19 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     const slideXml = slideEntries.find((item) => slideNumber(item.name) === slide)?.xml || "";
     const visibleText = extractShapes(slideXml).map((shape) => shape.text).filter(Boolean).join("\n");
     const pageEntries = byPage.get(slide) || [];
+    const strictEntries = pageEntries.filter((entry) => isStrictVisualAnchorSpec(entry.visual_anchor || entry));
     if (pageEntries.length < 1) {
       issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have at least one manifest-backed visual anchor.", {
         manifest_entries: pageEntries.length,
       }));
       continue;
+    }
+    if (strictEntries.length < 1) {
+      issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have at least one real visual anchor. Structured components such as data cards, tables, capability matrices/stacks, and heatmaps support density but cannot replace evidence or generated diagrams.", {
+        manifest_entries: pageEntries.length,
+        strict_visual_anchor_entries: strictEntries.length,
+        supporting_component_entries: pageEntries.length - strictEntries.length,
+      }));
     }
 
     issues.push(...checkContentLayoutSchema(slide, pageEntries));
@@ -945,10 +1017,15 @@ function checkContentLayoutSchema(slide, entries) {
       actual_reference: first.reference || "",
     }));
   }
-  if (Number(first.visual_anchor_modules_count) < 1) {
-    issues.push(issue(slide, "content_layout_schema_anchor_missing", "error", "Content layout schema must include at least one visual-anchor block.", {
+  const strictAnchorCount = Number.isFinite(Number(first.strict_visual_anchor_blocks_count))
+    ? Number(first.strict_visual_anchor_blocks_count)
+    : Number(first.visual_anchor_modules_count);
+  if (strictAnchorCount < 1) {
+    issues.push(issue(slide, "content_layout_schema_anchor_missing", "error", "Content layout schema must include at least one real visual-anchor block; structured components are supporting components, not anchors.", {
       type: first.type,
       visual_anchor_modules_count: first.visual_anchor_modules_count,
+      strict_visual_anchor_blocks_count: first.strict_visual_anchor_blocks_count,
+      supporting_component_blocks_count: first.supporting_component_blocks_count,
     }));
   }
   if (!/(05 内容 二分栏|06 内容 偏分栏|07 内容 三分栏|08 内容 四分栏)/.test(schemaText)) {
@@ -961,7 +1038,29 @@ function checkContentLayoutSchema(slide, entries) {
 
 function moduleHasVisualAnchorBlock(module = {}) {
   const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
-  return blocks.some((block) => block && block.type === "visual_anchor");
+  return blocks.some((block) => block && block.type === "visual_anchor" && isStrictVisualAnchorBlock(block));
+}
+
+function isStrictVisualAnchorBlock(block = {}) {
+  if (block.visual_role) return block.visual_role === "visual_anchor";
+  if (block.kind || block.template) return isStrictVisualAnchorSpec(block);
+  return block.type === "visual_anchor";
+}
+
+function isStrictVisualAnchorSpec(spec = {}) {
+  if (!spec || typeof spec !== "object") return false;
+  const kind = safeText(spec.kind);
+  const template = safeText(spec.template);
+  if (!kind || !template) return false;
+  return !isStructuredSupportingComponentSpec({ kind, template });
+}
+
+function isStructuredSupportingComponentSpec(spec = {}) {
+  const kind = safeText(spec.kind);
+  const template = safeText(spec.template);
+  return (kind === "Quantity" && ["data_cards", "heatmap"].includes(template))
+    || (kind === "Matrix" && ["table", "capability_matrix", "heatmap"].includes(template))
+    || (kind === "Hierarchy" && template === "capability_stack");
 }
 
 function estimatePageTitleLines(text, widthInches, titleFontSize = 24) {
@@ -1019,7 +1118,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     const occupied = module.occupied_area;
     const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
     if (!moduleHasVisualAnchorBlock(module)) {
-      issues.push(issue(slide, "content_layout_module_anchor_missing", "error", "Each two/three/four-column content module must include at least one visual-anchor block; text may explain evidence but cannot be a standalone column.", {
+      issues.push(issue(slide, "content_layout_module_anchor_missing", "error", "Each two/three/four-column content module must include at least one real visual-anchor block; text and supporting components may explain evidence but cannot be a standalone column.", {
         layout_type: schema.type,
         module_index: idx + 1,
         module_title: title,
@@ -1063,7 +1162,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     }
 
     const textBlocks = blocks.filter((block) => block.type === "text");
-    const totalTextLines = textBlocks.reduce((sum, block) => sum + Number(block.line_count || 0), 0);
+    const totalTextLines = textBlocks.reduce((sum, block) => sum + textBlockLineCount(block), 0);
     const totalTextLength = textBlocks.reduce((sum, block) => sum + Number(block.text_length || 0), 0);
     const maxModuleTextLines = schema.type === "three_column" ? 4 : 6;
     const maxModuleTextLength = schema.type === "three_column" ? 150 : 210;
@@ -1087,7 +1186,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
         const excess = Number(area.h) - estimated;
         const shortage = estimated - Number(area.h);
         const textLength = Number(block.text_length || 0);
-        const lineCount = Number(block.line_count || 0);
+        const lineCount = textBlockLineCount(block);
         const maxLineLength = Number(block.max_line_length || 0);
         if (textLength > 170 || maxLineLength > 56 || lineCount > 6) {
           issues.push(issue(slide, "content_layout_text_too_long", "error", "Text block is too prose-heavy for Huawei dense layout; compress into short claim lines, red-highlighted keywords, KPI/readout cards, or Matrix/table fragments.", {
@@ -1172,7 +1271,39 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       }
     }
   }
+
   return issues;
+}
+
+function checkCoverSubtitle(shapes) {
+  const issues = [];
+  const subtitles = shapes.filter((shape) =>
+    shape.text
+    && Number(shape.y) >= 2.85
+    && Number(shape.y) <= 3.75
+    && Math.max(...shape.fontSizes, 0) >= 14
+  );
+  for (const subtitle of subtitles) {
+    const fontSize = Math.max(...subtitle.fontSizes, 0) || 18;
+    const estimatedLines = estimateGeneratedWrappedLines(subtitle.text, fontSize, Math.max(Number(subtitle.w || 10.8) - 0.16, 0.1));
+    const visibleLength = subtitle.text.replace(/\s/g, "").length;
+    if (estimatedLines > 1 || visibleLength > 56) {
+      issues.push(issue(1, "cover_subtitle_too_long", "error", "Cover subtitle must be a one-line positioning phrase, not the full core conclusion. Move long argument chains to the summary page or speaker notes.", {
+        text: subtitle.text.slice(0, 220),
+        estimated_lines: estimatedLines,
+        max_estimated_lines: 1,
+        text_length: visibleLength,
+        max_text_length: 56,
+      }));
+    }
+  }
+  return issues;
+}
+
+function textBlockLineCount(block) {
+  const wrapped = Number(block?.estimated_wrapped_line_count);
+  if (Number.isFinite(wrapped) && wrapped > 0) return wrapped;
+  return Number(block?.line_count || 0);
 }
 
 function checkVisualAnchorLayout(slide, entry) {
@@ -1229,6 +1360,7 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchors[].kind and visual_anchors[].template."));
       continue;
     }
+    issues.push(...checkPlannedModuleEvidenceBinding(page, plannedSlide));
     const actualEntries = manifestByPage.get(page) || [];
     if (actualEntries.length < plannedAnchors.length) {
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Rendered manifest has fewer visual anchors than the deck plan.", {
@@ -1303,6 +1435,44 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
   return issues;
 }
 
+function checkPlannedModuleEvidenceBinding(page, plannedSlide = {}) {
+  const modules = Array.isArray(plannedSlide?.contentLayout?.modules) ? plannedSlide.contentLayout.modules : [];
+  const issues = [];
+  modules.forEach((module, moduleIdx) => {
+    const blocks = Array.isArray(module.blocks) ? module.blocks : [];
+    const moduleTextParts = [module.title || ""];
+    blocks
+      .filter((block) => block && block.type !== "visual_anchor")
+      .forEach((block) => collectTextValues(block, moduleTextParts));
+    const moduleText = moduleTextParts.join(" ");
+    const anchorBlocks = blocks.filter((block) => block?.type === "visual_anchor" && isStrictVisualAnchorSpec(block.visual_anchor || block));
+    anchorBlocks.forEach((block, anchorIdx) => {
+      const spec = block.visual_anchor || block;
+      const anchorText = collectTextValues({
+        title: spec.title,
+        claim: spec.claim,
+        caption: spec.source?.caption,
+        highlight_reason: spec.highlight_reason,
+      }).join(" ");
+      const overlap = semanticOverlap(moduleText, anchorText);
+      if (overlap.length < 2) {
+        issues.push(issue(page, "content_layout_evidence_claim_mismatch", "error", "A module visual anchor does not semantically bind to its module title and nearby text; choose, crop, or generate evidence that proves the local claim instead of borrowing an unrelated figure.", {
+          module_index: moduleIdx + 1,
+          module_title: module.title || "",
+          visual_anchor_index: anchorIdx + 1,
+          visual_anchor_id: spec.id || "",
+          visual_anchor_title: spec.title || "",
+          visual_anchor_claim: spec.claim || "",
+          source_caption: spec.source?.caption || "",
+          shared_terms: overlap,
+          min_shared_terms: 2,
+        }));
+      }
+    });
+  });
+  return issues;
+}
+
 function checkVisualAnchorManifestContract(slide, entry) {
   const issues = [];
   const spec = entry.visual_anchor || {};
@@ -1315,7 +1485,7 @@ function checkVisualAnchorManifestContract(slide, entry) {
     }));
   }
   if (spec.kind === "Matrix" && spec.template === "table" && entry.renderer !== "ppt_native") {
-    issues.push(issue(slide, "content_visual_anchor_table_contract_mismatch", "error", "Matrix/table visual anchors must remain editable table output.", {
+    issues.push(issue(slide, "content_visual_anchor_table_contract_mismatch", "error", "Matrix/table supporting components must remain editable table output.", {
       visual_anchor_id: entry.visual_anchor_id || spec.id || "",
       actual_output: entry.renderer || "",
     }));
@@ -1333,7 +1503,7 @@ function checkVisualAnchorTableCapacity(slide, entry) {
   const visualArea = entry.visual_area || entry.anchor_area || {};
   const estimatedRowHeight = Number(visualArea.h) > 0 && rowCount > 0 ? Number(visualArea.h) / rowCount : null;
   if (rowCount <= 4 && (estimatedRowHeight === null || estimatedRowHeight >= 0.3)) return [];
-  return [issue(slide, "content_visual_anchor_table_overflow", "error", "Matrix/table anchors in four-column modules are too dense; use at most four rows in small modules, split the content, enlarge the area, or switch to Quantity/data_cards.", {
+  return [issue(slide, "content_visual_anchor_table_overflow", "error", "Matrix/table supporting components in four-column modules are too dense; use at most four rows in small modules, split the content, enlarge the area, or switch to a shorter KPI readout.", {
     visual_anchor_id: entry.visual_anchor_id || spec.id || "",
     layout_type: layout.type,
     row_count: rowCount,
@@ -1628,7 +1798,6 @@ function suppressBriefDerivedLowerPriorityIssues(issues, parsed) {
   const suppressibleTypes = new Set([
     "language_excess_english",
     "language_non_chinese",
-    "page_title_wrap",
     "page_title_overflow_estimate",
     "text_overflow_estimate",
   ]);

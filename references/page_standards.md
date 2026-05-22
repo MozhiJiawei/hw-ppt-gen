@@ -7,6 +7,7 @@ Use this reference to decide what each page type must deliver.
 - Communicates topic, audience, and date.
 - Does not use `分析总结`.
 - Does not participate in evidence logic unless the user explicitly requests a visual cover.
+- The subtitle is a short positioning line, not the deck's full core conclusion. Keep it to one visible line. Put long argument chains on the summary page or in speaker notes, not in the cover red band.
 
 ## Contents
 
@@ -24,7 +25,7 @@ Required:
 - uses the parser-derived `contentLayout.type`;
 - presents the key evidence objects named by the summary brief when available;
 - keeps each evidence object readable;
-- uses KPI/cards/tables only as readouts that support the evidence.
+- uses KPI/cards/tables only as supporting components that explain the evidence.
 
 Reject:
 
@@ -34,12 +35,12 @@ Reject:
 
 For a three-viewpoint summary, each column should normally contain:
 
-- one primary source evidence object or traceable crop;
+- one primary source evidence object or complete source subfigure;
 - a short module title;
-- optional compact KPI/readout text only when it does not shrink the evidence below readability;
-- 2-4 short claim lines with red-bold emphasis terms, not a paragraph.
+- optional compact KPI/readout components only when they do not shrink the evidence below readability;
+- 2-4 short claim lines with bold black claim handles and sparse red-bold conclusion variables, not a paragraph.
 
-Do not make all three columns table-driven. Use generated tables sparingly; on a three-column summary, one mechanism/comparison table is usually enough. Scenario/result columns should usually read as evidence + conclusion lines or KPI readouts.
+Do not make all three columns table-driven. Use generated tables sparingly; on a three-column summary, one mechanism/comparison table is usually enough. Scenario/result columns should usually read as evidence + conclusion lines or KPI readouts. Tables and KPI cards support the anchor; they do not satisfy the anchor requirement.
 
 ## Content Page
 
@@ -48,7 +49,7 @@ Each content page has:
 - one viewpoint in the title/title note;
 - one `分析总结` band under the title;
 - one primary evidence object;
-- compact judgment, caveat, KPI, or table content near the evidence;
+- compact judgment, caveat, KPI, or table supporting content near the evidence;
 - footer source note.
 
 Prefer this visible structure:
@@ -68,7 +69,9 @@ Multiple evidence objects on one page are allowed only when each remains readabl
 
 If several figures cannot all remain readable:
 
-- crop the primary source figure to the relevant region;
-- move secondary evidence into text/table/KPI form;
+- use the complete relevant subfigure when the source image contains multiple panels;
+- move secondary evidence into text/table/KPI supporting form;
 - split the material across pages if page count is not fixed;
 - record the limitation when page count is fixed.
+
+Do not crop source evidence merely to fill a panel. A crop is acceptable only when it preserves a complete subfigure or a human/source-provided evidence region with axes, legends, labels, borders, and decisive annotations intact.

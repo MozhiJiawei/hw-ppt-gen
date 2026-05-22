@@ -26,15 +26,15 @@ function baseProcessAnchor(id) {
     id,
     title: "规则复现",
     claim: "用于复现 QA 规则边界。",
-    kind: "Sequence",
-    template: "process",
+    kind: "Quantity",
+    template: "bar_chart",
     visual_spec: {
-      steps: [
-        { id: "input", label: "输入" },
-        { id: "check", label: "检查" },
-        { id: "result", label: "输出" },
+      y_label: "值",
+      categories: ["A", "B", "C"],
+      series: [
+        { name: "指标", values: [1, 2, 3] },
       ],
-      highlight: "check",
+      highlight: { category: "B", series: "指标" },
     },
     highlight_reason: "高亮检查环节，因为本页验证 QA 规则是否正确识别内容。",
   };
@@ -94,7 +94,7 @@ function planEntry(page, slideData) {
   };
   if (slideData.visual_anchor) anchors.push(slideData.visual_anchor);
   for (const module of slideData.contentLayout?.modules || []) collect(module);
-  return { page, visual_anchors: anchors };
+  return { page, visual_anchors: anchors, contentLayout: slideData.contentLayout };
 }
 
 async function generateDeck() {
@@ -115,7 +115,7 @@ async function generateDeck() {
   const pptx = createHuaweiDeck({ title: "QA Rule Regressions" });
   addCoverSlide(pptx, {
     title: "QA 规则回归复现",
-    subtitle: "用于验证 #7 #8 #9 #10",
+    subtitle: "这是一段故意写得很长的封面副标题，用来模拟模型把完整核心结论塞进红色封面横幅，导致副标题多行换行并破坏华为封面版式。",
     source: "来源：规则回归测试",
   });
 
@@ -178,16 +178,23 @@ async function generateDeck() {
           {
             role: "content_panel",
             title: "过高表格",
-            blocks: [{
-              type: "visual_anchor",
-              visual_anchor: tableAnchor("four_column_tall_table", [
-                ["任务", "指标", "解读"],
-                ["A", "通过率", "较长描述"],
-                ["B", "准确率", "较长描述"],
-                ["C", "稳定性", "较长描述"],
-                ["D", "成本", "较长描述"],
-              ]),
-            }],
+            blocks: [
+              {
+                type: "supporting_component",
+                visual_anchor: tableAnchor("four_column_tall_table", [
+                  ["任务", "指标", "解读"],
+                  ["A", "通过率", "较长描述"],
+                  ["B", "准确率", "较长描述"],
+                  ["C", "稳定性", "较长描述"],
+                  ["D", "成本", "较长描述"],
+                ]),
+              },
+              {
+                type: "visual_anchor",
+                height: 1.2,
+                visual_anchor: baseProcessAnchor("four_column_table_real_anchor", "08 内容 四分栏"),
+              },
+            ],
           },
           { role: "content_panel", title: "模块二", blocks: [{ type: "text", body: "后续模块标题不能被表格压住。" }] },
           { role: "content_panel", title: "模块三", blocks: [{ type: "text", body: "底部模块保持清晰。" }] },
@@ -272,7 +279,65 @@ async function generateDeck() {
           {
             role: "content_panel",
             title: "短文本",
-            blocks: [{ type: "text", height: 1.1, body: "短内容导致底边提前结束。" }],
+            blocks: [
+              { type: "visual_anchor", height: 1.2, visual_anchor: baseProcessAnchor("misaligned_real_anchor", "07 内容 三分栏") },
+              { type: "text", height: 1.1, body: "短内容导致底边提前结束。" },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      page: "09",
+      title: "证据与模块结论不匹配必须被 QA 拦截",
+      sections,
+      currentSection: "规则复现",
+      summary: { body: [{ label: "绑定关系", text: "模块里的图片必须证明标题和文字，不允许借无关图凑视觉锚点。" }] },
+      contentLayout: {
+        type: "two_column",
+        reference: "05 内容 二分栏",
+        modules: [
+          {
+            role: "content_panel",
+            title: "保真证据：低 retention 仍保持质量",
+            blocks: [
+              {
+                type: "visual_anchor",
+                visual_anchor: {
+                  ...baseProcessAnchor("claim_mismatch_anchor"),
+                  title: "训练路由机制",
+                  claim: "训练期随机跨层注意力让模型适应多种 KV 来源。",
+                },
+              },
+              {
+                type: "text",
+                body: [
+                  "质量保持：R-CLA 在低 cache retention 下缓解退化。",
+                  "评估口径：F1 曲线证明保真收益。",
+                ],
+              },
+            ],
+          },
+          {
+            role: "content_panel",
+            title: "匹配对照：随机路由训练机制",
+            blocks: [
+              {
+                type: "visual_anchor",
+                visual_anchor: {
+                  ...baseProcessAnchor("claim_match_anchor"),
+                  title: "随机路由对照",
+                  claim: "训练期随机跨层注意力释放固定 cache sharing 的脆弱性。",
+                },
+              },
+              {
+                type: "text",
+                body: [
+                  "训练扰动：层可使用自身或先前层 KV states。",
+                  "机制判断：随机路由提升部署弹性。",
+                ],
+              },
+            ],
           },
         ],
       },
@@ -329,38 +394,38 @@ function runBriefContractQaFixture(pptxPath) {
     slides: [
       {
         page: 2,
-        title: "GPU Pooling",
+        title: "Stochastic KV Routing",
         titleNote: "被模型改写的标题说明",
-        currentSection: "浪费来自市场形态",
+        currentSection: "瓶颈来自 KV cache",
         summary: {
           body: [
-            { label: "场景", text: "长尾模型低频调用会放大固定 GPU 占用。" },
-            { label: "机制", text: "token 间隙抢占换模比 request 结束后释放更细。" },
-            { label: "判断", text: "适合多模型市场先做受控评估，而不是替代所有服务。" },
+            { label: "问题", text: "KV cache 随层数和上下文线性扩张，推高推理显存成本。" },
+            { label: "机制", text: "R-CLA 训练时随机选择历史层 KV，部署时固定共享策略。" },
+            { label: "判断", text: "适合先在长上下文、显存受限场景做受控评估。" },
           ],
         },
       },
       {
         page: 4,
-        title: "市场型浪费",
-        titleNote: "长尾模型低频请求与热门模型 burst 共同推高 GPU 冗余预留。",
-        currentSection: "浪费来自市场形态",
+        title: "KV Cache 瓶颈",
+        titleNote: "每层 KV state 放大长上下文显存占用，压缩 batch 和 context 空间。",
+        currentSection: "瓶颈来自 KV cache",
         summary: {
           body: [
-            { label: "长尾错配", text: "低频模型需要保留服务能力，闲置成本被系统性放大。" },
-            { label: "突发冗余", text: "热门模型峰值超过保守容量时，平台必须维持安全垫。" },
+            { label: "显存压力", text: "KV cache 随层数、序列长度和 batch 线性扩张。" },
+            { label: "成本边界", text: "缓存 footprint 会限制并发容量和长上下文服务。" },
           ],
         },
       },
       {
         page: 5,
-        title: "Token-Level 破局",
-        titleNote: "Aegaeon 在 token 间隙抢占换模，降低 request-level 等待带来的 SLO 风险。",
-        currentSection: "突破在 token 粒度",
+        title: "R-CLA 机制",
+        titleNote: "训练期随机跨层注意力，让部署期固定 cache sharing 不再脆弱。",
+        currentSection: "弹性来自随机路由",
         summary: {
           body: [
-            { label: "调度", text: "prefill 和 decoding 分别服务 TTFT 与 TBT 目标。" },
-            { label: "换模", text: "组件复用和显式内存管理压缩换模阻塞路径。" },
+            { label: "训练扰动", text: "每层随机使用自身或先前层 KV states。" },
+            { label: "部署弹性", text: "测试时可固定每 2 层或 4 层共享一份 KV cache。" },
           ],
         },
       },
@@ -387,6 +452,7 @@ function runBriefContractQaFixture(pptxPath) {
 async function main() {
   const result = await generateDeck();
 
+  assert(issuesOf(result, "cover_subtitle_too_long", 1).length >= 1, "#21: cover subtitles should stay one-line positioning phrases, not full core conclusions");
   assert.equal(issuesOf(result, "analysis_summary_missing", 2).length, 0, "#9: English terms after semantic labels must not hide the analysis summary");
   assert.equal(issuesOf(result, "sparse_large_card", 3).length, 0, "#7: biased-column interpretation cards with short explicit judgments should not be sparse-card warnings");
 
@@ -395,11 +461,12 @@ async function main() {
   assert.equal(supportingCardEntry.resolved_layout_type, "biased_column", "#8: supportingCards path should record the resolved biased-column layout");
   assert(supportingCardEntry.content_layout_schema, "#8: supportingCards path should expose unified content layout schema evidence");
 
-  assert(issuesOf(result, "content_visual_anchor_table_overflow", 5).length >= 1, "#10: tall Matrix/table anchors in four-column modules should be blocking QA issues");
+  assert(issuesOf(result, "content_visual_anchor_table_overflow", 5).length >= 1, "#10: tall Matrix/table supporting components in four-column modules should be blocking QA issues");
   assert(issuesOf(result, "content_visual_anchor_image_too_small", 6).length >= 1, "#11: evidence images that occupy too little visual area should be blocking QA issues");
   assert(issuesOf(result, "sparse_large_card").some((item) => item.severity === "error"), "#12: very sparse large cards should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_alignment", 8).length >= 1, "#13: misaligned column module content should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_anchor_missing", 7).length >= 1, "#19: text-only two/three/four-column modules should be blocking QA issues");
+  assert(issuesOf(result, "content_layout_evidence_claim_mismatch", 9).length >= 1, "#20: unrelated visual anchors should fail evidence-to-claim binding QA");
 
   const briefQa = runBriefContractQaFixture(result.pptxPath);
   assert(briefQa.issues.some((item) => item.type === "ppt_content_brief_title_note_mismatch"), "#18: brief-backed titleNote rewrites should fail QA");

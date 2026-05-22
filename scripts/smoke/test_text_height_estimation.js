@@ -220,7 +220,7 @@ const REGRESSION_CASES = [
     label: "第1轮 12pt合理密度正文",
     fontSize: 12,
     width: 3.7,
-    text: "排障摘要：RCA-2026-05命中cache miss、token burst与限流阈值；预计节省18%人工复核。",
+    text: "评估摘要：R-CLA命中KV cache retention、随机路由与质量阈值；预计减少18%显存复核。",
   },
   {
     id: "round2_formula_cn_11_w2_6",
@@ -283,7 +283,7 @@ const REGRESSION_CASES = [
     label: "第2轮 12pt单位短长行",
     fontSize: 12,
     width: 5.8,
-    text: "阈值：75ms。\n说明：当payload>512KB且burst>1,200 req/min时，优先启用边缘缓存与批量确认。",
+    text: "阈值：75ms。\n说明：当context>8192且batch>16时，优先启用KV共享与批量确认。",
   },
   {
     id: "round2_mixed_codes_money_11_w7_2",

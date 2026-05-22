@@ -7,6 +7,13 @@ Use this reference only when:
 
 Generated visuals are secondary. They must not replace source evidence that proves the slide claim.
 
+Generated visuals split into two semantic classes:
+
+- real visual anchors: charts, flows, loops, hierarchy diagrams, network/dependency diagrams, mechanism diagrams, and quadrant visuals;
+- supporting components: `Quantity/data_cards`, generated `heatmap`, `Matrix/table`, `Matrix/capability_matrix`, and `Hierarchy/capability_stack`.
+
+Supporting components are useful for density and compression, but they are structured text/readout components. They cannot satisfy a page or module's visual-anchor requirement by themselves.
+
 ## Common Shape
 
 ```json
@@ -14,8 +21,8 @@ Generated visuals are secondary. They must not replace source evidence that prov
   "id": "stable_file_safe_id",
   "title": "Short metadata title",
   "claim": "一句中文核心观点。",
-  "kind": "Matrix",
-  "template": "table",
+  "kind": "Sequence",
+  "template": "process",
   "visual_spec": {}
 }
 ```
@@ -29,14 +36,22 @@ Required common fields:
 - `template`
 - `visual_spec`
 
-Supported generated kinds and templates:
+Supported generated kinds and templates are split by semantic role.
 
-- `Quantity`: `data_cards`, `bar_chart`, `line_chart`, `proportion_chart`, `heatmap`
+Real visual anchors:
+
+- `Quantity`: `bar_chart`, `line_chart`, `proportion_chart`
 - `Sequence`: `process`, `timeline`, `swimlane`
 - `Loop`: `closed_loop`, `dual_loop`, `spiral_iteration_ladder`
-- `Hierarchy`: `tree`, `layered_architecture`, `capability_stack`
-- `Matrix`: `table`, `quadrant_matrix`, `capability_matrix`, `heatmap`
+- `Hierarchy`: `tree`, `layered_architecture`
+- `Matrix`: `quadrant_matrix`
 - `Network`: `hub_spoke_network`, `dependency_graph`, `module_interaction_map`, `causal_influence_graph`
+
+Supporting components:
+
+- `Quantity`: `data_cards`, `heatmap`
+- `Hierarchy`: `capability_stack`
+- `Matrix`: `table`, `capability_matrix`, `heatmap`
 
 ## Field Boundaries
 
@@ -71,7 +86,7 @@ Do not output implementation-control fields such as `visual_strategy` or `intent
 
 ### `Quantity/data_cards`
 
-Use data cards as compact KPI readouts. They should not become tall filler panels; place the explanatory density in adjacent short conclusion lines or a conclusion note. Use a `Matrix/table` only when the missing structure is a real comparison.
+Use data cards as compact KPI readouts after the module already has source evidence or a real generated visual anchor. They should not become tall filler panels and they do not count as visual anchors. Place explanatory density in adjacent short conclusion lines or a conclusion note. Use a `Matrix/table` only when the missing structure is a real comparison.
 
 ```json
 {
@@ -129,7 +144,7 @@ Use data cards as compact KPI readouts. They should not become tall filler panel
 
 Generated or transcribed tables must use `Matrix/table`; do not call a page-level table helper directly.
 
-Use `Matrix/table` only when rows and columns jointly create meaning. Do not use it as a cosmetic replacement for `标签：正文` lines.
+Use `Matrix/table` only when rows and columns jointly create meaning. It is a supporting component, not a visual anchor. Do not use it as a cosmetic replacement for `标签：正文` lines.
 Do not use multiple generated tables on the same summary page just to increase density. If the table is not the clearest way to see the relationship, use conclusion lines, KPI cards, or a conclusion note.
 Avoid weak two-column tables such as `口径 / 判断`, `字段 / 含义`, or `维度 / 说明`; they are usually prose in table clothing.
 
@@ -155,6 +170,7 @@ Use the same common shape and keep `visual_spec` relationship-native:
 - `Hierarchy`: nodes/layers/levels only; use only for real containment, layering, decomposition, or support relationships.
 - `Network`: nodes/edges only; use only for real many-to-many relationships.
 - `Matrix/capability_matrix` and `Quantity/heatmap`: use only for sourced values or explicit scoring methods.
+- `Quantity/data_cards`, generated `heatmap`, `Matrix/table`, `Matrix/capability_matrix`, and `Hierarchy/capability_stack`: supporting components only; do not use them as the sole visual object in a content module.
 
 ## Rejection Checks
 

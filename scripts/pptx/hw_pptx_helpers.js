@@ -285,7 +285,16 @@ function addPageTitle(slide, title, options = {}) {
   const hasSectionTabs = Array.isArray(opts.sections) && opts.sections.length > 0;
   const titleW = 12.2;
   const titleY = opts.titleY ?? (hasSectionTabs ? 0.46 : HW_STYLE.slide.titleY);
-  const titleRuleY = opts.titleRuleY ?? (hasSectionTabs ? 1.0 : HW_STYLE.slide.titleRuleY);
+  const subtitleText = safeText(subtitle);
+  const titleText = safeText(title);
+  const titlePair = subtitleText
+    ? chooseInlineTitlePair(titleText, subtitleText, titleW)
+    : { titleFontSize: HW_STYLE.size.pageTitle, subtitleFontSize: HW_STYLE.size.pageTitle };
+  const plainTitle = subtitleText ? `${titleText} - ${subtitleText}` : titleText;
+  const estimatedLines = Math.max(1, estimateWrappedLines(plainTitle, titlePair.titleFontSize, titleW - 0.1, { margin: 0.05 }));
+  const baseRuleY = hasSectionTabs ? 1.0 : HW_STYLE.slide.titleRuleY;
+  const titleH = estimatedLines <= 1 ? 0.5 : Math.min(1.22, estimatedLines * 0.42 + 0.12);
+  const titleRuleY = opts.titleRuleY ?? (estimatedLines <= 1 ? baseRuleY : Math.max(baseRuleY, titleY + titleH + 0.08));
   if (kicker) {
     textBox(slide, kicker, {
       x: HW_STYLE.slide.marginX,
@@ -297,10 +306,7 @@ function addPageTitle(slide, title, options = {}) {
       color: HW_STYLE.color.red,
     });
   }
-  const subtitleText = safeText(subtitle);
-  const titleText = safeText(title);
   if (subtitleText) {
-    const titlePair = chooseInlineTitlePair(titleText, subtitleText, titleW);
     slide.addText([
       { text: titleText, options: { fontSize: titlePair.titleFontSize, bold: true } },
       { text: ` - ${subtitleText}`, options: { fontSize: titlePair.subtitleFontSize, bold: true } },
@@ -308,7 +314,7 @@ function addPageTitle(slide, title, options = {}) {
       x: HW_STYLE.slide.marginX,
       y: titleY,
       w: titleW,
-      h: 0.5,
+      h: titleH,
       fontFace: HW_STYLE.font.cn,
       fontSize: titlePair.titleFontSize,
       color: HW_STYLE.color.red,
@@ -316,14 +322,13 @@ function addPageTitle(slide, title, options = {}) {
       breakLine: false,
       lineSpacingMultiple: 1,
       valign: "top",
-      fit: "shrink",
     }));
   } else {
     textBox(slide, title, {
       x: HW_STYLE.slide.marginX,
       y: titleY,
       w: titleW,
-      h: 0.5,
+      h: titleH,
       fontSize: HW_STYLE.size.pageTitle,
       bold: true,
       color: HW_STYLE.color.red,
@@ -335,20 +340,23 @@ function addPageTitle(slide, title, options = {}) {
   addLine(slide, HW_STYLE.slide.marginX, titleRuleY, 12.78, titleRuleY, {
     line: { color: HW_STYLE.color.red, width: 0.5 },
   });
+  return {
+    titleY,
+    titleH,
+    titleRuleY,
+    afterTitleY: titleRuleY + 0.18,
+  };
 }
 
 function chooseInlineTitlePair(title, subtitle, widthInches) {
   const candidates = [
     { titleFontSize: 24, subtitleFontSize: 18 },
     { titleFontSize: 24, subtitleFontSize: 14 },
-    { titleFontSize: 18, subtitleFontSize: 14 },
-    { titleFontSize: 18, subtitleFontSize: 12 },
-    { titleFontSize: 14, subtitleFontSize: 12 },
   ];
   return candidates.find((candidate) => {
     const width = estimateTextWidth(title, candidate.titleFontSize)
       + estimateTextWidth(` - ${subtitle}`, candidate.subtitleFontSize);
-    return width <= widthInches * 1.02;
+    return width <= widthInches * 1.05;
   }) || candidates[candidates.length - 1];
 }
 

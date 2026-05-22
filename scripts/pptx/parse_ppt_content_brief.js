@@ -454,7 +454,8 @@ function parsePptContentBrief(input, options = {}) {
     slideContract: {
       cover: {
         title: metadata["主题"],
-        subtitle: metadata["核心结论"],
+        subtitle: summaryPage.titleNote || metadata["目标读者"],
+        coreConclusion: metadata["核心结论"],
         audience: metadata["目标读者"],
         source: metadata["内容来源"],
       },

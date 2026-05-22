@@ -7,6 +7,7 @@ const {
   addPageTitle,
   cloneOptions,
   estimateTextBoxHeight,
+  estimateWrappedLines,
   grayCard,
   redTitleCard,
   safeText,
@@ -211,9 +212,9 @@ function normalizeContentLayout(layout) {
   if (schema.special === "large_visual_with_side_cards" && (modules[0].role || modules[0].kind) !== "visual_anchor") {
     throw new Error(`contentLayout.type ${type} requires the first module to be role "visual_anchor".`);
   }
-  const anchorCount = modules.reduce((count, module) => count + countModuleVisualAnchors(module), 0);
-  if (anchorCount < 1) {
-    throw new Error(`contentLayout.type ${type} requires at least one visual_anchor block.`);
+  const strictAnchorCount = modules.reduce((count, module) => count + countModuleStrictVisualAnchors(module), 0);
+  if (strictAnchorCount < 1) {
+    throw new Error(`contentLayout.type ${type} requires at least one real visual_anchor block; supporting components cannot satisfy the anchor requirement.`);
   }
   return {
     type,
@@ -232,6 +233,18 @@ function countModuleVisualAnchors(module = {}) {
   return blocks.reduce((count, block) => {
     const type = block.type || block.role || block.kind;
     return count + (type === "visual_anchor" || block.visual_anchor || block.visualAnchor ? 1 : 0);
+  }, 0);
+}
+
+function countModuleStrictVisualAnchors(module = {}) {
+  const directAnchor = module.visual_anchor || module.visualAnchor;
+  if (((module.role || module.kind) === "visual_anchor" || directAnchor) && !isStructuredSupportingComponent(directAnchor)) return 1;
+  const blocks = module.blocks || module.children || module.items || [];
+  if (!Array.isArray(blocks)) return 0;
+  return blocks.reduce((count, block) => {
+    const type = block.type || block.role || block.kind;
+    const anchor = block.visual_anchor || block.visualAnchor;
+    return count + ((type === "visual_anchor" || anchor) && !isStructuredSupportingComponent(anchor) ? 1 : 0);
   }, 0);
 }
 
@@ -338,13 +351,13 @@ function contentLayoutAreas(layout, contentArea) {
   });
 }
 
-function fixedContentLayoutArea(layout) {
+function fixedContentLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop) {
   const bottomPadding = layout.schema.special === "large_visual_with_side_cards" ? 0.35 : 0.17;
   return {
     x: HW_STYLE.slide.marginX,
-    y: HW_STYLE.summary.contentTop - 0.18,
+    y: contentTop - 0.18,
     w: 12.23,
-    h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - bottomPadding,
+    h: HW_STYLE.slide.footerY - contentTop - bottomPadding,
   };
 }
 
@@ -399,7 +412,7 @@ function addModuleBodyText(slide, text, area, module) {
     underline: module.underline,
   };
   const emphasis = normalizeEmphasisTerms(module);
-  if (!emphasis.length) {
+  if (!emphasis.length && !hasStructuredLabel(text)) {
     textBox(slide, text, options);
     return;
   }
@@ -614,6 +627,14 @@ function estimateTextBlockSize(block, area) {
   return Math.max(0.26, rounded);
 }
 
+function estimateTextBlockWrappedLines(block, area) {
+  const body = normalizeModuleBody(block);
+  if (!safeText(body)) return 0;
+  const fontSize = Number(block.fontSize || block.contentFontSize || HW_STYLE.size.body);
+  const width = Math.max(0.1, Number(area?.w || 1) - Math.max(0.08 * 2, 0.16));
+  return estimateWrappedLines(body, fontSize, width, { bulletIndentUnits: 0 });
+}
+
 function normalizeEmphasisTerms(module = {}) {
   const terms = module.emphasis || module.emphasisTerms || module.emphasis_terms || module.redTerms || module.red_terms || [];
   const list = Array.isArray(terms) ? terms : [terms];
@@ -629,6 +650,19 @@ function normalizeEmphasisTerms(module = {}) {
 
 function isTableAnchor(visualAnchor) {
   return visualAnchor?.kind === "Matrix" && visualAnchor?.template === "table";
+}
+
+function isStructuredSupportingComponent(visualAnchor) {
+  const kind = safeText(visualAnchor?.kind);
+  const template = safeText(visualAnchor?.template);
+  return (kind === "Quantity" && ["data_cards", "heatmap"].includes(template))
+    || (kind === "Matrix" && ["table", "capability_matrix", "heatmap"].includes(template))
+    || (kind === "Hierarchy" && template === "capability_stack");
+}
+
+function visualComponentRole(visualAnchor) {
+  if (!visualAnchor) return undefined;
+  return isStructuredSupportingComponent(visualAnchor) ? "supporting_component" : "visual_anchor";
 }
 
 function estimateTableBlockHeight(visualAnchor, area = {}) {
@@ -659,6 +693,20 @@ function buildEmphasisRuns(text, emphasisTerms, options = {}) {
     hyperlink: options.hyperlink,
     underline: options.underline,
   };
+  const structured = splitStructuredLabel(value);
+  if (structured) {
+    return [
+      ...(structured.prefix ? [{ text: structured.prefix, options: baseOptions }] : []),
+      { text: structured.label, options: { ...baseOptions, bold: true } },
+      { text: structured.delimiter, options: { ...baseOptions, bold: true } },
+      ...buildEmphasisRunsInSegment(structured.rest, emphasisTerms, baseOptions),
+    ];
+  }
+  return buildEmphasisRunsInSegment(value, emphasisTerms, baseOptions);
+}
+
+function buildEmphasisRunsInSegment(value, emphasisTerms, baseOptions) {
+  const fontSize = baseOptions.fontSize || HW_STYLE.size.body;
   const runs = [];
   let cursor = 0;
   while (cursor < value.length) {
@@ -674,6 +722,24 @@ function buildEmphasisRuns(text, emphasisTerms, options = {}) {
     cursor = match.index + match.term.length;
   }
   return runs.length ? runs : [{ text: value, options: baseOptions }];
+}
+
+function hasStructuredLabel(text) {
+  return safeText(text).split(/\r?\n/).some((line) => Boolean(splitStructuredLabel(line)));
+}
+
+function splitStructuredLabel(text) {
+  const value = safeText(text);
+  const match = value.match(/^(\s*(?:[-•]\s*)?)([^：:\n]{2,18})([：:])(\s*.+)$/);
+  if (!match) return null;
+  const label = match[2].trim();
+  if (!label || /[。.!?？；;]/.test(label)) return null;
+  return {
+    prefix: match[1],
+    label: match[2],
+    delimiter: match[3],
+    rest: match[4],
+  };
 }
 
 function findNextEmphasis(text, cursor, emphasisTerms) {
@@ -738,7 +804,7 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
     throw new Error("contentLayout image blocks were removed; use visual_anchor kind=Evidence/template=source_figure with text annotations.");
   }
   if (type === "table") {
-    throw new Error("contentLayout table blocks were removed; use visual_anchor kind=Matrix/template=table with text annotations.");
+    throw new Error("contentLayout table blocks were removed; use supporting_component kind=Matrix/template=table with text annotations.");
   }
   addModuleBodyText(slide, normalizeModuleBody(block), area, {
     ...module,
@@ -793,12 +859,18 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
     area: blockArea,
     visible_area: visibleArea,
   };
+  if (visualAnchor) {
+    descriptor.kind = visualAnchor.kind;
+    descriptor.template = visualAnchor.template;
+    descriptor.visual_role = visualComponentRole(visualAnchor);
+  }
   if (isTextBlock(block)) {
     const body = normalizeModuleBody(block);
     const lines = body.split(/\r?\n/).map((line) => safeText(line)).filter(Boolean);
     descriptor.estimated_height = estimateTextBlockSize(block, blockArea || { w: 1, h: 1 });
     descriptor.text_length = safeText(body).length;
     descriptor.line_count = lines.length;
+    descriptor.estimated_wrapped_line_count = estimateTextBlockWrappedLines(block, blockArea || { w: 1, h: 1 });
     descriptor.max_line_length = lines.reduce((max, line) => Math.max(max, line.replace(/^-\s*/, "").length), 0);
     descriptor.emphasis_count = normalizeEmphasisTerms(block).length;
   } else if (isEvidenceAnchor(visualAnchor)) {
@@ -965,8 +1037,8 @@ function addBiasedSideCard(slide, module, area) {
   });
 }
 
-function renderBiasedContentLayout(slide, data, layout) {
-  const contentArea = fixedContentLayoutArea(layout);
+function renderBiasedContentLayout(slide, data, layout, contentTop) {
+  const contentArea = fixedContentLayoutArea(layout, contentTop);
   const areas = contentLayoutAreas(layout, contentArea);
   const anchorResults = [addBiasedVisualOnlyModule(slide, layout.modules[0], data, areas[0])];
   layout.modules.slice(1).forEach((module, idx) => addBiasedSideCard(slide, module, areas[idx + 1]));
@@ -985,11 +1057,11 @@ function renderBiasedContentLayout(slide, data, layout) {
   };
 }
 
-function renderContentLayout(slide, data, layout, visualCaption) {
+function renderContentLayout(slide, data, layout, visualCaption, contentTop) {
   if (layout.schema.special === "large_visual_with_side_cards") {
-    return renderBiasedContentLayout(slide, data, layout);
+    return renderBiasedContentLayout(slide, data, layout, contentTop);
   }
-  const contentArea = fixedContentLayoutArea(layout);
+  const contentArea = fixedContentLayoutArea(layout, contentTop);
   const areas = contentLayoutAreas(layout, contentArea);
   const anchorResults = [];
   const moduleLayouts = [];
@@ -1003,6 +1075,14 @@ function renderContentLayout(slide, data, layout, visualCaption) {
     anchorResults.push(...result.anchorResults);
     moduleLayouts.push(result.moduleLayout);
   });
+  const strictVisualAnchorBlocksCount = moduleLayouts.reduce((sum, module) => {
+    const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+    return sum + blocks.filter((block) => block.visual_role === "visual_anchor").length;
+  }, 0);
+  const supportingComponentBlocksCount = moduleLayouts.reduce((sum, module) => {
+    const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+    return sum + blocks.filter((block) => block.visual_role === "supporting_component").length;
+  }, 0);
   addColumnFlowArrows(slide, areas, layout.flowArrows || layout.flow_arrows || {});
   return {
     anchorResults,
@@ -1015,6 +1095,8 @@ function renderContentLayout(slide, data, layout, visualCaption) {
       text_modules_count: layout.modules.filter((module) => !countModuleVisualAnchors(module)).length,
       visual_anchor_modules_count: anchorResults.length,
       visual_anchor_blocks_count: anchorResults.length,
+      strict_visual_anchor_blocks_count: strictVisualAnchorBlocksCount,
+      supporting_component_blocks_count: supportingComponentBlocksCount,
       module_layouts: moduleLayouts,
     },
   };
@@ -1041,13 +1123,15 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   if (data.visual_anchor) validateVisualAnchorSpec(data.visual_anchor);
 
   const slide = pptx.addSlide();
-  addPageTitle(slide, data.title || "页面标题", {
+  const titleLayout = addPageTitle(slide, data.title || "页面标题", {
     kicker: data.kicker || "",
     subtitle: data.titleNote || data.titleSubtitle || "",
     sections: data.sections || [],
     currentSection: data.currentSection || data.section,
   });
-  addAnalysisSummary(slide, data.summary);
+  const summaryY = Math.max(HW_STYLE.summary.y, titleLayout.afterTitleY);
+  const contentTop = summaryY + HW_STYLE.summary.h + 0.27;
+  addAnalysisSummary(slide, data.summary, { y: summaryY });
 
   const supportingCards = data.supportingCards || data.supporting_cards || [];
   const hasSideCards = supportingCards.length > 0;
@@ -1058,16 +1142,16 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   let layoutInfo = null;
   let resolvedLayoutType = null;
   if (contentLayout) {
-    const result = renderContentLayout(slide, data, contentLayout, visualCaption);
+    const result = renderContentLayout(slide, data, contentLayout, visualCaption, contentTop);
     anchorResults = result.anchorResults;
     layoutInfo = result.layoutInfo;
     resolvedLayoutType = layoutInfo?.type || null;
   } else {
     const anchorArea = cloneOptions(data.anchorArea || {
       x: HW_STYLE.slide.marginX,
-      y: HW_STYLE.summary.contentTop,
+      y: contentTop,
       w: hasSideCards ? 7.52 : 12.23,
-      h: HW_STYLE.slide.footerY - HW_STYLE.summary.contentTop - 0.35,
+      h: HW_STYLE.slide.footerY - contentTop - 0.35,
     });
     const captionReserveH = visualCaption ? (visualCaption.source ? 0.58 : 0.42) : 0;
     const visualArea = visualCaption
@@ -1104,6 +1188,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     visual_anchor_id: anchorResult.visualAnchor.id,
     kind: anchorResult.visualAnchor.kind,
     template: anchorResult.visualAnchor.template,
+    visual_role: visualComponentRole(anchorResult.visualAnchor),
     visual_anchor: cloneOptions(anchorResult.visualAnchor),
     renderer: anchorResult.renderResult.renderer,
     rendered: anchorResult.renderResult.rendered,

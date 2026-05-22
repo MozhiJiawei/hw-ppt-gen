@@ -93,59 +93,69 @@ async function main() {
 
   addPlannedVisualAnchorContentSlide({
     title: "数量锚点",
-    titleNote: "关键指标由数据卡承载",
+    titleNote: "关键指标先形成趋势图，数据卡只做读数支撑",
     sections,
     currentSection: "视觉锚点",
     summary: {
       body: [
-        { label: "数字聚焦", text: "数据卡用于对比关键指标，锚点类别是本页核心，因为它说明可选关系范围。" },
+        { label: "数字聚焦", text: "柱状图承载数量对比，数据卡只作为支撑读数。" },
         { label: "红色克制", text: "红色只标注主要指标，其他数据保持灰阶呈现。" },
       ],
     },
     visual_anchor: {
       id: "sample_quantity_cards",
-      title: "Quantity Cards",
-      claim: "数据卡承载数量关系。",
+      title: "Quantity Bar Chart",
+      claim: "柱状图承载数量关系。",
       kind: "Quantity",
-      template: "data_cards",
+      template: "bar_chart",
       visual_spec: {
-        cards: [
-          { id: "refs", label: "参考图", value: "10", unit: "张" },
-          { id: "kinds", label: "锚点类别", value: "7", unit: "类" },
-          { id: "qa", label: "QA 入口", value: "1", unit: "套" },
+        y_label: "数量",
+        categories: ["参考图", "锚点类别", "QA 入口"],
+        series: [
+          { name: "对象数", values: [10, 7, 1] },
         ],
-        highlight: "kinds",
+        highlight: { category: "锚点类别", series: "对象数" },
       },
       highlight_reason: "高亮锚点类别，因为它说明生成器可选择的关系范围。",
     },
+    supportingCards: [
+      { title: "支撑读数", body: ["参考图：10 张用于校准版式", "锚点类别：7 类用于覆盖证据/图解", "QA 入口：1 套负责计划和 manifest 对齐"] },
+      { title: "语义边界", body: ["柱状图是本页真实视觉锚点", "数据卡只承担读数压缩，不替代锚点"] },
+    ],
     source,
     page: "04",
   });
 
   addPlannedVisualAnchorContentSlide({
     title: "层级锚点",
-    titleNote: "能力栈表达从页面骨架到主视觉的责任分层",
+    titleNote: "层级架构表达从页面骨架到主视觉的责任分层",
     sections,
     currentSection: "视觉锚点",
     summary: {
       body: [
         { label: "职责分离", text: "页面骨架只处理标题、总结和页脚，主视觉交给视觉锚点。" },
-        { label: "结构清晰", text: "能力栈帮助读者理解各层职责，视觉锚点是关键，因为它承接骨架并支撑解释模块。" },
+        { label: "结构清晰", text: "层级架构帮助读者理解各层职责，视觉锚点承接骨架并支撑解释模块。" },
       ],
     },
     visual_anchor: {
-      id: "sample_capability_stack",
-      title: "Capability Stack",
+      id: "sample_layered_architecture",
+      title: "Layered Architecture",
       claim: "页面能力以层级方式组合。",
       kind: "Hierarchy",
-      template: "capability_stack",
+      template: "layered_architecture",
       visual_spec: {
-        levels: [
-          { label: "页面骨架" },
-          { label: "视觉锚点" },
-          { label: "解释模块" },
+        layers: [
+          { label: "页面层", items: ["页面骨架"] },
+          { label: "证据层", items: ["视觉锚点"] },
+          { label: "解释层", items: ["支撑组件"] },
         ],
-        highlight: "视觉锚点",
+        side_label: "QA",
+        side_modules: ["manifest"],
+        edges: [
+          ["页面骨架", "视觉锚点"],
+          ["视觉锚点", "支撑组件"],
+          ["视觉锚点", "manifest"],
+        ],
       },
       highlight_reason: "高亮视觉锚点，因为它承接页面骨架并支撑解释模块。",
     },

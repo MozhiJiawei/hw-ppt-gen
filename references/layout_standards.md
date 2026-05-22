@@ -22,7 +22,7 @@ Every summary/content page rendered by `addVisualAnchorContentSlide` keeps:
 - `分析总结` band directly below the title;
 - red module headers;
 - thin gray frames;
-- evidence or generated visual anchors inside modules;
+- evidence or generated diagram/chart anchors inside modules;
 - nearby conclusion text;
 - footer source and page number.
 
@@ -34,7 +34,7 @@ Use when the page has two viewpoint modules or one evidence module plus one conc
 
 Good:
 
-- one readable source figure on the left, compact conclusion text or real comparison table on the right;
+- one readable source figure on the left, compact conclusion text or real comparison table as supporting component on the right;
 - two readable evidence modules when both are equally important and both remain legible.
 
 Reject:
@@ -66,7 +66,7 @@ Rules:
 
 - each column must carry a complete module;
 - evidence must remain readable in each column;
-- if a column source figure is too dense, crop to the relevant region or use a compact readout beside the evidence;
+- if a column source figure is too dense, use the complete relevant subfigure or a compact readout beside the evidence;
 - do not use three KPI-only columns when source figures are available.
 - do not use three table-heavy columns; use at most one generated table when it carries a real mechanism/comparison.
 
@@ -84,9 +84,11 @@ Rules:
 
 ## Density Standard
 
-Fill space with readable evidence, concise tables, KPI readouts, and short conclusions. Do not fill space with paragraphs. Do not leave large cards half-empty unless the card is dominated by readable evidence.
+Fill space with readable evidence, concise supporting tables, KPI readouts, and short conclusions. Do not fill space with paragraphs. Do not leave large cards half-empty unless the card is dominated by readable evidence.
 
 Evidence is the first layout claimant. In fixed two-column, biased-column, and three-column layouts, the renderer may narrow gutters and rebalance column widths inside the chosen layout family so source figures remain readable. Do not compensate for a small source figure by adding prose; reduce secondary text/tables before letting the evidence become a thumbnail.
+
+Do not compensate for a small source figure by trimming away chart or diagram context. Keep complete source figures or complete subfigures intact. When evidence needs more room, adjust the layout balance inside the fixed family, reduce supporting components, or move detail to another page if possible.
 
 ## Text Rhythm
 
@@ -98,10 +100,11 @@ Dense Huawei pages should alternate visual weights:
 - conclusion note, with a compact table only for real comparison.
 
 Do not fill a column by stretching a KPI card or writing a long bullet stack. If a column has empty bottom space, add a meaningful structure: 2x2 mechanism table, small KPI row, source-grounded conclusion note, or red arrow relationship.
+These structures are supporting components. They improve density after the module already has a readable evidence object or generated diagram/chart; they do not replace that anchor.
 
-Use red-bold emphasis sparingly inside text blocks. Emphasize the claim handle, number, or decision term, not whole sentences.
+Use red-bold emphasis sparingly inside text blocks. The claim handle before `：` is structural and should stay bold black; red-bold belongs on the decisive number, bottleneck, decision, boundary, or conclusion variable after it. Do not red-bold whole sentences or every tidy label.
 Do not use tables as decorative rewrites of `标签：正文`. A table earns its place only when both axes matter.
 
 ## Content Typography
 
-Within one content page, editable text blocks inside content modules should use the same body-size tier. Visual anchors, including KPI cards, tables, generated diagrams, and source images, own their internal typography. Do not make one module's explanatory text look like 12pt body while another module's explanatory text is visibly smaller.
+Within one content page, editable text blocks inside content modules should use the same body-size tier. Visual anchors and supporting components own their internal typography separately: source images, generated diagrams/charts, KPI cards, and tables may use their own internal sizes. Do not make one module's explanatory text look like 12pt body while another module's explanatory text is visibly smaller.

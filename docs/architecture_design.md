@@ -49,8 +49,8 @@ This view lists the architectural elements only. It intentionally does not draw 
 | L4 Visual Rendering / 视觉渲染层                                                   |
 |                                                                                  |
 | +-------------------+ +-------------------+ +-------------------+ +-------------+ |
-| | Template contract | | hw_diagram_helpers| | Matrix/table      | | Evidence    | |
-| | fixed mapping     | | conceptual visual | | editable table    | | source image| |
+  | | Template contract | | hw_diagram_helpers| | Supporting comps  | | Evidence    | |
+  | | fixed mapping     | | conceptual visual | | tables/cards      | | source image| |
 | +-------------------+ +-------------------+ +-------------------+ +-------------+ |
 +----------------------------------------------------------------------------------+
 
@@ -167,12 +167,12 @@ Owned by:
 Responsibility:
 
 - record what the agent intended to render;
-- record every content slide's visual anchors and relevant semantic reasons.
+- record every content slide's real visual anchors and supporting components with relevant semantic reasons.
 
 Constraints:
 
 - output handling is implementation-owned and must not be recorded as plan configuration;
-- plan must record all visual anchors on a slide, not only the first;
+- plan must record all real visual anchors and supporting components on a slide, not only the first rendered object;
 - plan and manifest must be comparable by `id`, `kind`, and `template`.
 
 ### Slide Schema
@@ -185,18 +185,20 @@ Owned by:
 
 Responsibility:
 
-- combine layout selection, visual anchors, and text outline into a page-level data structure.
+- combine layout selection, visual anchors, supporting components, and text outline into a page-level data structure.
 
 The slide schema has three independent substructures:
 
 1. `contentLayout`: page shape and module/block placement.
-2. `visual_anchor`: semantic visual relationship and visual data.
-3. text fields: summary, captions, legends, source notes, interpretation, and conclusions.
+2. `visual_anchor`: evidence or diagram/chart that acts as the page/module's visual proof.
+3. `supporting_component`: structured readout/compression such as KPI cards, tables, capability matrices/stacks, or heatmaps.
+4. text fields: summary, captions, legends, source notes, interpretation, and conclusions.
 
 Constraints:
 
 - layout chooses where content goes;
-- visual anchors choose what relationship is rendered;
+- visual anchors choose what evidence or diagram relationship anchors the module;
+- supporting components structure secondary readouts but do not satisfy visual-anchor requirements;
 - text fields explain the slide and remain editable PPT text;
 - do not put captions, source notes, reading guidance, or conclusions under `visual_anchor.visual_spec`.
 
@@ -211,15 +213,15 @@ Responsibility:
 - create Huawei content pages;
 - apply fixed content layouts such as `two_column`, `biased_column`, `three_column`, and `four_column`;
 - place module blocks;
-- invoke visual rendering for `visual_anchor` blocks;
-- write manifest entries for rendered visual anchors.
+- invoke visual rendering for `visual_anchor` and `supporting_component` blocks through the same implementation path;
+- write manifest entries for rendered visual anchors and supporting components.
 
 Constraints:
 
 - `contentLayout` is a layout container, not a visual-template layer;
-- allowed blocks are layout/text blocks and `visual_anchor` blocks;
+- allowed blocks are layout/text blocks, `visual_anchor` blocks, and `supporting_component` blocks;
 - do not add layout-specific visual roles such as `image_text`, `metric_row`, `mini_card_grid`, or `sectioned_card_grid`;
-- if a module needs multiple visuals and text fragments, represent them as multiple `visual_anchor` and `text` blocks;
+- if a module needs multiple visuals, supporting readouts, and text fragments, represent them as multiple `visual_anchor`, `supporting_component`, and `text` blocks;
 - source images must enter through `Evidence`, not a direct image block.
 
 ### Visual Output
@@ -232,13 +234,14 @@ Responsibility:
 
 - validate visual-anchor specs;
 - route each semantic template through its fixed implementation;
-- render conceptual anchors, evidence anchors, and table anchors through their fixed handling.
+- render conceptual anchors, evidence anchors, and supporting components through their fixed handling.
 
 Constraints:
 
 - implementation routing is not part of the model-facing visual spec;
 - never accept slide-level, module-level, or anchor-level output overrides;
 - generated visuals must contain only relationship-native content such as labels, axes, values, nodes, and edges;
+- `Quantity/data_cards`, generated `heatmap`, `Matrix/table`, `Matrix/capability_matrix`, and `Hierarchy/capability_stack` are supporting components, not visual anchors;
 - page-level prose remains outside `visual_spec`;
 - generated image placement preserves aspect ratio and uses contain placement;
 - do not silently substitute one template implementation for another to pass PowerPoint export.
@@ -269,12 +272,12 @@ Owned by:
 
 Responsibility:
 
-- record every rendered visual anchor;
+- record every rendered visual anchor and supporting component;
 - capture page, id, kind, template, renderer, render status, image dimensions, anchor area, image area, and layout metadata.
 
 Constraints:
 
-- every正文内容页 must have at least one manifest-backed rendered visual anchor;
+- every正文内容页 must have at least one manifest-backed rendered real visual anchor; supporting components alone are insufficient;
 - dense pages may have multiple manifest entries;
 - manifest must be sufficient for QA to prove the implementation matched the plan.
 
@@ -288,15 +291,15 @@ Responsibility:
 
 - check PPTX style and structure;
 - compare plan and manifest;
-- validate visual-anchor schema and implementation contract;
+- validate visual-anchor/supporting-component schema and implementation contract;
 - check exported render evidence when available.
 
 Constraints:
 
 - QA is part of the architecture;
 - multi-anchor slides must validate every planned anchor;
-- QA must fail implementation drift, missing anchors, unrendered anchors, invalid schema, and plan/manifest mismatch;
-- QA must protect "at least one anchor" without regressing into "exactly one anchor";
+- QA must fail implementation drift, missing real anchors, unrendered components, invalid schema, and plan/manifest mismatch;
+- QA must protect "at least one real anchor" without letting supporting components count as anchors or regressing into "exactly one anchor";
 - QA should distinguish accepted architecture exceptions from accidental bypass paths.
 
 ### Smoke Tests
@@ -324,7 +327,8 @@ Constraints:
 ```mermaid
 flowchart LR
   Layout["contentLayout\npage shape + modules + blocks"]
-  VisualSpec["visual_anchor\nkind + template + visual_spec/source"]
+  VisualSpec["visual_anchor\nevidence + diagram/chart"]
+  SupportSpec["supporting_component\ncards + tables + grids"]
   TextOutline["text outline\nsummary + captions + notes"]
   RenderedPage["PPT content page"]
   ManifestEntry["manifest entries"]
@@ -332,8 +336,10 @@ flowchart LR
 
   Layout --> RenderedPage
   VisualSpec --> RenderedPage
+  SupportSpec --> RenderedPage
   TextOutline --> RenderedPage
   VisualSpec --> ManifestEntry
+  SupportSpec --> ManifestEntry
   RenderedPage --> ManifestEntry
   Layout --> ManifestEntry
   ManifestEntry --> QACompare
@@ -344,6 +350,7 @@ The three inputs are independent:
 
 - `contentLayout` must not carry visual semantics.
 - `visual_anchor` must not carry page explanation prose.
+- `supporting_component` must not be used as proof that the page has a visual anchor.
 - text outline must not bypass visual-anchor evidence.
 
 ## Visual Output Flow
@@ -352,7 +359,7 @@ The three inputs are independent:
 flowchart TB
   Anchor["visual_anchor"]
   Evidence["Evidence"]
-  Table["Matrix/table"]
+  Support["supporting_component"]
   EditableTemplates["Editable-output templates"]
   ImageTemplates["Image-output templates"]
   ImageOutput["image output"]
@@ -360,11 +367,10 @@ flowchart TB
   Manifest["manifest"]
 
   Anchor --> Evidence
-  Anchor --> Table
   Anchor --> EditableTemplates
   Anchor --> ImageTemplates
+  Support --> EditableTemplates
   Evidence --> Manifest
-  Table --> Manifest
   EditableTemplates --> EditableOutput
   ImageTemplates --> ImageOutput
   ImageOutput --> Manifest
@@ -374,18 +380,18 @@ flowchart TB
 Output constraints attach to this flow:
 
 - `Evidence` is source-backed evidence handling.
-- `Matrix/table` is a fixed table handling path and must still be represented as a visual anchor.
-- all other anchors follow the fixed output path mapped from their semantic template.
+- `supporting_component` is the fixed handling path for structured readouts such as `Quantity/data_cards`, generated `heatmap`, `Matrix/table`, `Matrix/capability_matrix`, and `Hierarchy/capability_stack`.
+- all anchors and supporting components follow the fixed output path mapped from their semantic template.
 - no slide, layout, or anchor can override output handling.
 
 ## Table Boundary
 
-Tables are not a general page-level helper.
+Tables are supporting components, not general page-level helpers and not visual anchors.
 
 Architecture rule:
 
-- if a table appears on a正文内容页 and carries evidence, comparison, judgment, or a structured claim, it must be represented as `visual_anchor.kind = "Matrix"` and `template = "table"`;
-- the native table implementation is an internal rendering detail of that visual-anchor template;
+- if a generated/transcribed table appears on a正文内容页 and carries comparison, judgment, or a structured claim, it must be represented as a `supporting_component` using `kind = "Matrix"` and `template = "table"`;
+- the native table implementation is an internal rendering detail of that supporting-component template;
 - page schemas must not expose table drawing as a standalone layout helper.
 
 This prevents native table drawing from becoming a bypass around plan, manifest, and QA.
@@ -425,6 +431,7 @@ Do not merge changes where only the script works but the skill still asks for ol
 These are concrete drift patterns this repository should avoid:
 
 - layout shortcut becomes visual semantics: `image_text`, `metric_row`, or mini-grid roles in `contentLayout`;
+- structured readout becomes fake anchor: `data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, or generated `heatmap` is used to satisfy visual-anchor requirements;
 - visual-anchor bypass: part of the visual is drawn through untracked helper calls;
 - silent fallback: one template implementation quietly substitutes another to pass PowerPoint export;
 - first-anchor-only QA: multi-anchor pages validate only the first manifest entry;
@@ -445,10 +452,10 @@ Before merging architecture-sensitive changes, verify:
 - layout, visual rendering, and text outline remain separate;
 - new visual needs use existing `kind` / `template` semantics unless a new semantic template is truly required;
 - source images use `Evidence`;
-- tables on content pages use `Matrix/table` visual anchors;
+- tables on content pages use `Matrix/table` supporting components;
 - visual output handling remains implementation-owned;
 - fixed template implementations do not silently substitute for each other;
-- plan and manifest cover every visual anchor;
+- plan and manifest cover every visual anchor and supporting component;
 - QA checks the behavior being introduced;
 - smoke tests cover affected visual-anchor templates when relevant;
 - PowerPoint COM export remains part of the quality bar;

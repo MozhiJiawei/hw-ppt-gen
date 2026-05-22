@@ -27,25 +27,25 @@ function assertValidBriefMapsHardConstraints() {
   const brief = read("scripts/smoke/fixtures/ppt_content_brief_valid.md");
   const parsed = parsePptContentBrief(brief, { expectedPages: 5 });
 
-  assert.equal(parsed.metadata["主题"], "GPU Pooling 价值评估");
-  assert.deepStrictEqual(parsed.sections, ["浪费来自市场形态", "突破在 token 粒度"]);
+  assert.equal(parsed.metadata["主题"], "Stochastic KV Routing 价值评估");
+  assert.deepStrictEqual(parsed.sections, ["瓶颈来自 KV cache", "弹性来自随机路由"]);
 
   assert.equal(parsed.summaryPage.pageNumber, 2);
-  assert.equal(parsed.summaryPage.title, "GPU Pooling");
-  assert.equal(parsed.summaryPage.titleNote, "面向模型市场长尾与突发并发，用 token 级共享降低保守预留。");
+  assert.equal(parsed.summaryPage.title, "Stochastic KV Routing");
+  assert.equal(parsed.summaryPage.titleNote, "用随机跨层注意力训练，换取部署期可选的 KV cache 深度共享。");
   assert.deepStrictEqual(parsed.summaryPage.summary.body, [
-    { label: "场景", text: "长尾模型低频调用会放大固定 GPU 占用。" },
-    { label: "机制", text: "token 间隙抢占换模比 request 结束后释放更细。" },
-    { label: "判断", text: "适合多模型市场先做受控评估，而不是替代所有服务。" },
+    { label: "问题", text: "KV cache 随层数和上下文线性扩张，推高推理显存成本。" },
+    { label: "机制", text: "R-CLA 训练时随机选择历史层 KV，部署时固定共享策略。" },
+    { label: "判断", text: "适合先在长上下文、显存受限场景做受控评估。" },
   ]);
 
   assert.equal(parsed.slideContract.toc.length, 2);
   assert.equal(parsed.slideContract.contentSlides.length, 2);
-  assert.equal(parsed.slideContract.contentSlides[0].title, "市场型浪费");
-  assert.equal(parsed.slideContract.contentSlides[0].titleNote, "长尾模型低频请求与热门模型 burst 共同推高 GPU 冗余预留。");
+  assert.equal(parsed.slideContract.contentSlides[0].title, "KV Cache 瓶颈");
+  assert.equal(parsed.slideContract.contentSlides[0].titleNote, "每层 KV state 放大长上下文显存占用，压缩 batch 和 context 空间。");
   assert.deepStrictEqual(parsed.slideContract.contentSlides[0].summary.body, [
-    { label: "长尾错配", text: "低频模型需要保留服务能力，闲置成本被系统性放大。" },
-    { label: "突发冗余", text: "热门模型峰值超过保守容量时，平台必须维持安全垫。" },
+    { label: "显存压力", text: "KV cache 随层数、序列长度和 batch 线性扩张。" },
+    { label: "成本边界", text: "缓存 footprint 会限制并发容量和长上下文服务。" },
   ]);
   assert.deepStrictEqual(parsed.slideContract.contentSlides[0].contentLayoutRecommendation, {
     type: "two_column",
@@ -53,7 +53,7 @@ function assertValidBriefMapsHardConstraints() {
     viewpointCount: 2,
   });
   assert.deepStrictEqual(parsed.slideContract.contentSlides[0].sections, parsed.sections);
-  assert.equal(parsed.slideContract.contentSlides[0].currentSection, "浪费来自市场形态");
+  assert.equal(parsed.slideContract.contentSlides[0].currentSection, "瓶颈来自 KV cache");
   assert.deepStrictEqual(parsed.planContract.slides.map((slide) => ({
     page: slide.page,
     role: slide.role,
@@ -65,25 +65,25 @@ function assertValidBriefMapsHardConstraints() {
     {
       page: 2,
       role: "summary",
-      title: "GPU Pooling",
-      titleNote: "面向模型市场长尾与突发并发，用 token 级共享降低保守预留。",
+      title: "Stochastic KV Routing",
+      titleNote: "用随机跨层注意力训练，换取部署期可选的 KV cache 深度共享。",
       currentSection: "",
       contentLayoutType: "three_column",
     },
     {
       page: 4,
       role: "content",
-      title: "市场型浪费",
-      titleNote: "长尾模型低频请求与热门模型 burst 共同推高 GPU 冗余预留。",
-      currentSection: "浪费来自市场形态",
+      title: "KV Cache 瓶颈",
+      titleNote: "每层 KV state 放大长上下文显存占用，压缩 batch 和 context 空间。",
+      currentSection: "瓶颈来自 KV cache",
       contentLayoutType: "two_column",
     },
     {
       page: 5,
       role: "content",
-      title: "Token-Level 破局",
-      titleNote: "Aegaeon 在 token 间隙抢占换模，降低 request-level 等待带来的 SLO 风险。",
-      currentSection: "突破在 token 粒度",
+      title: "R-CLA 机制",
+      titleNote: "训练期随机跨层注意力，让部署期固定 cache sharing 不再脆弱。",
+      currentSection: "弹性来自随机路由",
       contentLayoutType: "two_column",
     },
   ]);

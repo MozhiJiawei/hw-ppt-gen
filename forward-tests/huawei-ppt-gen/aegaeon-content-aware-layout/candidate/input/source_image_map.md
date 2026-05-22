@@ -2,7 +2,9 @@
 
 The fixture rewrites `ppt_content_brief.md` image references to the local files below so the forward test is portable and does not depend on upstream absolute `.tmp` paths.
 
-Use these local files when binding `Evidence/source_figure` or when creating derived evidence assets.
+Use these local files when binding `Evidence/source_figure`.
+
+Do not create derived crops merely to fit the slide. If one source image contains multiple subfigures and a module needs one of them, a derived image is acceptable only when it preserves the complete subfigure, including axes, tick labels, legends, figure labels, borders, and decisive annotations.
 
 | Figure label in brief | Local file | Intended evidence role | Original extractor file |
 | --- | --- | --- | --- |

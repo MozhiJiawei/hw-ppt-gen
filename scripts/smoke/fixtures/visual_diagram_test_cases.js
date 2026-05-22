@@ -95,7 +95,7 @@ function buildTemplateCases() {
       value: `${20 + idx * 3 + cardIdx * 7}`,
       unit: cardIdx % 2 ? "%" : "分",
     }));
-    return withMeta(`data_cards_${idx + 1}`, "Quantity", "data_cards", "KPI 卡片属于数量型视觉锚点，适合承载少量关键指标。", {
+    return withMeta(`data_cards_${idx + 1}`, "Quantity", "data_cards", "KPI 卡片属于支撑组件，适合承载少量关键指标。", {
       cards,
       highlight: cards[cards.length - 1].id,
     }, aspectRatio);

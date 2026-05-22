@@ -1,4 +1,4 @@
-const fs = require("fs");
+﻿const fs = require("fs");
 const path = require("path");
 const sharp = require("sharp");
 const {
@@ -93,14 +93,14 @@ function processAnchor(id, title) {
   return {
     id,
     title,
-    claim: `${title}用数据卡说明推进节奏。`,
+    claim: `${title}用柱状图说明推进节奏。`,
     kind: "Quantity",
-    template: "data_cards",
+    template: "bar_chart",
     visual_spec: {
-      cards: [
-        { id: "a", label: "输入", value: "1", unit: "步" },
-        { id: "b", label: "处理", value: "2", unit: "步" },
-        { id: "c", label: "输出", value: "3", unit: "步" },
+      y_label: "值",
+      categories: ["A", "B", "C"],
+      series: [
+        { name: "指标", values: [1, 2, 3] },
       ],
     },
   };
@@ -199,7 +199,7 @@ async function main() {
                 ],
               },
               {
-                type: "visual_anchor",
+                type: "supporting_component",
                 visual_anchor: matrixAnchor(
                   "layout_two_column_grid",
                   "二分栏左侧矩阵",
@@ -212,6 +212,7 @@ async function main() {
                   ],
                 ),
               },
+              { type: "visual_anchor", height: 1.15, visual_anchor: processAnchor("layout_three_left_process", "三分栏左侧流程") },
             ],
           },
           {
@@ -269,8 +270,7 @@ async function main() {
             emphasis: ["关键证据", "当前判断"],
             body: [
               "证据：左侧宽栏承担关键证据。",
-              "判断：右栏只解释它如何进入当前判断。",
-              "结论：先建立关系，再收束为行动入口。",
+              "结论：右栏收束为行动入口。",
             ],
           },
           {
@@ -322,7 +322,7 @@ async function main() {
                 body: ["场景判断直接开场，密度贴近参考图 07。", "下方三列小框承接细节。"],
               },
               {
-                type: "visual_anchor",
+                type: "supporting_component",
                 visual_anchor: matrixAnchor(
                   "layout_three_left_grid",
                   "三分栏左侧矩阵",
@@ -331,6 +331,7 @@ async function main() {
                   [["小标题", "小标题", "小标题"], ["标签", "标签", "标签"], ["内容区", "内容区", "内容区"], ["结论", "结论", "结论"]],
                 ),
               },
+              { type: "visual_anchor", height: 1.15, visual_anchor: processAnchor("layout_three_left_process", "三分栏左侧图") },
             ],
           },
           {
@@ -344,44 +345,19 @@ async function main() {
                 body: "卡片内标题",
               },
               {
-                type: "visual_anchor",
-                height: 0.78,
+                type: "supporting_component",
+                height: 1.05,
                 visual_anchor: matrixAnchor("layout_three_mid_top", "三分栏中列上矩阵", ["一", "二"], ["A", "B"], [["输入", "过滤"], ["聚合", ""]]),
               },
+              { type: "visual_anchor", height: 1.45, visual_anchor: processAnchor("layout_three_mid_process", "三分栏中列图") },
               {
                 type: "text",
-                height: 0.5,
+                height: 0.98,
                 fontSize: 10,
-                body: "卡片内标题",
+                emphasis: ["支撑组件", "真实锚点"],
+                body: "规则：支撑组件不能替代真实锚点。",
               },
-              {
-                type: "visual_anchor",
-                height: 1.05,
-                visual_anchor: matrixAnchor(
-                  "layout_three_mid_grid",
-                  "三分栏中列矩阵",
-                  ["一", "二", "三"],
-                  ["A", "B", "C"],
-                  [["来源", "判断", "动作"], ["证据", "压缩", "复核"], ["指标", "结论", "沉淀"]],
-                ),
-              },
-              {
-                type: "text",
-                height: 0.5,
-                fontSize: 10,
-                body: "卡片内标题",
-              },
-              {
-                type: "visual_anchor",
-                height: 0.96,
-                visual_anchor: matrixAnchor(
-                  "layout_three_mid_bottom",
-                  "三分栏中列下矩阵",
-                  ["一", "二"],
-                  ["A", "B", "C"],
-                  [["短句", "红字", "图表"], ["表格", "结论", ""]],
-                ),
-              },
+              { type: "supporting_component", height: 0.55, visual_anchor: metricStripAnchor("layout_three_mid_readout", "三分栏读数", "规则") },
             ],
           },
           {

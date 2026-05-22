@@ -376,7 +376,8 @@ function assertHardQaKnowsVisualAnchorContract() {
   for (const rule of expectedVisualAnchorQaRules) {
     assert(qa.includes(rule), `hard QA should emit ${rule}`);
   }
-  assert(qa.includes("at least one manifest-backed visual anchor"), "hard QA should allow one or more anchors per content slide");
+  assert(qa.includes("at least one real visual anchor"), "hard QA should require a real visual anchor, not only supporting components");
+  assert(qa.includes("isStructuredSupportingComponentSpec"), "hard QA should distinguish supporting components from real anchors");
 }
 
 function assertTableHelperIsNotPublicSchemaEscapeHatch() {
@@ -385,7 +386,7 @@ function assertTableHelperIsNotPublicSchemaEscapeHatch() {
   assert.equal(Object.prototype.hasOwnProperty.call(helpers, "addHuaweiTable"), false, "addHuaweiTable must not be exported as a page-level helper");
   assert(!contentSlide.includes("role === \"table\""), "contentLayout must not accept role=table as a direct native table path");
   assert(contentSlide.includes("contentLayout table blocks were removed"), "contentLayout table blocks should fail instead of drawing a native table directly");
-  assert(contentSlide.includes("kind=Matrix/template=table"), "table block rejection should direct callers to Matrix/table visual anchors");
+  assert(contentSlide.includes("supporting_component kind=Matrix/template=table"), "table block rejection should direct callers to the Matrix/table supporting component path");
 }
 
 function assertSkillDocumentsCurrentPath() {
@@ -397,15 +398,19 @@ function assertSkillDocumentsCurrentPath() {
   assert(layoutStandards.includes("05 内容 二分栏"), "layout standards should document the fixed content-layout references");
   assert(skill.includes("one primary evidence object"), "SKILL should document the primary evidence standard");
   assert(skill.includes("Evidence"), "SKILL should document source-evidence visual anchors");
+  assert(skill.includes("supporting components"), "SKILL should distinguish supporting components from visual anchors");
 }
 
 function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
   const schema = read("references/content_layout_schema.md");
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
   assert(schema.includes("two_column"), "content layout reference should document two_column");
   assert(schema.includes("three_column"), "content layout reference should document three_column");
   assert(schema.includes("renderer suppresses module visual captions"), "content layout reference should document dense-column caption suppression");
   assert(schema.includes("Do not provide a `flow` field"), "content layout reference should make module flow renderer-owned");
   assert(schema.includes("emphasis"), "content layout reference should document red/bold emphasis terms");
+  assert(schema.includes("structural claim handles"), "content layout reference should keep claim handles out of red emphasis");
+  assert(contentSlide.includes("splitStructuredLabel"), "content renderer should protect claim handles from red emphasis");
 }
 
 function assertContentLayoutProtectsEvidenceReadability() {
@@ -424,7 +429,28 @@ function assertContentLayoutUnifiesTypographyContext() {
   const layoutStandards = read("references/layout_standards.md");
   assert(contentSlide.includes("module.contentFontSize || HW_STYLE.size.body"), "content layout text blocks should share the body-size text tier");
   assert(layoutStandards.includes("Content Typography"), "layout standards should document same-tier content typography");
-  assert(layoutStandards.includes("Visual anchors, including KPI cards, tables, generated diagrams, and source images, own their internal typography"), "layout standards should keep visual-anchor typography separate from text-block typography");
+  assert(layoutStandards.includes("Visual anchors and supporting components own their internal typography separately"), "layout standards should keep component typography separate from text-block typography");
+}
+
+function assertSupportingComponentsDoNotCountAsVisualAnchors() {
+  const skill = read("SKILL.md");
+  const schema = read("references/content_layout_schema.md");
+  const generated = read("references/generated_visual_schema.md");
+  const architecture = read("docs/architecture_design.md");
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  assert(skill.includes("data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, and generated `heatmap` are supporting components"), "SKILL should name the supporting component boundary");
+  assert(schema.includes('"type": "supporting_component"'), "content layout schema should show supporting_component blocks");
+  assert(generated.includes("Supporting components are useful for density and compression"), "generated visual schema should explain supporting components");
+  assert(architecture.includes("structured readout becomes fake anchor"), "architecture docs should record the drift pattern");
+  assert(contentSlide.includes("visualComponentRole"), "renderer should record visual roles for manifest-backed components");
+}
+
+function assertContentLayoutQaUsesWrappedTextLines() {
+  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  const hardQa = read("scripts/qa/check_huawei_pptx.js");
+  assert(contentSlide.includes("estimated_wrapped_line_count"), "content layout manifest should record estimated wrapped text lines");
+  assert(contentSlide.includes("estimateTextBlockWrappedLines"), "content layout renderer should estimate text lines in the actual block width");
+  assert(hardQa.includes("textBlockLineCount(block)"), "hard QA should use estimated wrapped line count for text-wall checks");
 }
 
 function assertContentLayoutDoesNotExposePageRegionOverride() {
@@ -476,6 +502,8 @@ function main() {
   collect("content layout reference documents dense caption suppression", assertContentLayoutReferenceDocumentsDenseCaptionSuppression, failures);
   collect("content layout protects evidence readability", assertContentLayoutProtectsEvidenceReadability, failures);
   collect("content layout unifies typography context", assertContentLayoutUnifiesTypographyContext, failures);
+  collect("supporting components do not count as visual anchors", assertSupportingComponentsDoNotCountAsVisualAnchors, failures);
+  collect("content layout QA uses wrapped text lines", assertContentLayoutQaUsesWrappedTextLines, failures);
   collect("content layout does not expose page-region override", assertContentLayoutDoesNotExposePageRegionOverride, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 

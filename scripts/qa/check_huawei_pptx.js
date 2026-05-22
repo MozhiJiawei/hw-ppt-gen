@@ -39,7 +39,7 @@ const ALLOWED_COLORS = new Set([
 ]);
 
 const STANDARD_LINE_WIDTH = 6350;
-const ALLOWED_FONT_SIZES = new Set([10, 12, 14, 18, 24]);
+const ALLOWED_FONT_SIZES = new Set([8, 10, 12, 14, 18, 24]);
 const CONTENT_CARD_FILLS = new Set(["F2F2F2", "F7F7F7", "FFF1EF", "FCE4E0"]);
 const CONTENT_LAYOUT_SCHEMA_RULES = Object.freeze({
   two_column: { reference: "05 内容 二分栏", moduleCount: 2 },

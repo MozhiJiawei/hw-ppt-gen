@@ -220,6 +220,7 @@ function normalizeContentLayout(layout) {
     reference: safeText(layout.reference || schema.reference),
     modules,
     schema,
+    visualWeight: layout.visualWeight || layout.visual_weight || null,
     flowArrows: layout.flowArrows || layout.flow_arrows || null,
   };
 }
@@ -289,7 +290,10 @@ function contentLayoutAreas(layout, contentArea) {
   const gap = 0.18;
   if (layout.schema.special === "large_visual_with_side_cards") {
     const visualDemand = moduleEvidenceWidthDemand(layout.modules[0], layout.type, contentArea.w * 0.59);
-    const visualShare = Math.min(0.68, Math.max(0.59, visualDemand / Math.max(0.1, contentArea.w)));
+    const requestedVisualShare = Number(layout.visualWeight || layout.visual_weight);
+    const visualShare = Number.isFinite(requestedVisualShare)
+      ? Math.min(0.72, Math.max(0.52, requestedVisualShare))
+      : Math.min(0.68, Math.max(0.59, visualDemand / Math.max(0.1, contentArea.w)));
     const sideGap = visualShare >= 0.64 ? 0.28 : 0.38;
     const visualW = contentArea.w * visualShare;
     const sideW = contentArea.w - visualW - sideGap;
@@ -389,7 +393,10 @@ function addModuleBodyText(slide, text, area, module) {
     w: area.w,
     h: area.h,
     fontSize,
-    color: HW_STYLE.color.text,
+    color: module.color || HW_STYLE.color.text,
+    bold: Boolean(module.bold),
+    hyperlink: module.hyperlink,
+    underline: module.underline,
   };
   const emphasis = normalizeEmphasisTerms(module);
   if (!emphasis.length) {
@@ -402,7 +409,7 @@ function addModuleBodyText(slide, text, area, module) {
 function addRichModuleBodyText(slide, text, area, options, emphasis) {
   const lines = safeText(text).split(/\r?\n/);
   if (lines.length <= 1) {
-    slide.addText(buildEmphasisRuns(text, emphasis, options.fontSize), richTextBoxOptions(options));
+    slide.addText(buildEmphasisRuns(text, emphasis, options), richTextBoxOptions(options));
     return;
   }
 
@@ -417,7 +424,7 @@ function addRichModuleBodyText(slide, text, area, options, emphasis) {
     });
     const remainingH = Math.max(0.05, area.y + area.h - cursorY);
     const lineH = Math.min(remainingH, Math.max(0.18, estimatedLineH));
-    slide.addText(buildEmphasisRuns(line, emphasis, options.fontSize), richTextBoxOptions({
+    slide.addText(buildEmphasisRuns(line, emphasis, options), richTextBoxOptions({
       ...options,
       y: cursorY,
       h: lineH,
@@ -642,23 +649,31 @@ function estimateTableBlockHeight(visualAnchor, area = {}) {
   return Math.ceil(rowHeights.reduce((sum, height) => sum + height, 0) * 20) / 20;
 }
 
-function buildEmphasisRuns(text, emphasisTerms, fontSize) {
+function buildEmphasisRuns(text, emphasisTerms, options = {}) {
   const value = safeText(text);
+  const fontSize = options.fontSize || HW_STYLE.size.body;
+  const baseOptions = {
+    fontSize,
+    color: options.color || HW_STYLE.color.text,
+    bold: Boolean(options.bold),
+    hyperlink: options.hyperlink,
+    underline: options.underline,
+  };
   const runs = [];
   let cursor = 0;
   while (cursor < value.length) {
     const match = findNextEmphasis(value, cursor, emphasisTerms);
     if (!match) {
-      runs.push({ text: value.slice(cursor), options: { fontSize, color: HW_STYLE.color.text } });
+      runs.push({ text: value.slice(cursor), options: baseOptions });
       break;
     }
     if (match.index > cursor) {
-      runs.push({ text: value.slice(cursor, match.index), options: { fontSize, color: HW_STYLE.color.text } });
+      runs.push({ text: value.slice(cursor, match.index), options: baseOptions });
     }
     runs.push({ text: match.term, options: { fontSize, color: HW_STYLE.color.red, bold: true } });
     cursor = match.index + match.term.length;
   }
-  return runs.length ? runs : [{ text: value, options: { fontSize, color: HW_STYLE.color.text } }];
+  return runs.length ? runs : [{ text: value, options: baseOptions }];
 }
 
 function findNextEmphasis(text, cursor, emphasisTerms) {
@@ -725,7 +740,15 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
   if (type === "table") {
     throw new Error("contentLayout table blocks were removed; use visual_anchor kind=Matrix/template=table with text annotations.");
   }
-  addModuleBodyText(slide, normalizeModuleBody(block), area, { ...module, ...block, fontSize: block.fontSize || module.fontSize });
+  addModuleBodyText(slide, normalizeModuleBody(block), area, {
+    ...module,
+    ...block,
+    fontSize: block.fontSize || module.fontSize,
+    color: block.color || module.color,
+    bold: block.bold ?? module.bold,
+    hyperlink: block.hyperlink || module.hyperlink,
+    underline: block.underline ?? module.underline,
+  });
   return null;
 }
 

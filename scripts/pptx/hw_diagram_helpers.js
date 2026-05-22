@@ -1958,10 +1958,11 @@ function drawNativeTable(slide, visual, area) {
     y: area.y,
     w: area.w,
     h: area.h,
-    rowH: rows.map(() => rowHeight),
-    fontSize: 10,
-    margin: rowHeight < 0.3 ? 0.03 : 0.06,
-    boldFirstColumn: true,
+    fontSize: visual.fontSize || 10,
+    margin: visual.margin ?? (rowHeight < 0.3 ? 0.03 : 0.06),
+    colW: visual.colW,
+    rowH: visual.rowH || rows.map(() => rowHeight),
+    boldFirstColumn: visual.boldFirstColumn !== false,
   });
 }
 
@@ -2459,8 +2460,11 @@ function validateVisualAnchorSpec(spec) {
   }
 
   if (spec.kind === "Matrix" && template === "table") {
-    rejectUnknownFields(visual || {}, ["rows"], "visual_spec", errors);
+    rejectUnknownFields(visual || {}, ["rows", "colW", "rowH", "fontSize", "margin", "boldFirstColumn"], "visual_spec", errors);
     if (!Array.isArray(visual?.rows) || visual.rows.length < 1) errors.push("table requires visual_spec.rows.");
+    if (visual?.fontSize != null && (!Number.isFinite(Number(visual.fontSize)) || Number(visual.fontSize) < 8)) errors.push("table visual_spec.fontSize must be at least 8.");
+    if (visual?.colW != null && !Array.isArray(visual.colW)) errors.push("table visual_spec.colW must be an array when provided.");
+    if (visual?.rowH != null && !Array.isArray(visual.rowH)) errors.push("table visual_spec.rowH must be an array when provided.");
     if (errors.length) throw new Error(`Invalid visual anchor spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
     return true;
   }

@@ -1,1 +1,6 @@
 reproductions/**/*.zip filter=lfs diff=lfs merge=lfs -text
+forward-tests/**/*.pdf filter=lfs diff=lfs merge=lfs -text
+forward-tests/**/*.zip filter=lfs diff=lfs merge=lfs -text
+forward-tests/**/*.png filter=lfs diff=lfs merge=lfs -text
+forward-tests/**/*.jpg filter=lfs diff=lfs merge=lfs -text
+forward-tests/**/*.jpeg filter=lfs diff=lfs merge=lfs -text

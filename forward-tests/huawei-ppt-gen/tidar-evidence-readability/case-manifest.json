@@ -1,0 +1,7 @@
+{
+  "id": "tidar-evidence-readability",
+  "title": "TiDAR Evidence Readability",
+  "summary": "Reproduces issue #19: fixed brief columns can compress paper evidence and generated visuals until exported slides become unreadable.",
+  "issue": "https://github.com/MozhiJiawei/hw-ppt-gen/issues/19",
+  "tags": ["issue-19", "evidence-readability", "image-density", "ai-image-fallback"]
+}

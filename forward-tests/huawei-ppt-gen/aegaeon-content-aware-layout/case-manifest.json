@@ -1,0 +1,6 @@
+{
+  "id": "aegaeon-content-aware-layout",
+  "title": "Aegaeon Content-Aware Layout",
+  "summary": "Checks whether an approved upstream brief can be realized as a readable Huawei-style deck without hidden expected examples.",
+  "tags": ["layout", "content-brief", "evidence-readability"]
+}

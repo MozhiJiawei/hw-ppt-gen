@@ -2,6 +2,7 @@ const fs = require("fs");
 const path = require("path");
 const pptxgen = require("pptxgenjs");
 const rough = require("roughjs");
+const { estimateTextBoxHeight } = require("./hw_pptx_helpers");
 
 const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 
@@ -44,6 +45,12 @@ const TEXT_LIMITS = Object.freeze({
   minSvgFontSize: 14,
   minNativeFontSize: 10,
   allowedNativeFontSizes: [24, 18, 14, 12, 10],
+});
+
+const ROUGH_SVG_SIZE_TIERS = Object.freeze({
+  large: { scale: 1, label: "biased_column_large" },
+  medium: { scale: 1, label: "two_column_medium" },
+  small: { scale: 1, label: "three_column_small" },
 });
 
 const TEMPLATE_LAYOUTS = Object.freeze({
@@ -155,7 +162,23 @@ function normalizeExportOptions(spec, options = {}) {
     template,
     requestedWidth: width == null ? null : Math.round(Number(width)),
     requestedHeight: height == null ? null : Math.round(Number(height)),
+    sizeTier: normalizeRoughSvgSizeTier(options.sizeTier || options.columnTier || options.layoutTier),
   };
+}
+
+function normalizeRoughSvgSizeTier(value) {
+  if (value == null || value === "") return "large";
+  const tier = String(value).trim().toLowerCase();
+  if (ROUGH_SVG_SIZE_TIERS[tier]) return tier;
+  throw new Error(`Unsupported rough_svg size tier: ${value}. Use large, medium, or small.`);
+}
+
+function resolveRoughSvgSizeTierForArea(area = {}) {
+  const widthIn = Number(area.w);
+  if (!Number.isFinite(widthIn) || widthIn <= 0) return "large";
+  if (widthIn < 4.15) return "small";
+  if (widthIn < 6.4) return "medium";
+  return "large";
 }
 
 function clamp(value, min, max) {
@@ -681,8 +704,8 @@ function curve(canvas, rc, x1, y1, x2, y2, bend = 0, opts = {}) {
 function resolveCropBox(bounds) {
   const fallback = { x: 80, y: 120, w: 1440, h: 700 };
   if (!bounds || !Number.isFinite(bounds.minX) || !Number.isFinite(bounds.minY) || !Number.isFinite(bounds.maxX) || !Number.isFinite(bounds.maxY)) return fallback;
-  const textPad = 26;
-  const shapePad = 16;
+  const textPad = 8;
+  const shapePad = 8;
   const x = clamp(Math.floor(bounds.minX - textPad), 0, DIAGRAM_STYLE.width - 40);
   const y = clamp(Math.floor(bounds.minY - textPad), 0, DIAGRAM_STYLE.height - 40);
   const maxX = clamp(Math.ceil(bounds.maxX + shapePad), x + 40, DIAGRAM_STYLE.width);
@@ -727,16 +750,253 @@ ${svgText(90, 126, safeText(claim), { size: 24, weight: 500, anchor: "start", fi
     width,
     height,
     cropBox,
+    sizeTier: exportOptions.sizeTier,
     svg: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="${cropBox.x} ${cropBox.y} ${cropBox.w} ${cropBox.h}">
-<rect width="${DIAGRAM_STYLE.width}" height="${DIAGRAM_STYLE.height}" fill="${colors.paper}"/>
-<g opacity="0.48">
-  <path d="M80 120 C310 86 518 111 742 89 S1205 116 1510 82" fill="none" stroke="${colors.line}" stroke-width="2"/>
-  <path d="M88 812 C358 790 606 830 894 802 S1266 788 1514 816" fill="none" stroke="${colors.line}" stroke-width="2"/>
-</g>
 ${header}
 ${body}
 </svg>`,
   };
+}
+
+function getRoughSvgSizeTier(spec) {
+  return normalizeRoughSvgSizeTier(spec?._canvasOptions?._exportOptions?.sizeTier);
+}
+
+function quantityTierProfile(spec) {
+  const tier = getRoughSvgSizeTier(spec);
+  if (tier === "small") {
+    return {
+      tier,
+      chartX: 120,
+      chartW: 500,
+      chartH: 390,
+      legendPlacement: "bottom",
+      legendMaxW: 210,
+      categorySize: 20,
+      categoryMaxLines: 4,
+      tickSize: 18,
+      axisLabelSize: 22,
+      valueSize: 18,
+    };
+  }
+  if (tier === "medium") {
+    return {
+      tier,
+      chartX: 145,
+      chartW: 700,
+      chartH: 430,
+      legendPlacement: "bottom",
+      legendMaxW: 210,
+      categorySize: 20,
+      categoryMaxLines: 3,
+      tickSize: 18,
+      axisLabelSize: 22,
+      valueSize: 18,
+    };
+  }
+  return {
+    tier,
+    chartX: 170,
+    chartW: null,
+    chartH: null,
+    legendPlacement: "right",
+    legendX: null,
+    legendMaxW: 230,
+    categorySize: null,
+    categoryMaxLines: 2,
+    tickSize: 18,
+    axisLabelSize: 22,
+    valueSize: 18,
+  };
+}
+
+function roughTierProfile(spec) {
+  const tier = getRoughSvgSizeTier(spec);
+  if (tier === "small") {
+    return {
+      tier,
+      compact: true,
+      x: 120,
+      y: 170,
+      w: 560,
+      h: 570,
+      columns: 2,
+      cardW: 218,
+      cardH: 92,
+      labelSize: 22,
+      smallLabelSize: 18,
+    };
+  }
+  if (tier === "medium") {
+    return {
+      tier,
+      compact: true,
+      x: 145,
+      y: 170,
+      w: 820,
+      h: 570,
+      columns: 3,
+      cardW: 230,
+      cardH: 94,
+      labelSize: 23,
+      smallLabelSize: 18,
+    };
+  }
+  return {
+    tier,
+    compact: false,
+    x: 120,
+    y: 170,
+    w: 1360,
+    h: 590,
+    columns: 4,
+    cardW: 232,
+    cardH: 104,
+    labelSize: 23,
+    smallLabelSize: 18,
+  };
+}
+
+function compactGridPosition(profile, idx, count, options = {}) {
+  const columns = options.columns || Math.min(profile.columns, Math.max(1, count));
+  const cardW = options.cardW || profile.cardW;
+  const cardH = options.cardH || profile.cardH;
+  const gapX = options.gapX || Math.max(34, (profile.w - columns * cardW) / Math.max(1, columns - 1));
+  const gapY = options.gapY || 34;
+  const rows = Math.ceil(count / columns);
+  const totalW = columns * cardW + Math.max(0, columns - 1) * gapX;
+  const totalH = rows * cardH + Math.max(0, rows - 1) * gapY;
+  const x0 = (options.x ?? profile.x) + profile.w / 2 - totalW / 2;
+  const y0 = (options.y ?? profile.y) + Math.max(0, ((options.h ?? profile.h) - totalH) / 2);
+  const col = idx % columns;
+  const row = Math.floor(idx / columns);
+  return {
+    x: x0 + col * (cardW + gapX),
+    y: y0 + row * (cardH + gapY),
+    cx: x0 + col * (cardW + gapX) + cardW / 2,
+    cy: y0 + row * (cardH + gapY) + cardH / 2,
+    w: cardW,
+    h: cardH,
+    row,
+    col,
+  };
+}
+
+function compactLoopPositionOrder(count, columns) {
+  const cols = Math.max(1, columns);
+  const rows = Math.max(1, Math.ceil(count / cols));
+  const order = [];
+  const push = (row, col) => {
+    const idx = row * cols + col;
+    if (idx < count && !order.includes(idx)) order.push(idx);
+  };
+  for (let row = 0; row < rows; row += 1) push(row, 0);
+  for (let col = 1; col < cols; col += 1) push(rows - 1, col);
+  for (let row = rows - 2; row >= 0; row -= 1) push(row, cols - 1);
+  for (let col = cols - 2; col >= 1; col -= 1) push(0, col);
+  for (let idx = 0; idx < count; idx += 1) {
+    if (!order.includes(idx)) order.push(idx);
+  }
+  return order;
+}
+
+function compactCardEdgePoint(pos, next, mode = "from") {
+  const dx = next.cx - pos.cx;
+  const dy = next.cy - pos.cy;
+  const pad = 8;
+  if (Math.abs(dx) >= Math.abs(dy)) {
+    const side = dx >= 0 ? 1 : -1;
+    return { x: pos.cx + side * (pos.w / 2 + pad), y: pos.cy };
+  }
+  const side = dy >= 0 ? 1 : -1;
+  return { x: pos.cx, y: pos.cy + side * (pos.h / 2 + pad), mode };
+}
+
+function drawCompactLoopConnectors(canvas, rc, positions, options = {}) {
+  const colors = DIAGRAM_STYLE.color;
+  if (positions.length < 2) return;
+  const seed = options.seed || 1700;
+  positions.forEach((pos, i) => {
+    const next = positions[(i + 1) % positions.length];
+    const closing = i === positions.length - 1;
+    if (closing) {
+      const start = { x: pos.cx > next.cx ? pos.x - 8 : pos.x + pos.w + 8, y: pos.y + 16 };
+      const end = { x: pos.cx > next.cx ? next.x + next.w + 8 : next.x - 8, y: next.y + 16 };
+      curve(canvas, rc, start.x, start.y, end.x, end.y, -(options.closeLift || 48), {
+        arrow: true,
+        stroke: options.closeStroke || colors.red,
+        strokeWidth: options.closeStrokeWidth || 2.6,
+        seed: seed + 80 + i,
+      });
+      return;
+    }
+    const start = compactCardEdgePoint(pos, next, "from");
+    const end = compactCardEdgePoint(next, pos, "to");
+    const sameRow = pos.row === next.row;
+    const sameCol = pos.col === next.col;
+    if (sameRow || sameCol) {
+      line(canvas, rc, start.x, start.y, end.x, end.y, {
+        arrow: true,
+        stroke: options.stroke || colors.lineDark,
+        strokeWidth: options.strokeWidth || 2,
+        seed: seed + i,
+      });
+      return;
+    }
+    const bend = Math.abs(next.col - pos.col) > Math.abs(next.row - pos.row)
+      ? (next.row > pos.row ? 24 : -24)
+      : (next.col > pos.col ? -24 : 24);
+    curve(canvas, rc, start.x, start.y, end.x, end.y, bend, {
+      arrow: true,
+      stroke: options.stroke || colors.lineDark,
+      strokeWidth: options.strokeWidth || 2,
+      seed: seed + i,
+    });
+  });
+}
+
+function drawCompactStepCards(canvas, rc, steps, profile, visual, options = {}) {
+  const colors = DIAGRAM_STYLE.color;
+  const palette = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale];
+  const positionOrder = options.positionOrder || null;
+  const positions = [];
+  steps.forEach((step, i) => {
+    const pos = compactGridPosition(profile, positionOrder?.[i] ?? i, steps.length, options);
+    positions.push(pos);
+    const highlighted = step.id === visual.highlight || step.label === visual.highlight;
+    rect(canvas, rc, pos.x, pos.y, pos.w, pos.h, {
+      fill: highlighted ? colors.pink : palette[i % palette.length],
+      opaqueFill: highlighted ? colors.pink : palette[i % palette.length],
+      stroke: highlighted ? colors.red : colors.ink,
+      strokeWidth: highlighted ? 3.2 : 2.1,
+      fillStyle: highlighted ? "cross-hatch" : "hachure",
+      seed: (options.seed || 1700) + i,
+    });
+    ellipse(canvas, rc, pos.x + 30, pos.y + 28, 42, 32, { fill: highlighted ? colors.red : "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: (options.seed || 1700) + 80 + i });
+    canvas.add(svgText(pos.x + 30, pos.y + 36, String(i + 1), { size: 17, weight: 900, fill: highlighted ? "#ffffff" : colors.ink }));
+    canvas.add(svgText(pos.x + pos.w / 2 + 12, pos.y + pos.h / 2 + 8, step.label, {
+      size: options.labelSize || profile.labelSize,
+      weight: 850,
+      fill: highlighted ? colors.red : colors.ink,
+      lineHeight: (options.labelSize || profile.labelSize) + 3,
+      maxWidth: pos.w - 72,
+      maxLines: 2,
+    }));
+  });
+  if (options.connectors !== false) {
+    positions.forEach((pos, i) => {
+      if (i >= positions.length - 1) return;
+      const next = positions[i + 1];
+      const sameRow = pos.row === next.row;
+      curve(canvas, rc, pos.cx + (sameRow ? pos.w / 2 + 4 : 0), pos.cy + (sameRow ? 0 : pos.h / 2 + 4), next.cx - (sameRow ? next.w / 2 + 4 : 0), next.cy - (sameRow ? 0 : next.h / 2 + 4), sameRow ? 12 : (i % 2 ? 24 : -24), {
+        arrow: true,
+        stroke: colors.lineDark,
+        strokeWidth: 2,
+        seed: (options.seed || 1700) + 140 + i,
+      });
+    });
+  }
+  return positions;
 }
 
 function drawLayeredArchitecture(spec) {
@@ -745,6 +1005,83 @@ function drawLayeredArchitecture(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const layers = visual.layers || [];
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    const centers = new Map();
+    const rowGap = 18;
+    const layerH = Math.max(82, Math.min(116, (profile.h - rowGap * Math.max(0, layers.length - 1) - 110) / Math.max(1, layers.length)));
+    const palette = [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale];
+    layers.forEach((layer, layerIdx) => {
+      const y = profile.y + layerIdx * (layerH + rowGap);
+      rect(canvas, rc, profile.x, y, profile.w, layerH, {
+        fill: palette[layerIdx % palette.length],
+        hachureGap: 14,
+        stroke: colors.lineDark,
+        roughness: 2.1,
+        seed: 120 + layerIdx,
+      });
+      canvas.add(svgText(profile.x + 58, y + layerH / 2 + 8, layer.label || layer.id, {
+        size: 21,
+        fill: colors.red,
+        weight: 800,
+        maxWidth: 100,
+        maxLines: 2,
+      }));
+      const items = layer.items || [];
+      const itemGap = 12;
+      const itemX = profile.x + 128;
+      const itemAreaW = profile.w - 150;
+      const itemW = Math.min(160, (itemAreaW - itemGap * Math.max(0, items.length - 1)) / Math.max(1, items.length));
+      const itemH = Math.min(60, layerH - 24);
+      const totalW = items.length * itemW + itemGap * Math.max(0, items.length - 1);
+      const startX = itemX + itemAreaW / 2 - totalW / 2;
+      items.forEach((label, itemIdx) => {
+        const x = startX + itemIdx * (itemW + itemGap);
+        const cx = x + itemW / 2;
+        const cy = y + layerH / 2;
+        centers.set(label, [cx, cy]);
+        rect(canvas, rc, x, cy - itemH / 2, itemW, itemH, {
+          fill: "#ffffff",
+          fillStyle: itemIdx % 2 ? "hachure" : "zigzag",
+          seed: 140 + layerIdx * 10 + itemIdx,
+        });
+        canvas.add(svgText(cx, cy + 7, label, {
+          size: profile.tier === "small" ? 19 : 20,
+          weight: 750,
+          lineHeight: 22,
+          maxWidth: itemW - 16,
+          maxHeight: itemH - 10,
+        }));
+      });
+    });
+    const sideModules = visual.side_modules || [];
+    if (sideModules.length) {
+      const sideY = profile.y + layers.length * (layerH + rowGap) + 24;
+      if (visual.side_label) canvas.add(svgText(profile.x + profile.w / 2, sideY, visual.side_label, { size: 23, weight: 850, fill: colors.red, maxWidth: profile.w, maxLines: 1 }));
+      sideModules.slice(0, 6).forEach((label, i) => {
+        const pos = compactGridPosition(profile, i, Math.min(sideModules.length, 6), { y: sideY + 28, h: 108, cardW: profile.tier === "small" ? 230 : 210, cardH: 54, columns: profile.tier === "small" ? 2 : 3, gapY: 12 });
+        centers.set(label, [pos.cx, pos.cy]);
+        ellipse(canvas, rc, pos.cx, pos.cy, pos.w, pos.h, {
+          fill: palette[(i + 1) % palette.length],
+          hachureAngle: -45 + i * 15,
+          seed: 180 + i,
+        });
+        canvas.add(svgText(pos.cx, pos.cy + 7, label, { size: 18, weight: 750, lineHeight: 21, maxWidth: pos.w - 28, maxLines: 2 }));
+      });
+    }
+    (visual.edges || []).forEach(([from, to], i) => {
+      const a = centers.get(from);
+      const b = centers.get(to);
+      if (!a || !b) return;
+      curve(canvas, rc, a[0], a[1] + 30, b[0], b[1] - 30, (i % 3 - 1) * 12, {
+        arrow: true,
+        stroke: i >= Math.floor((visual.edges || []).length * 0.55) ? colors.red : colors.lineDark,
+        strokeWidth: i >= Math.floor((visual.edges || []).length * 0.55) ? 2.5 : 1.6,
+        seed: 190 + i,
+      });
+    });
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   const centers = new Map();
   const left = 145;
   const top = 170;
@@ -856,7 +1193,13 @@ function drawGroupedBarChart(spec) {
   const series = visual.series || [];
   const values = series.flatMap((item) => item.values || []).map(Number).filter(Number.isFinite);
   const maxValue = Math.max(10, Math.ceil(Math.max(...values, 1) / 10) * 10);
-  const chart = { x: 170, y: 220, w: series.length > 3 ? 980 : 1030, h: 470 };
+  const profile = quantityTierProfile(spec);
+  const chart = {
+    x: profile.chartX,
+    y: 220,
+    w: profile.chartW || (series.length > 3 ? 980 : 1030),
+    h: profile.chartH || 470,
+  };
   const baseline = chart.y + chart.h;
   const groupW = chart.w / Math.max(categories.length, 1);
   const barGap = Math.max(5, Math.min(12, 42 / Math.max(1, series.length)));
@@ -876,9 +1219,9 @@ function drawGroupedBarChart(spec) {
   for (let tick = 0; tick <= maxValue; tick += Math.max(10, maxValue / 6)) {
     const y = baseline - (tick / maxValue) * chart.h;
     line(canvas, rc, chart.x - 8, y, chart.x + chart.w, y, { stroke: tick === 0 ? colors.ink : colors.line, strokeWidth: tick === 0 ? 2 : 1.2, roughness: 0.8, seed: 720 + tick });
-    canvas.add(svgText(chart.x - 22, y + 7, String(Math.round(tick)), { size: 18, weight: 500, anchor: "end", fill: colors.muted }));
+    canvas.add(svgText(chart.x - 22, y + 7, String(Math.round(tick)), { size: profile.tickSize, weight: 500, anchor: "end", fill: colors.muted }));
   }
-  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label, { size: 22, weight: 800, anchor: "start", fill: colors.red }));
+  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label, { size: profile.axisLabelSize, weight: 800, anchor: "start", fill: colors.red }));
 
   const seriesColor = (entry, idx, highlighted) => {
     if (highlighted) return colors.red;
@@ -905,16 +1248,36 @@ function drawGroupedBarChart(spec) {
         hachureGap: highlighted ? 7 : 10,
         seed: 760 + categoryIdx * 10 + seriesIdx,
       });
-      canvas.add(svgText(x + barW / 2, y - 18, value.toFixed(value % 1 ? 1 : 0), { size: 18, weight: highlighted ? 900 : 700, fill: highlighted ? colors.red : colors.ink }));
+      canvas.add(svgText(x + barW / 2, y - 18, value.toFixed(value % 1 ? 1 : 0), { size: profile.valueSize, weight: highlighted ? 900 : 700, fill: highlighted ? colors.red : colors.ink }));
     });
-    canvas.add(svgText(groupX, baseline + 42, category, { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21, maxWidth: groupW - 16, maxLines: 2 }));
+    const categorySize = profile.categorySize || (categories.length > 6 ? 18 : 21);
+    canvas.add(svgText(groupX, baseline + 42, category, {
+      size: categorySize,
+      weight: 650,
+      fill: colors.ink,
+      lineHeight: Math.max(18, categorySize + 2),
+      maxWidth: groupW - 16,
+      maxLines: profile.categoryMaxLines,
+    }));
   });
 
   series.forEach((entry, idx) => {
-    const x = series.length > 3 ? 1210 : 1280;
-    const y = 252 + idx * Math.max(40, Math.min(54, 260 / Math.max(1, series.length)));
+    const bottomLegend = profile.legendPlacement === "bottom";
+    const x = bottomLegend ? chart.x + (idx % 2) * Math.max(245, chart.w * 0.48) : (profile.legendX || (series.length > 3 ? 1210 : 1280));
+    const y = bottomLegend
+      ? baseline + 116 + Math.floor(idx / 2) * 38
+      : 252 + idx * Math.max(40, Math.min(54, 260 / Math.max(1, series.length)));
     rect(canvas, rc, x, y - 18, 46, 28, { fill: seriesColor(entry, idx, false), stroke: colors.lineDark, seed: 820 + idx });
-    canvas.add(svgText(x + 62, y + 4, entry.name, { size: series.length > 4 ? 18 : 22, weight: 700, anchor: "start", fill: colors.ink, lineHeight: 22, maxWidth: 230, maxLines: 2 }));
+    const legendSize = series.length > 4 ? 18 : 22;
+    canvas.add(svgText(x + 62, y + 4, entry.name, {
+      size: legendSize,
+      weight: 700,
+      anchor: "start",
+      fill: colors.ink,
+      lineHeight: 22,
+      maxWidth: profile.legendMaxW,
+      maxLines: 2,
+    }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -928,7 +1291,8 @@ function drawLineChart(spec) {
   const series = visual.series || [];
   const values = series.flatMap((item) => item.values || []).map(Number).filter(Number.isFinite);
   const maxValue = Math.max(10, Math.ceil(Math.max(...values, 1) / 10) * 10);
-  const chart = { x: 190, y: 220, w: 1040, h: 490 };
+  const profile = quantityTierProfile(spec);
+  const chart = { x: profile.chartX + 20, y: 220, w: profile.chartW || 1040, h: profile.chartH || 490 };
   const baseline = chart.y + chart.h;
   rect(canvas, rc, chart.x - 18, chart.y - 12, chart.w + 44, chart.h + 48, { fill: "#ffffff", fillStyle: "hachure", hachureGap: 32, stroke: colors.line, strokeWidth: 1.6, seed: 910 });
   line(canvas, rc, chart.x, chart.y, chart.x, baseline, { stroke: colors.ink, strokeWidth: 2.5, seed: 911 });
@@ -938,9 +1302,17 @@ function drawLineChart(spec) {
   categories.forEach((category, idx) => {
     const x = xFor(idx);
     line(canvas, rc, x, baseline, x, baseline + 8, { stroke: colors.ink, strokeWidth: 1.6, seed: 920 + idx });
-    canvas.add(svgText(x, baseline + 42, category, { size: categories.length > 6 ? 18 : 21, weight: 650, fill: colors.ink, lineHeight: 21, maxWidth: Math.max(86, chart.w / Math.max(1, categories.length) - 12), maxLines: 2 }));
+    const categorySize = profile.categorySize || (categories.length > 6 ? 18 : 21);
+    canvas.add(svgText(x, baseline + 42, category, {
+      size: categorySize,
+      weight: 650,
+      fill: colors.ink,
+      lineHeight: Math.max(18, categorySize + 2),
+      maxWidth: Math.max(78, chart.w / Math.max(1, categories.length) - 12),
+      maxLines: profile.categoryMaxLines,
+    }));
   });
-  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label, { size: 22, weight: 800, anchor: "start", fill: colors.red }));
+  canvas.add(svgText(chart.x + 4, chart.y - 36, visual.y_label, { size: profile.axisLabelSize, weight: 800, anchor: "start", fill: colors.red }));
   series.forEach((entry, seriesIdx) => {
     const points = (entry.values || []).map((value, idx) => [xFor(idx), yFor(value)]);
     for (let i = 0; i < points.length - 1; i += 1) {
@@ -958,12 +1330,20 @@ function drawLineChart(spec) {
         strokeWidth: highlighted ? 3.2 : 2,
         seed: 980 + seriesIdx * 20 + idx,
       });
-      canvas.add(svgText(x, y - 24, String(entry.values[idx]), { size: 16, weight: 700, fill: highlighted ? colors.red : colors.muted }));
+      canvas.add(svgText(x, y - 24, String(entry.values[idx]), { size: profile.tier === "small" ? 15 : 16, weight: 700, fill: highlighted ? colors.red : colors.muted }));
     });
-    const legendX = 1270;
-    const legendY = 282 + seriesIdx * 52;
+    const bottomLegend = profile.legendPlacement === "bottom";
+    const legendX = bottomLegend ? chart.x + (seriesIdx % 2) * Math.max(245, chart.w * 0.48) : (profile.legendX || 1270);
+    const legendY = bottomLegend ? baseline + 116 + Math.floor(seriesIdx / 2) * 42 : 282 + seriesIdx * 52;
     line(canvas, rc, legendX, legendY, legendX + 46, legendY, { stroke: seriesIdx === 0 ? colors.red : colors.ink, strokeWidth: 3, seed: 1020 + seriesIdx });
-    canvas.add(svgText(legendX + 62, legendY + 6, entry.name, { size: 22, weight: 700, anchor: "start", fill: colors.ink, maxWidth: 230, maxLines: 2 }));
+    canvas.add(svgText(legendX + 62, legendY + 6, entry.name, {
+      size: 22,
+      weight: 700,
+      anchor: "start",
+      fill: colors.ink,
+      maxWidth: profile.legendMaxW,
+      maxLines: 2,
+    }));
   });
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
@@ -975,14 +1355,25 @@ function drawDonutProportionChart(spec) {
   const visual = spec.visual_spec || {};
   const segments = visual.segments || [];
   const total = segments.reduce((sum, item) => sum + Math.max(0, Number(item.value) || 0), 0) || 1;
-  const center = [610, 480];
+  const profile = quantityTierProfile(spec);
+  const compact = profile.tier === "small" || profile.tier === "medium";
+  const center = profile.tier === "small" ? [250, 360] : (profile.tier === "medium" ? [300, 300] : [610, 480]);
+  const outerBase = profile.tier === "small" ? 112 : (profile.tier === "medium" ? 118 : 198);
+  const outerHighlight = outerBase + 16;
+  const innerRadius = profile.tier === "small" ? 58 : (profile.tier === "medium" ? 62 : 104);
+  const labelRadiusX = profile.tier === "small" ? 232 : (profile.tier === "medium" ? 255 : 285);
+  const labelRadiusY = profile.tier === "small" ? 178 : (profile.tier === "medium" ? 194 : 210);
+  const compactLabelXs = profile.tier === "small" ? [140, 310] : [150, 390];
+  const compactLabelY = profile.tier === "small" ? 540 : 530;
+  const compactLabelGap = 72;
+  const compactLabelW = profile.tier === "small" ? 110 : 150;
   let start = -Math.PI / 2;
   segments.forEach((segment, idx) => {
     const value = Math.max(0, Number(segment.value) || 0);
     const end = start + (value / total) * Math.PI * 2;
     const large = end - start > Math.PI ? 1 : 0;
-    const rOuter = segment.label === visual.highlight ? 214 : 198;
-    const rInner = 104;
+    const rOuter = segment.label === visual.highlight ? outerHighlight : outerBase;
+    const rInner = innerRadius;
     const p1 = [center[0] + Math.cos(start) * rOuter, center[1] + Math.sin(start) * rOuter];
     const p2 = [center[0] + Math.cos(end) * rOuter, center[1] + Math.sin(end) * rOuter];
     const p3 = [center[0] + Math.cos(end) * rInner, center[1] + Math.sin(end) * rInner];
@@ -996,13 +1387,51 @@ function drawDonutProportionChart(spec) {
       seed: 1040 + idx,
     });
     const mid = (start + end) / 2;
-    const lx = center[0] + Math.cos(mid) * 285;
-    const ly = center[1] + Math.sin(mid) * 210;
-    canvas.add(svgText(lx, ly, [`${segment.label}`, `${segment.value}`], { size: 23, weight: segment.label === visual.highlight ? 900 : 700, fill: segment.label === visual.highlight ? colors.red : colors.ink, lineHeight: 28, maxWidth: 180, maxLines: 3 }));
+    if (!compact) {
+      const lx = center[0] + Math.cos(mid) * labelRadiusX;
+      const ly = center[1] + Math.sin(mid) * labelRadiusY;
+      canvas.add(svgText(lx, ly, [`${segment.label}`, `${segment.value}`], {
+        size: 23,
+        weight: segment.label === visual.highlight ? 900 : 700,
+        fill: segment.label === visual.highlight ? colors.red : colors.ink,
+        lineHeight: 28,
+        maxWidth: 180,
+        maxLines: 3,
+      }));
+    }
     start = end;
   });
-  ellipse(canvas, rc, center[0], center[1], 180, 120, { fill: colors.paper, stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
-  canvas.add(svgText(center[0], center[1] + 8, visual.total_label, { size: 28, weight: 900, fill: colors.red, lineHeight: 32, maxWidth: 150, maxLines: 2 }));
+  if (compact) {
+    segments.forEach((segment, idx) => {
+      const highlighted = segment.label === visual.highlight;
+      const x = compactLabelXs[idx % 2];
+      const y = compactLabelY + Math.floor(idx / 2) * compactLabelGap;
+      rect(canvas, rc, x - 18, y - 24, 26, 20, {
+        fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.redPale, colors.gray, colors.gray2][idx % 6],
+        stroke: highlighted ? colors.red : colors.lineDark,
+        strokeWidth: highlighted ? 2.4 : 1.4,
+        seed: 1090 + idx,
+      });
+      canvas.add(svgText(x + 22, y, [`${segment.label}`, `${segment.value}`], {
+        size: 23,
+        weight: highlighted ? 900 : 700,
+        fill: highlighted ? colors.red : colors.ink,
+        anchor: "start",
+        lineHeight: 28,
+        maxWidth: compactLabelW,
+        maxLines: 3,
+      }));
+    });
+  }
+  ellipse(canvas, rc, center[0], center[1], profile.tier === "small" ? 112 : (profile.tier === "medium" ? 106 : 180), profile.tier === "small" ? 82 : (profile.tier === "medium" ? 78 : 120), { fill: colors.paper, stroke: colors.red, strokeWidth: 2.5, seed: 1080 });
+  canvas.add(svgText(center[0], center[1] + 8, visual.total_label, {
+    size: 28,
+    weight: 900,
+    fill: colors.red,
+    lineHeight: 32,
+    maxWidth: profile.tier === "small" ? 108 : (profile.tier === "medium" ? 126 : 150),
+    maxLines: 2,
+  }));
   return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
 }
 
@@ -1076,6 +1505,70 @@ function drawArchiveEvolutionTree(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const nodes = visual.nodes || [];
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    const positions = new Map();
+    const nodeBoxes = new Map();
+    const denseColumns = profile.tier === "small" && nodes.length > 8 ? 3 : (profile.tier === "medium" && nodes.length > 10 ? 4 : profile.columns);
+    const denseCardW = denseColumns > profile.columns ? (profile.tier === "small" ? 170 : 190) : (profile.tier === "small" ? 218 : 230);
+    const denseCardH = denseColumns > profile.columns ? 74 : (profile.tier === "small" ? 88 : 92);
+    nodes.forEach((id, i) => {
+      const isHighlight = id === visual.highlight;
+      const pos = compactGridPosition(profile, i, nodes.length, {
+        cardW: denseCardW,
+        cardH: denseCardH,
+        columns: denseColumns,
+        gapX: denseColumns > profile.columns ? 24 : undefined,
+        gapY: denseColumns > profile.columns ? 14 : 28,
+      });
+      positions.set(id, [pos.cx, pos.cy]);
+      nodeBoxes.set(id, {
+        ...pos,
+        idSize: denseColumns > profile.columns ? (isHighlight ? 20 : 18) : (isHighlight ? 23 : 19),
+        labelSize: denseColumns > profile.columns ? 17 : (isHighlight ? 21 : 18),
+        labelLineHeight: denseColumns > profile.columns ? 19 : (isHighlight ? 24 : 21),
+      });
+    });
+    (visual.edges || []).forEach(([from, to], i) => {
+      const a = positions.get(from);
+      const b = positions.get(to);
+      if (!a || !b) return;
+      const fromBox = nodeBoxes.get(from);
+      const toBox = nodeBoxes.get(to);
+      const sameRow = fromBox.row === toBox.row;
+      curve(canvas, rc, a[0] + (sameRow ? fromBox.w / 2 : 0), a[1] + (sameRow ? 0 : fromBox.h / 2), b[0] - (sameRow ? toBox.w / 2 : 0), b[1] - (sameRow ? 0 : toBox.h / 2), sameRow ? 12 : (i % 2 ? 24 : -24), {
+        arrow: true,
+        stroke: to === visual.highlight ? colors.red : colors.lineDark,
+        strokeWidth: to === visual.highlight ? 3 : 2,
+        seed: 1210 + i,
+      });
+    });
+    nodes.forEach((id, i) => {
+      const [x, y] = positions.get(id);
+      const isHighlight = id === visual.highlight;
+      const box = nodeBoxes.get(id);
+      const label = visual.labels?.[id] || "";
+      rect(canvas, rc, box.x, box.y, box.w, box.h, {
+        fill: isHighlight ? colors.pink : (i % 2 ? colors.bluePale : colors.gray),
+        opaqueFill: isHighlight ? colors.pink : (i % 2 ? colors.bluePale : colors.gray),
+        stroke: isHighlight ? colors.red : colors.ink,
+        strokeWidth: isHighlight ? 3.4 : 2.1,
+        fillStyle: isHighlight ? "cross-hatch" : "hachure",
+        hachureGap: isHighlight ? 7 : 9,
+        seed: 1240 + i,
+      });
+      canvas.add(svgText(x, y - 18, `#${id}`, { size: box.idSize, weight: 850, maxWidth: box.w - 24, maxLines: 1 }));
+      canvas.add(svgText(x, y + 18, label, {
+        size: box.labelSize,
+        weight: 800,
+        fill: isHighlight ? colors.red : colors.muted,
+        lineHeight: box.labelLineHeight,
+        maxWidth: box.w - 22,
+        maxLines: 2,
+      }));
+    });
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   const pos = layoutTree(nodes, visual.edges || []);
   const mainPath = findPathToHighlight(visual.edges || [], visual.highlight);
   const nodeBoxes = new Map();
@@ -1223,6 +1716,33 @@ function drawSelfImprovementLoop(spec) {
   const { rc } = roughSvg(303);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    const steps = visual.steps || [];
+    const loopColumns = steps.length <= 4 ? 2 : (profile.tier === "small" ? 2 : 3);
+    ellipse(canvas, rc, profile.x + profile.w / 2, profile.y + 64, profile.tier === "small" ? 260 : 320, 96, { fill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.2, fillStyle: "cross-hatch", hachureGap: 12, seed: 1370 });
+    canvas.add(svgText(profile.x + profile.w / 2, profile.y + 72, visual.center, { size: 29, weight: 900, fill: colors.red, lineHeight: 33, maxWidth: profile.tier === "small" ? 220 : 280, maxLines: 2 }));
+    const positions = drawCompactStepCards(canvas, rc, steps, profile, visual, {
+      y: profile.y + 142,
+      h: profile.h - 120,
+      cardW: profile.tier === "small" ? 226 : 238,
+      cardH: 92,
+      columns: loopColumns,
+      labelSize: profile.tier === "small" ? 21 : 22,
+      positionOrder: compactLoopPositionOrder(steps.length, loopColumns),
+      connectors: false,
+      seed: 1380,
+    });
+    drawCompactLoopConnectors(canvas, rc, positions, {
+      stroke: colors.lineDark,
+      strokeWidth: 2,
+      closeStroke: colors.red,
+      closeStrokeWidth: 2.6,
+      closeLift: profile.tier === "small" ? 34 : 44,
+      seed: 1510,
+    });
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   const center = [800, 480];
   const radiusX = 440;
   const radiusY = 250;
@@ -1269,6 +1789,75 @@ function drawDualLoop(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const loops = visual.loops || [];
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    const columns = profile.tier === "small" ? 1 : Math.min(2, loops.length);
+    const loopPositionOrder = loops.length > columns ? compactLoopPositionOrder(loops.length, columns) : null;
+    const loopBox = {
+      columns,
+      cardW: profile.tier === "small" ? 380 : 340,
+      cardH: profile.tier === "small"
+        ? (loops.length <= 2 ? 180 : (loops.length === 3 ? 148 : 124))
+        : (loops.length >= 3 ? 170 : 150),
+      gapY: profile.tier === "small"
+        ? (loops.length <= 2 ? 30 : (loops.length === 3 ? 26 : 18))
+        : 30,
+    };
+    const loopPositions = [];
+    loops.forEach((loopSpec, loopIdx) => {
+      const pos = compactGridPosition(profile, loopPositionOrder?.[loopIdx] ?? loopIdx, loops.length, loopBox);
+      loopPositions.push(pos);
+      const highlighted = loopSpec.id === visual.highlight;
+      ellipse(canvas, rc, pos.cx, pos.cy, pos.w, pos.h, {
+        fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][loopIdx % 4],
+        stroke: highlighted ? colors.red : colors.ink,
+        strokeWidth: highlighted ? 3.4 : 2.4,
+        seed: 2360 + loopIdx,
+      });
+      canvas.add(svgText(pos.cx, pos.y + 52, loopSpec.label, { size: 27, weight: 900, fill: highlighted ? colors.red : colors.ink, lineHeight: 30, maxWidth: pos.w - 72, maxLines: 2 }));
+      const steps = loopSpec.steps || [];
+      const denseSmallLoop = profile.tier === "small" && loops.length >= 3;
+      const visibleSteps = steps.slice(0, denseSmallLoop ? 2 : 4);
+      const stepColumns = visibleSteps.length <= 1 ? 1 : 2;
+      const stepRows = Math.ceil(visibleSteps.length / stepColumns);
+      const stepW = denseSmallLoop ? 120 : (visibleSteps.length >= 4 ? 126 : 136);
+      const stepH = denseSmallLoop ? 32 : 40;
+      const stepGapX = Math.max(18, (pos.w - 88 - stepColumns * stepW) / Math.max(1, stepColumns - 1));
+      const stepGapY = profile.tier === "small" && pos.h < 140 ? 6 : 10;
+      const totalStepH = stepRows * stepH + Math.max(0, stepRows - 1) * stepGapY;
+      const stepTop = pos.y + (denseSmallLoop ? pos.h - stepH - 18 : Math.max(76, pos.h - totalStepH - 18));
+      const stepOrder = visibleSteps.length === 4 ? compactLoopPositionOrder(visibleSteps.length, 2) : visibleSteps.map((_, i) => i);
+      visibleSteps.forEach((step, i) => {
+        const positionIdx = stepOrder[i] ?? i;
+        const row = Math.floor(positionIdx / stepColumns);
+        const rowCount = row === stepRows - 1 && visibleSteps.length % stepColumns ? visibleSteps.length % stepColumns : stepColumns;
+        const colInRow = positionIdx % stepColumns;
+        const rowW = rowCount * stepW + Math.max(0, rowCount - 1) * stepGapX;
+        const rowX0 = pos.cx - rowW / 2;
+        const stepX = rowX0 + Math.min(colInRow, rowCount - 1) * (stepW + stepGapX) + stepW / 2;
+        const stepY = stepTop + row * (stepH + stepGapY) + stepH / 2;
+        ellipse(canvas, rc, stepX, stepY, stepW, stepH, { fill: "#ffffff", stroke: highlighted ? colors.red : colors.ink, seed: 2380 + loopIdx * 20 + i });
+        canvas.add(svgText(stepX, stepY + 5, step.label, { size: denseSmallLoop ? 15 : (visibleSteps.length >= 4 ? 17 : 18), weight: 800, lineHeight: denseSmallLoop ? 16 : 19, maxWidth: stepW - 16, maxLines: 2 }));
+      });
+      if (denseSmallLoop && steps.length > visibleSteps.length) {
+        canvas.add(svgText(pos.cx, pos.y + pos.h - 16, `+${steps.length - visibleSteps.length}`, { size: 17, weight: 900, fill: highlighted ? colors.red : colors.ink, maxWidth: 54, maxLines: 1 }));
+      }
+    });
+    for (let i = 0; i < loops.length - 1; i += 1) {
+      const a = loopPositions[i];
+      const b = loopPositions[i + 1];
+      const sameRow = a.row === b.row;
+      const sameCol = a.col === b.col;
+      const start = compactCardEdgePoint(a, b);
+      const end = compactCardEdgePoint(b, a);
+      if (sameRow || sameCol) {
+        line(canvas, rc, start.x, start.y, end.x, end.y, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 2400 + i });
+      } else {
+        curve(canvas, rc, start.x, start.y, end.x, end.y, b.row > a.row ? 28 : -28, { arrow: true, stroke: colors.red, strokeWidth: 3, seed: 2400 + i });
+      }
+    }
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   const centerY = 480;
   const startX = 350;
   const span = 980;
@@ -1308,6 +1897,22 @@ function drawSpiralIterationLadder(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const steps = visual.steps || [];
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    let last = null;
+    canvas.add(svgText(profile.x + profile.w / 2, profile.y + 24, visual.center, { size: 33, weight: 900, fill: colors.red, maxWidth: profile.w - 40, maxLines: 2 }));
+    steps.forEach((step, i) => {
+      const t = i / Math.max(1, steps.length - 1);
+      const x = profile.x + 70 + t * (profile.w - 140);
+      const y = profile.y + profile.h - 36 - t * (profile.h - 150) + Math.sin(i * 1.2) * 42;
+      const highlighted = step.id === visual.highlight;
+      if (last) curve(canvas, rc, last[0], last[1], x, y, i % 2 ? -34 : 34, { arrow: true, stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3 : 2.1, seed: 2420 + i });
+      ellipse(canvas, rc, x, y, highlighted ? 150 : 132, highlighted ? 86 : 76, { fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4], stroke: highlighted ? colors.red : colors.ink, strokeWidth: highlighted ? 3.3 : 2.2, seed: 2440 + i });
+      canvas.add(svgText(x, y - 4, step.label, { size: 22, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: 24, maxWidth: highlighted ? 128 : 112, maxLines: 2 }));
+      last = [x, y];
+    });
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   let last = null;
   steps.forEach((step, i) => {
     const t = i / Math.max(1, steps.length - 1);
@@ -1446,10 +2051,11 @@ function drawQuadrantMatrix(spec) {
   const { rc } = roughSvg(505);
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
-  const x0 = 300;
-  const y0 = 200;
-  const w = 900;
-  const h = 560;
+  const profile = roughTierProfile(spec);
+  const x0 = profile.compact ? profile.x + 92 : 300;
+  const y0 = profile.compact ? 205 : 200;
+  const w = profile.compact ? profile.w - 150 : 900;
+  const h = profile.compact ? 430 : 560;
   const midX = x0 + w / 2;
   const midY = y0 + h / 2;
   rect(canvas, rc, x0, y0, w, h, { fill: "#ffffff", fillStyle: "hachure", hachureGap: 28, stroke: colors.ink, strokeWidth: 2.5, seed: 510 });
@@ -1470,8 +2076,9 @@ function drawQuadrantMatrix(spec) {
     const py = y0 + (1 - Math.max(0.06, Math.min(0.94, Number(item.y) || 0.5))) * h;
     const highlighted = item.label === visual.highlight || item.id === visual.highlight;
     const dense = visual.items.length > 8;
-    const itemW = dense ? 152 : 170;
-    const itemH = dense ? 82 : 74;
+    const itemW = profile.compact ? (dense ? 130 : 146) : (dense ? 152 : 170);
+    const itemH = profile.compact ? (dense ? 78 : 76) : (dense ? 82 : 74);
+    const labelSize = profile.compact ? (dense ? 18 : 21) : (dense ? 14 : 23);
     const fill = highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray][i % 4];
     ellipse(canvas, rc, px, py, highlighted ? itemW + 24 : itemW, highlighted ? itemH + 12 : itemH, {
       fill,
@@ -1482,10 +2089,10 @@ function drawQuadrantMatrix(spec) {
       seed: 530 + i,
     });
     canvas.add(svgText(px, py - (dense ? 6 : 8), item.label, {
-      size: dense ? 14 : 23,
+      size: labelSize,
       weight: 850,
       fill: highlighted ? colors.red : colors.ink,
-      lineHeight: dense ? 15 : 22,
+      lineHeight: labelSize + 2,
       maxWidth: itemW - 24,
       maxLines: 2,
     }));
@@ -1566,6 +2173,44 @@ function drawGenericNetworkGraph(spec) {
   const canvas = createCanvas();
   const visual = spec.visual_spec || {};
   const nodes = visual.nodes || [];
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    const positions = new Map();
+    const denseColumns = profile.tier === "small" && nodes.length > 8 ? 3 : (profile.tier === "medium" && nodes.length > 10 ? 4 : profile.columns);
+    const cardW = denseColumns > profile.columns ? (profile.tier === "small" ? 170 : 190) : (profile.tier === "small" ? 220 : 230);
+    const cardH = denseColumns > profile.columns ? 74 : (profile.tier === "small" ? 86 : 90);
+    const labelSize = denseColumns > profile.columns ? 18 : 21;
+    nodes.forEach((node, i) => {
+      const pos = compactGridPosition(profile, i, nodes.length, { cardW, cardH, columns: denseColumns, gapX: denseColumns > profile.columns ? 24 : undefined, gapY: denseColumns > profile.columns ? 14 : 28 });
+      positions.set(node.id, [pos.cx, pos.cy, pos]);
+    });
+    (visual.edges || []).forEach(([from, to], i) => {
+      const a = positions.get(from);
+      const b = positions.get(to);
+      if (!a || !b) return;
+      const sameRow = a[2].row === b[2].row;
+      curve(canvas, rc, a[0] + (sameRow ? cardW / 2 : 0), a[1] + (sameRow ? 0 : cardH / 2), b[0] - (sameRow ? cardW / 2 : 0), b[1] - (sameRow ? 0 : cardH / 2), sameRow ? 14 : (i % 2 ? 26 : -22), {
+        arrow: true,
+        stroke: from === visual.highlight || to === visual.highlight ? colors.red : colors.muted,
+        strokeWidth: from === visual.highlight || to === visual.highlight ? 2.8 : 1.8,
+        seed: 2540 + i,
+      });
+    });
+    nodes.forEach((node, i) => {
+      const [x, y, pos] = positions.get(node.id);
+      const highlighted = node.id === visual.highlight || node.label === visual.highlight;
+      rect(canvas, rc, pos.x, pos.y, pos.w, pos.h, {
+        fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
+        opaqueFill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
+        stroke: highlighted ? colors.red : colors.ink,
+        strokeWidth: highlighted ? 3.3 : 2.2,
+        fillStyle: highlighted ? "cross-hatch" : "hachure",
+        seed: 2580 + i,
+      });
+      canvas.add(svgText(x, y + 7, node.label, { size: labelSize, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: labelSize + 3, maxWidth: pos.w - 22, maxLines: 2 }));
+    });
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   const center = [800, 475];
   const dense = nodes.length > 8;
   const veryDense = nodes.length > 10;
@@ -1613,6 +2258,48 @@ function drawHubSpokeNetwork(spec) {
   const visual = spec.visual_spec || {};
   const hub = visual.hub || { id: "", label: "" };
   const nodes = visual.nodes || [];
+  const profile = roughTierProfile(spec);
+  if (profile.compact) {
+    const center = [profile.x + profile.w / 2, profile.y + 82];
+    const denseColumns = profile.tier === "small" && nodes.length > 8 ? 3 : (profile.tier === "medium" && nodes.length > 10 ? 4 : profile.columns);
+    const cardW = denseColumns > profile.columns ? (profile.tier === "small" ? 170 : 190) : (profile.tier === "small" ? 220 : 230);
+    const cardH = denseColumns > profile.columns ? 74 : (profile.tier === "small" ? 86 : 90);
+    const labelSize = denseColumns > profile.columns ? 18 : 21;
+    const positions = new Map([[hub.id, [center[0], center[1], { x: center[0] - 130, y: center[1] - 54, w: 260, h: 108, row: -1 }]]]);
+    ellipse(canvas, rc, center[0], center[1], 260, 108, { fill: colors.yellowPale, opaqueFill: colors.yellowPale, stroke: colors.red, strokeWidth: 3.5, fillStyle: "cross-hatch", seed: 2650 });
+    canvas.add(svgText(center[0], center[1] + 8, hub.label, { size: 30, weight: 900, fill: colors.red, lineHeight: 33, maxWidth: 218, maxLines: 2 }));
+    nodes.forEach((node, i) => {
+      const pos = compactGridPosition(profile, i, nodes.length, { y: profile.y + 174, h: profile.h - 140, cardW, cardH, columns: denseColumns, gapX: denseColumns > profile.columns ? 24 : undefined, gapY: denseColumns > profile.columns ? 14 : 28 });
+      positions.set(node.id, [pos.cx, pos.cy, pos]);
+    });
+    (visual.edges || []).forEach(([from, to], i) => {
+      const a = positions.get(from);
+      const b = positions.get(to);
+      if (!a || !b) return;
+      const isCross = from !== hub.id && to !== hub.id;
+      const sameRow = a[2].row === b[2].row;
+      curve(canvas, rc, a[0] + (isCross && sameRow ? cardW / 2 : 0), a[1] + (from === hub.id ? 54 : (isCross && sameRow ? 0 : cardH / 2)), b[0] - (isCross && sameRow ? cardW / 2 : 0), b[1] - (to === hub.id ? 54 : (isCross && sameRow ? 0 : cardH / 2)), isCross ? 28 : 0, {
+        arrow: true,
+        stroke: to === visual.highlight || from === visual.highlight ? colors.red : (isCross ? colors.muted : colors.ink),
+        strokeWidth: isCross ? 1.8 : 2.3,
+        seed: 2620 + i,
+      });
+    });
+    nodes.forEach((node, i) => {
+      const [x, y, pos] = positions.get(node.id);
+      const highlighted = node.id === visual.highlight || node.label === visual.highlight;
+      rect(canvas, rc, pos.x, pos.y, pos.w, pos.h, {
+        fill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
+        opaqueFill: highlighted ? colors.pink : [colors.bluePale, colors.greenPale, colors.yellowPale, colors.gray, colors.redPale][i % 5],
+        stroke: highlighted ? colors.red : colors.ink,
+        strokeWidth: highlighted ? 3.3 : 2.2,
+        fillStyle: highlighted ? "cross-hatch" : "hachure",
+        seed: 2660 + i,
+      });
+      canvas.add(svgText(x, y + 7, node.label, { size: labelSize, weight: 850, fill: highlighted ? colors.red : colors.ink, lineHeight: labelSize + 3, maxWidth: pos.w - 22, maxLines: 2 }));
+    });
+    return baseSvg(spec.title, spec.claim, canvas.chunks.join("\n"), { ...spec._canvasOptions, _contentBounds: canvas.bounds });
+  }
   const center = [800, 475];
   const dense = nodes.length > 8;
   const veryDense = nodes.length > 10;
@@ -1744,6 +2431,11 @@ function estimateNativeTextWidth(text, fontSize) {
   return estimateNativeTextUnits(text) * (fontSize / 72);
 }
 
+function estimateNativeTextLines(text, fontSize, width, margin = 0.04) {
+  const usableW = Math.max(0.1, Number(width) - margin * 2);
+  return Math.max(1, Math.ceil(estimateNativeTextWidth(text, fontSize) / usableW));
+}
+
 function normalizeNativeMargin(margin) {
   if (typeof margin === "number") return margin;
   if (Array.isArray(margin)) return Math.max(...margin.map((value) => Number(value) || 0));
@@ -1764,7 +2456,8 @@ function wrapNativeTextToBoxAtSize(text, opts, fontSize) {
   const margin = normalizeNativeMargin(opts.margin);
   const maxWidth = boxW - margin * 2;
   const lineHeight = (fontSize / 72) * (opts.lineSpacingMultiple || 1.16);
-  const maxLines = Math.max(1, Math.floor((boxH - margin * 2) / lineHeight));
+  const maxLinesByHeight = Math.max(1, Math.floor((boxH - margin * 2) / lineHeight));
+  const maxLines = Math.max(1, Math.min(Number(opts.maxLines) || Infinity, maxLinesByHeight));
   if (maxWidth <= 0) {
     throw new Error(`ppt_native text box is too narrow for ${value}`);
   }
@@ -1949,19 +2642,218 @@ function nativeSketchArrow(slide, x1, y1, x2, y2, options = {}) {
   nativeLine(slide, x1, y1 + wobble, x2, y2 - wobble, { color, width: 0.5 });
 }
 
+function nativeSizeTierForArea(area = {}) {
+  const width = Number(area.w);
+  if (!Number.isFinite(width) || width >= 6.4) return "large";
+  if (width >= 4.15) return "medium";
+  return "small";
+}
+
+function nativeStructuredProfile(area = {}) {
+  const tier = nativeSizeTierForArea(area);
+  if (tier === "small") {
+    return {
+      tier,
+      fontFace: "Microsoft YaHei",
+      tableFontSize: 10,
+      gridFontSize: 10,
+      gridLabelFontSize: 10,
+      cardValueFontSize: 18,
+      cardUnitFontSize: 10,
+      cardLabelFontSize: 10,
+      minWShare: 0.6,
+      minHShare: 0.34,
+      maxWShare: 0.96,
+      maxHShare: 0.78,
+    };
+  }
+  if (tier === "medium") {
+    return {
+      tier,
+      fontFace: "Microsoft YaHei",
+      tableFontSize: 12,
+      gridFontSize: 12,
+      gridLabelFontSize: 12,
+      cardValueFontSize: 18,
+      cardUnitFontSize: 12,
+      cardLabelFontSize: 12,
+      minWShare: 0.58,
+      minHShare: 0.34,
+      maxWShare: 0.9,
+      maxHShare: 0.72,
+    };
+  }
+  return {
+    tier,
+    fontFace: "Microsoft YaHei",
+    tableFontSize: 12,
+    gridFontSize: 12,
+    gridLabelFontSize: 12,
+    cardValueFontSize: 24,
+    cardUnitFontSize: 12,
+    cardLabelFontSize: 12,
+    minWShare: 0.5,
+    minHShare: 0.32,
+    maxWShare: 0.82,
+    maxHShare: 0.68,
+  };
+}
+
+function fitNaturalNativeArea(area, natural = {}, options = {}) {
+  const profile = options.profile || nativeStructuredProfile(area);
+  const minW = Math.max(options.minW || 0.24, area.w * (options.minWShare ?? profile.minWShare));
+  const minH = Math.max(options.minH || 0.22, area.h * (options.minHShare ?? profile.minHShare));
+  const maxW = Math.max(minW, area.w * (options.maxWShare ?? profile.maxWShare));
+  const maxH = Math.max(minH, area.h * (options.maxHShare ?? profile.maxHShare));
+  const w = Math.min(area.w, maxW, Math.max(minW, Number(natural.w) || area.w));
+  const h = Math.min(area.h, maxH, Math.max(minH, Number(natural.h) || area.h));
+  const alignX = options.alignX || "center";
+  const alignY = options.alignY || "center";
+  const x = alignX === "left" ? area.x : alignX === "right" ? area.x + area.w - w : area.x + (area.w - w) / 2;
+  const y = alignY === "top" ? area.y : alignY === "bottom" ? area.y + area.h - h : area.y + (area.h - h) / 2;
+  return { x, y, w, h };
+}
+
+function estimateNativeTableArea(visual, area, profile = nativeStructuredProfile(area)) {
+  const rows = visual.rows || [];
+  const columnCount = Math.max(1, ...rows.map((row) => Array.isArray(row) ? row.length : 1));
+  const explicitColW = Array.isArray(visual.colW) ? visual.colW.map(Number).filter(Number.isFinite) : [];
+  const naturalW = explicitColW.length
+    ? explicitColW.reduce((sum, value) => sum + value, 0)
+    : Math.min(area.w, Math.max(1.2, columnCount * (profile.tier === "large" ? 1.22 : profile.tier === "medium" ? 1.1 : 1.0)));
+  const rowHeights = Array.isArray(visual.rowH) && visual.rowH.length
+    ? visual.rowH.map((height) => Math.max(0.18, Number(height) || 0.18))
+    : rows.map((row, rowIdx) => {
+      const cells = Array.isArray(row) ? row : [row];
+      const maxChars = Math.max(1, ...cells.map((cell) => safeText(typeof cell === "object" && cell !== null ? cell.text : cell).length));
+      const lines = Math.ceil(maxChars / Math.max(6, Math.floor((naturalW / columnCount) * 9)));
+      const lineH = profile.tableFontSize / 54;
+      return Math.max(rowIdx === 0 ? lineH + 0.18 : lineH + 0.2, lines * lineH + 0.16);
+    });
+  return {
+    w: Math.min(area.w, naturalW),
+    h: Math.min(area.h, Math.max(0.28, rowHeights.reduce((sum, height) => sum + height, 0))),
+    rowHeights,
+  };
+}
+
+function estimateNativeDataCardsArea(visual, area, profile = nativeStructuredProfile(area)) {
+  const cards = visual.cards || [];
+  const count = Math.max(1, cards.length);
+  const gap = 0.14;
+  const maxTextW = Math.max(0, ...cards.flatMap((card) => [
+    estimateNativeTextWidth(card.label || "", profile.cardLabelFontSize) + 0.22,
+    estimateNativeTextWidth(card.value || "", profile.cardValueFontSize) + 0.2,
+  ]));
+  const baseCardW = profile.tier === "large" ? 1.55 : profile.tier === "medium" ? 1.36 : 1.18;
+  const cardW = Math.max(count >= 4 ? baseCardW * 0.9 : count === 3 ? baseCardW : baseCardW * 1.12, Math.min(profile.tier === "large" ? 2.1 : 1.8, maxTextW));
+  const naturalW = count * cardW + gap * Math.max(0, count - 1);
+  const minFitW = Math.max(0.8, area.w * profile.minWShare);
+  const maxFitW = Math.max(minFitW, area.w * profile.maxWShare);
+  const fittedW = Math.min(area.w, maxFitW, Math.max(minFitW, naturalW));
+  const effectiveCardW = (fittedW - gap * Math.max(0, count - 1)) / count;
+  const naturalH = Math.max(0.36, ...cards.map((card) => estimateNativeDataCardHeight(card, effectiveCardW, profile)));
+  return { w: Math.min(area.w, naturalW), h: Math.min(area.h, naturalH) };
+}
+
+function estimateNativePptTextHeight(text, fontSize, width, options = {}) {
+  return estimateTextBoxHeight(text, {
+    fontSize,
+    w: Math.max(0.12, width),
+    margin: options.margin ?? 0.04,
+    bulletIndentUnits: options.bulletIndentUnits,
+  });
+}
+
+function estimateNativeDataCardParts(card, cardW, profile) {
+  const contentW = Math.max(0.12, cardW - 0.1);
+  const unit = safeText(card.unit);
+  const valueFontSize = chooseNativeDataCardValueFontSize(card.value || "", profile.cardValueFontSize, contentW);
+  const valueH = Math.max(valueFontSize / 54 + 0.08, (valueFontSize / 72) * 1.12 + 0.1);
+  const unitH = unit ? Math.max(profile.cardUnitFontSize / 54 + 0.08, estimateNativePptTextHeight(unit, profile.cardUnitFontSize, contentW, { margin: 0.04 })) : 0;
+  const labelH = Math.max(0.26, estimateNativePptTextHeight(card.label || "", profile.cardLabelFontSize, contentW, { margin: 0.04 }));
+  const topPad = 0.05;
+  const bottomPad = 0.05;
+  const gapY = 0.02;
+  return {
+    contentW,
+    unit,
+    valueFontSize,
+    valueH,
+    unitH,
+    labelH,
+    topPad,
+    bottomPad,
+    gapY,
+    totalH: topPad + valueH + (unit ? gapY + unitH : 0) + gapY + labelH + bottomPad,
+  };
+}
+
+function chooseNativeDataCardValueFontSize(text, startSize, width) {
+  const candidates = TEXT_LIMITS.allowedNativeFontSizes.filter((fontSize) => fontSize <= startSize);
+  return candidates.find((fontSize) => estimateNativeTextLines(text, fontSize, width, 0.04) <= 1) || candidates[candidates.length - 1] || TEXT_LIMITS.minNativeFontSize;
+}
+
+function estimateNativeDataCardHeight(card, cardW, profile) {
+  return estimateNativeDataCardParts(card, cardW, profile).totalH;
+}
+
+function estimateNativeGridArea(visual, area, profile = nativeStructuredProfile(area)) {
+  const rows = visual.rows || [];
+  const columns = visual.columns || [];
+  const rowCount = Math.max(1, rows.length);
+  const columnCount = Math.max(1, columns.length);
+  const hasRowLabels = rows.some((row) => safeText(row));
+  const hasColumnLabels = columns.some((column) => safeText(column));
+  const values = visual.values || [];
+  const maxColumnText = Math.max(0, ...columns.map((column) => estimateNativeTextWidth(column, profile.gridLabelFontSize)));
+  const maxCellText = Math.max(0, ...rows.flatMap((_, rowIdx) => columns.map((_, colIdx) => estimateNativeTextWidth(String(valueAt(values, rowIdx, colIdx)), profile.gridFontSize))));
+  const maxRowText = Math.max(0, ...rows.map((row) => estimateNativeTextWidth(row, profile.gridLabelFontSize)));
+  const baseCellW = profile.tier === "large" ? 0.86 : profile.tier === "medium" ? 0.76 : 0.66;
+  const baseCellH = profile.tier === "large" ? 0.62 : profile.tier === "medium" ? 0.54 : 0.62;
+  const cellW = Math.max(columnCount >= 5 ? baseCellW * 0.86 : baseCellW, Math.min(profile.tier === "large" ? 1.52 : 1.34, Math.max(maxColumnText, maxCellText) + 0.18));
+  const lineH = profile.gridFontSize / 54;
+  const cellH = Math.max(rowCount >= 5 ? baseCellH * 0.9 : baseCellH, Math.min(profile.tier === "large" ? 0.92 : profile.tier === "medium" ? 0.82 : 1.08, Math.ceil(Math.max(1, Math.max(maxColumnText, maxCellText) / Math.max(0.1, cellW - 0.12))) * lineH + 0.18));
+  const rowLabelGap = hasRowLabels ? (profile.tier === "small" ? 0.12 : 0.08) : 0;
+  const rowLabelCap = profile.tier === "large" ? 1.45 : profile.tier === "medium" ? 1.28 : 1.32;
+  const labelLeft = hasRowLabels ? Math.min(rowLabelCap, Math.max(0.42, maxRowText + rowLabelGap + 0.08, area.w * 0.14)) : 0;
+  const labelTop = hasColumnLabels ? Math.min(profile.tier === "large" ? 0.94 : 0.82, Math.max(0.52, Math.ceil(maxColumnText / Math.max(0.1, cellW - 0.12)) * lineH + 0.18)) : 0;
+  return {
+    w: Math.min(area.w, Math.max(0.7, labelLeft + columnCount * cellW)),
+    h: Math.min(area.h, Math.max(0.56, labelTop + rowCount * cellH)),
+  };
+}
+
+function estimateNativeQuadrantArea(visual, area) {
+  const itemCount = (visual.items || []).length;
+  return {
+    w: Math.min(area.w, itemCount > 8 ? 4.2 : 3.8),
+    h: Math.min(area.h, itemCount > 8 ? 2.7 : 2.45),
+  };
+}
+
 function drawNativeTable(slide, visual, area) {
   const rows = visual.rows || [];
   if (!rows.length) throw new Error("Matrix/table native render requires visual_spec.rows.");
-  const rowHeight = Math.max(0.18, area.h / rows.length);
+  const profile = nativeStructuredProfile(area);
+  const natural = estimateNativeTableArea(visual, area, profile);
+  const tableArea = fitNaturalNativeArea(area, natural, { profile, alignY: "top", minW: 0.8, minH: 0.28 });
+  const rowScale = natural.h > 0 ? tableArea.h / natural.h : 1;
+  const rowHeights = natural.rowHeights.map((height) => Math.max(0.18, height * rowScale));
+  const columnCount = Math.max(1, ...rows.map((row) => Array.isArray(row) ? row.length : 1));
+  const rawColW = visual.colW || Array.from({ length: columnCount }, () => tableArea.w / columnCount);
+  const rawColTotal = rawColW.reduce((sum, value) => sum + (Number(value) || 0), 0);
+  const colScale = rawColTotal > 0 ? tableArea.w / rawColTotal : 1;
+  const colW = rawColW.map((value) => Math.max(0.2, (Number(value) || tableArea.w / columnCount) * colScale));
   addMatrixTable(slide, rows, {
-    x: area.x,
-    y: area.y,
-    w: area.w,
-    h: area.h,
-    fontSize: visual.fontSize || 10,
-    margin: visual.margin ?? (rowHeight < 0.3 ? 0.03 : 0.06),
-    colW: visual.colW,
-    rowH: visual.rowH || rows.map(() => rowHeight),
+    x: tableArea.x,
+    y: tableArea.y,
+    w: tableArea.w,
+    h: tableArea.h,
+    fontSize: visual.fontSize || profile.tableFontSize,
+    margin: visual.margin ?? (Math.min(...rowHeights) < 0.3 ? 0.03 : 0.06),
+    colW,
+    rowH: rowHeights,
     boldFirstColumn: visual.boldFirstColumn !== false,
   });
 }
@@ -2053,32 +2945,32 @@ function readImageDimensions(filePath) {
 }
 
 function drawNativeDataCards(slide, visual, area) {
+  const profile = nativeStructuredProfile(area);
+  const cardArea = fitNaturalNativeArea(area, estimateNativeDataCardsArea(visual, area, profile), {
+    profile,
+    minW: 0.8,
+    minH: 0.36,
+    minHShare: 0,
+    maxHShare: 1,
+  });
   const cards = visual.cards || [];
   const gap = 0.14;
-  const cardW = (area.w - gap * Math.max(0, cards.length - 1)) / Math.max(1, cards.length);
-  const compact = area.h < 1.3 || cardW < 1.2;
-  const valueFontSize = compact ? 12 : 24;
-  const unitFontSize = 10;
-  const labelFontSize = compact ? 10 : 12;
+  const cardW = (cardArea.w - gap * Math.max(0, cards.length - 1)) / Math.max(1, cards.length);
+  const valueFontSize = profile.cardValueFontSize;
+  const unitFontSize = profile.cardUnitFontSize;
+  const labelFontSize = profile.cardLabelFontSize;
   cards.forEach((card, idx) => {
-    const x = area.x + idx * (cardW + gap);
+    const x = cardArea.x + idx * (cardW + gap);
     const highlighted = card.id === visual.highlight || card.label === visual.highlight;
-    nativeRect(slide, x, area.y, cardW, area.h, { fill: highlighted ? "FFF1EF" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF", strokeWidth: highlighted ? 1 : 0.5 });
-    if (compact) {
-      const valueH = Math.min(0.22, area.h * 0.32);
-      const unitH = Math.min(0.14, area.h * 0.2);
-      const labelH = Math.min(0.18, area.h * 0.26);
-      const valueY = area.y + Math.max(0.04, area.h * 0.18);
-      const unitY = Math.min(area.y + area.h - unitH - labelH - 0.04, valueY + valueH + 0.02);
-      const labelY = Math.min(area.y + area.h - labelH - 0.04, unitY + unitH + 0.02);
-      nativeText(slide, card.value, { x: x + 0.04, y: valueY, w: cardW - 0.08, h: valueH, fontFace: "Impact", fontSize: valueFontSize, color: highlighted ? "C00000" : "333333", align: "center" });
-      nativeText(slide, card.unit || "", { x: x + 0.04, y: unitY, w: cardW - 0.08, h: unitH, fontSize: unitFontSize, color: "595959", align: "center" });
-      nativeText(slide, card.label || "", { x: x + 0.04, y: labelY, w: cardW - 0.08, h: labelH, fontSize: labelFontSize, bold: true, align: "center" });
-      return;
-    }
-    nativeText(slide, card.value, { x: x + 0.08, y: area.y + 0.34, w: cardW - 0.16, h: 0.42, fontFace: "Impact", fontSize: valueFontSize, color: highlighted ? "C00000" : "333333", align: "center" });
-    nativeText(slide, card.unit || "", { x: x + 0.08, y: area.y + 0.8, w: cardW - 0.16, h: 0.18, fontSize: unitFontSize, color: "595959", align: "center" });
-    nativeText(slide, card.label || "", { x: x + 0.08, y: area.y + 1.15, w: cardW - 0.16, h: 0.22, fontSize: labelFontSize, bold: true, align: "center" });
+    nativeRect(slide, x, cardArea.y, cardW, cardArea.h, { fill: highlighted ? "FFF1EF" : "F7F7F7", stroke: highlighted ? "C00000" : "BFBFBF", strokeWidth: highlighted ? 1 : 0.5 });
+    const parts = estimateNativeDataCardParts(card, cardW, profile);
+    const { unit, valueFontSize: fittedValueFontSize, valueH, unitH, labelH, topPad, gapY } = parts;
+    const valueY = cardArea.y + topPad;
+    const unitY = valueY + valueH + (unit ? gapY : 0);
+    const labelY = unit ? unitY + unitH + gapY : valueY + valueH + gapY;
+    nativeText(slide, card.value, { x: x + 0.05, y: valueY, w: cardW - 0.1, h: valueH, fontFace: profile.fontFace, fontSize: fittedValueFontSize, maxLines: 1, bold: true, color: highlighted ? "C00000" : "333333", align: "center" });
+    if (unit) nativeText(slide, unit, { x: x + 0.05, y: unitY, w: cardW - 0.1, h: unitH, fontFace: profile.fontFace, fontSize: unitFontSize, color: "595959", align: "center" });
+    nativeText(slide, card.label || "", { x: x + 0.05, y: labelY, w: cardW - 0.1, h: labelH, fontFace: profile.fontFace, fontSize: labelFontSize, bold: true, align: "center" });
   });
 }
 
@@ -2127,23 +3019,42 @@ function drawNativeLineChart(slide, visual, area) {
   categories.forEach((category, idx) => nativeText(slide, category, { x: chart.x + idx * (chart.w / Math.max(1, categories.length - 1)) - 0.25, y: chart.y + chart.h + 0.08, w: 0.5, h: 0.2, fontSize: 10, align: "center" }));
 }
 
-function drawNativeGrid(slide, visual, area) {
+function drawNativeGrid(slide, visual, area, template = "heatmap") {
+  const profile = nativeStructuredProfile(area);
+  const natural = estimateNativeGridArea(visual, area, profile);
+  const denseSmallGrid = profile.tier === "small" && (visual.rows || []).length * (visual.columns || []).length >= 12;
+  const keepHeatmapNaturalHeight = template === "heatmap";
+  const gridArea = fitNaturalNativeArea(area, natural, {
+    profile,
+    alignY: "top",
+    minW: 0.7,
+    minH: 0.56,
+    minHShare: keepHeatmapNaturalHeight ? 0 : (denseSmallGrid ? 0.88 : undefined),
+    maxHShare: keepHeatmapNaturalHeight && profile.tier === "small" ? 0.62 : (profile.tier === "small" ? 0.96 : undefined),
+  });
   const rows = visual.rows || [];
   const columns = visual.columns || [];
   const hasRowLabels = rows.some((row) => safeText(row));
   const hasColumnLabels = columns.some((column) => safeText(column));
-  const labelLeft = hasRowLabels ? Math.min(0.85, Math.max(0.38, area.w * 0.14)) : 0;
-  const labelTop = hasColumnLabels ? Math.min(0.42, Math.max(0.24, area.h * 0.12)) : 0;
+  const values = visual.values || [];
+  const maxRowText = Math.max(0, ...rows.map((row) => estimateNativeTextWidth(row, profile.gridLabelFontSize)));
+  const maxColumnText = Math.max(0, ...columns.map((column) => estimateNativeTextWidth(column, profile.gridLabelFontSize)));
+  const maxCellText = Math.max(0, ...rows.flatMap((_, rowIdx) => columns.map((_, colIdx) => estimateNativeTextWidth(String(valueAt(values, rowIdx, colIdx)), profile.gridFontSize))));
+  const lineH = profile.gridFontSize / 54;
+  const rowLabelGap = hasRowLabels ? (profile.tier === "small" ? 0.12 : 0.08) : 0;
+  const rowLabelCap = profile.tier === "large" ? 1.45 : profile.tier === "medium" ? 1.28 : 1.32;
+  const labelLeft = hasRowLabels ? Math.min(rowLabelCap, Math.max(0.42, maxRowText + rowLabelGap + 0.08, gridArea.w * 0.14)) : 0;
+  const labelTop = hasColumnLabels ? Math.min(profile.tier === "large" ? 0.94 : 0.82, Math.max(0.52, Math.ceil(maxColumnText / Math.max(0.1, (gridArea.w - labelLeft) / Math.max(1, columns.length) - 0.12)) * lineH + 0.18)) : 0;
   const grid = {
-    x: area.x + labelLeft,
-    y: area.y + labelTop,
-    w: Math.max(0.3, area.w - labelLeft),
-    h: Math.max(0.3, area.h - labelTop),
+    x: gridArea.x + labelLeft,
+    y: gridArea.y + labelTop,
+    w: Math.max(0.3, gridArea.w - labelLeft),
+    h: Math.max(0.3, gridArea.h - labelTop),
   };
   const cellW = grid.w / Math.max(1, columns.length);
   const cellH = grid.h / Math.max(1, rows.length);
-  const cellFontSize = 10;
-  const labelFontSize = 10;
+  const cellFontSize = profile.gridFontSize;
+  const labelFontSize = profile.gridLabelFontSize;
   rows.forEach((row, rowIdx) => {
     columns.forEach((column, colIdx) => {
       const highlighted = visual.highlight?.row === row && visual.highlight?.column === column;
@@ -2156,14 +3067,16 @@ function drawNativeGrid(slide, visual, area) {
         y,
         w: boxW,
         h: boxH,
+        fontFace: profile.fontFace,
         fontSize: cellFontSize,
+        lineSpacingMultiple: profile.tier === "small" ? 1.0 : undefined,
         fill: highlighted ? "FFF1EF" : (rowIdx % 2 ? "FFFFFF" : "F7F7F7"),
         stroke: highlighted ? "C00000" : "D9D9D9",
       });
     });
-    if (hasRowLabels) nativeText(slide, row, { x: area.x, y: grid.y + rowIdx * cellH + 0.02, w: labelLeft - 0.04, h: Math.max(0.22, cellH - 0.04), fontSize: labelFontSize, align: "right", valign: "mid", margin: 0 });
+    if (hasRowLabels) nativeText(slide, row, { x: gridArea.x, y: grid.y + rowIdx * cellH + 0.02, w: Math.max(0.22, labelLeft - rowLabelGap), h: Math.max(0.22, cellH - 0.04), fontFace: profile.fontFace, fontSize: labelFontSize, align: "right", valign: "mid", margin: 0 });
   });
-  if (hasColumnLabels) columns.forEach((column, colIdx) => nativeText(slide, column, { x: grid.x + colIdx * cellW, y: area.y, w: cellW, h: labelTop - 0.03, fontSize: labelFontSize, bold: true, align: "center", valign: "mid", color: "C00000", margin: 0 }));
+  if (hasColumnLabels) columns.forEach((column, colIdx) => nativeText(slide, column, { x: grid.x + colIdx * cellW, y: gridArea.y, w: cellW, h: labelTop - 0.03, fontFace: profile.fontFace, fontSize: labelFontSize, bold: true, align: "center", valign: "mid", color: "C00000", margin: 0 }));
 }
 
 function drawNativeProcess(slide, visual, area) {
@@ -2172,21 +3085,37 @@ function drawNativeProcess(slide, visual, area) {
     throw new Error(`ppt_native sequence area is too small for readable process rendering: ${area.w.toFixed(2)}x${area.h.toFixed(2)}`);
   }
   const maxLabelUnits = Math.max(0, ...steps.map((step) => estimateNativeTextUnits(step.label)));
-  const shouldStack = visual.orientation === "vertical" || (area.w < 4.2 && steps.length <= 4 && maxLabelUnits > 14);
+  const shouldStack = visual.orientation === "vertical"
+    || (area.w < 6.4 && steps.length >= 5 && steps.length <= 8)
+    || (area.w < 4.4 && steps.length <= 8)
+    || (steps.length <= 6 && maxLabelUnits > 10)
+    || (area.w < 4.2 && steps.length <= 4 && maxLabelUnits > 14);
   if (shouldStack) {
-    const gap = Math.max(0.12, Math.min(0.22, area.h * 0.045));
-    const maxStepH = 0.78;
-    const stepH = Math.min(maxStepH, (area.h - gap * Math.max(0, steps.length - 1)) / Math.max(1, steps.length));
-    const groupH = steps.length * stepH + gap * Math.max(0, steps.length - 1);
+    const labelFontSize = area.w < 6.4 ? 10 : 12;
+    const gap = Math.max(0.08, Math.min(0.18, area.h * 0.035));
+    const cardW = Math.min(area.w * (area.w < 4.4 ? 0.88 : 0.72), 3.1);
+    const labelW = Math.max(0.34, cardW - 0.62);
+    const lineH = labelFontSize / 72 * 1.08;
+    const naturalHeights = steps.map((step) => {
+      const lines = estimateNativeTextLines(step.label, labelFontSize, labelW, 0.02);
+      return Math.min(0.78, Math.max(labelFontSize === 10 ? 0.48 : 0.56, lines * lineH + 0.26));
+    });
+    const naturalGroupH = naturalHeights.reduce((sum, height) => sum + height, 0) + gap * Math.max(0, steps.length - 1);
+    const maxGroupH = area.h * 0.92;
+    const heightScale = naturalGroupH > maxGroupH ? maxGroupH / naturalGroupH : 1;
+    const stepHeights = naturalHeights.map((height) => Math.max(labelFontSize === 10 ? 0.44 : 0.52, height * heightScale));
+    const groupH = stepHeights.reduce((sum, height) => sum + height, 0) + gap * Math.max(0, steps.length - 1);
     const top = area.y + (area.h - groupH) / 2;
-    const cardW = Math.min(area.w * 0.72, 3.1);
     const cardX = area.x + (area.w - cardW) / 2;
+    let cursorY = top;
     steps.forEach((step, idx) => {
-      const y = top + idx * (stepH + gap);
+      const stepH = stepHeights[idx];
+      const y = cursorY;
+      cursorY += stepH + gap;
       const highlighted = step.id === visual.highlight;
       nativeRect(slide, cardX, y, cardW, stepH, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C" });
       nativeText(slide, String(idx + 1), { x: cardX + 0.12, y: y + stepH / 2 - 0.1, w: 0.24, h: 0.2, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
-      nativeText(slide, step.label, { x: cardX + 0.46, y: y + 0.08, w: cardW - 0.62, h: Math.max(0.24, stepH - 0.16), fontSize: 12, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333" });
+      nativeText(slide, step.label, { x: cardX + 0.46, y: y + 0.08, w: cardW - 0.62, h: Math.max(0.24, stepH - 0.16), fontSize: labelFontSize, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333", lineSpacingMultiple: labelFontSize === 10 ? 1.0 : 1.08 });
       if (idx < steps.length - 1) {
         const x = area.x + area.w / 2;
         nativeLine(slide, x, y + stepH + 0.02, x, y + stepH + gap - 0.02, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
@@ -2194,15 +3123,49 @@ function drawNativeProcess(slide, visual, area) {
     });
     return;
   }
+  if (area.w < 4.4 && steps.length > 8) {
+    const columns = 2;
+    const rows = Math.ceil(steps.length / columns);
+    const targetGroupW = area.w * 0.9;
+    const gapX = Math.max(0.18, Math.min(0.26, targetGroupW * 0.06));
+    const gapY = Math.max(0.1, Math.min(0.18, area.h * 0.028));
+    const stepW = (targetGroupW - gapX) / columns;
+    const maxLabelLines = Math.max(1, ...steps.map((step) => estimateNativeTextLines(step.label, 10, (targetGroupW - gapX) / columns - 0.46, 0.01)));
+    const naturalCardH = Math.min(0.76, Math.max(0.48, maxLabelLines * (10 / 72) + 0.28));
+    const cardH = Math.min(naturalCardH, (area.h - gapY * Math.max(0, rows - 1)) / rows);
+    const groupW = stepW * columns + gapX;
+    const groupH = cardH * rows + gapY * Math.max(0, rows - 1);
+    const startX = area.x + (area.w - groupW) / 2;
+    const startY = area.y + (area.h - groupH) / 2;
+    steps.forEach((step, idx) => {
+      const row = Math.floor(idx / columns);
+      const col = idx % columns;
+      const x = startX + col * (stepW + gapX);
+      const y = startY + row * (cardH + gapY);
+      const highlighted = step.id === visual.highlight;
+      nativeRect(slide, x, y, stepW, cardH, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C" });
+      nativeText(slide, String(idx + 1), { x: x + 0.08, y: y + 0.1, w: 0.24, h: 0.2, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
+      nativeText(slide, step.label, { x: x + 0.38, y: y + 0.08, w: stepW - 0.46, h: Math.max(0.42, cardH - 0.16), fontSize: 10, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333", margin: 0.01, lineSpacingMultiple: 1.0 });
+      if (idx < steps.length - 1) {
+        const nextRow = Math.floor((idx + 1) / columns);
+        if (nextRow === row) nativeLine(slide, x + stepW + 0.03, y + cardH / 2, x + stepW + gapX - 0.03, y + cardH / 2, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+        else nativeLine(slide, x + stepW / 2, y + cardH + 0.03, x + stepW / 2, y + cardH + gapY - 0.03, { color: highlighted ? "C00000" : "8C8C8C", width: 0.5, endArrowType: "triangle" });
+      }
+    });
+    return;
+  }
   if (steps.length > 6) {
-    const columns = Math.ceil(steps.length / 2);
+    const columns = area.w < 6.4 ? 2 : maxLabelUnits > 16 ? 3 : Math.ceil(steps.length / 2);
+    const rows = Math.ceil(steps.length / columns);
     const targetGroupW = area.w * 0.86;
     const gapX = Math.max(0.2, Math.min(0.32, targetGroupW * 0.035));
-    const gapY = Math.max(0.28, Math.min(0.42, area.h * 0.09));
+    const gapY = Math.max(0.18, Math.min(0.32, area.h * 0.055));
     const stepW = Math.min(2.1, (targetGroupW - gapX * Math.max(0, columns - 1)) / Math.max(1, columns));
-    const cardH = Math.min(0.86, Math.max(0.68, area.h * 0.22));
+    const maxLabelLines = Math.max(1, ...steps.map((step) => estimateNativeTextLines(step.label, 10, stepW - 0.56, 0.01)));
+    const naturalCardH = Math.min(0.78, Math.max(0.5, maxLabelLines * (10 / 72) + 0.3));
+    const cardH = Math.min(naturalCardH, (area.h - gapY * Math.max(0, rows - 1)) / Math.max(1, rows));
     const groupW = stepW * columns + gapX * Math.max(0, columns - 1);
-    const groupH = cardH * 2 + gapY;
+    const groupH = cardH * rows + gapY * Math.max(0, rows - 1);
     const startX = area.x + (area.w - groupW) / 2;
     const startY = area.y + (area.h - groupH) / 2;
     steps.forEach((step, idx) => {
@@ -2232,14 +3195,16 @@ function drawNativeProcess(slide, visual, area) {
   const stepW = Math.min(maxStepW, availableStepW);
   const groupW = stepW * steps.length + gap * Math.max(0, steps.length - 1);
   const startX = area.x + (area.w - groupW) / 2;
-  const boxH = Math.min(1.18, Math.max(0.86, area.h * 0.38));
+  const maxLabelLines = Math.max(1, ...steps.map((step) => estimateNativeTextLines(step.label, 12, stepW - 0.4, 0.04)));
+  const naturalBoxH = maxLabelLines * (12 / 72) + (steps.some((step) => step.time) ? 0.58 : 0.38);
+  const boxH = Math.min(1.08, Math.max(0.58, naturalBoxH));
   const boxY = area.y + (area.h - boxH) / 2;
   steps.forEach((step, idx) => {
     const x = startX + idx * (stepW + gap);
     const highlighted = step.id === visual.highlight;
     nativeRect(slide, x, boxY, stepW, boxH, { fill: highlighted ? "FFF1EF" : "FFFFFF", stroke: highlighted ? "C00000" : "8C8C8C" });
     nativeText(slide, String(idx + 1), { x: x + 0.16, y: boxY + 0.13, w: 0.24, h: 0.2, fontSize: 10, bold: true, align: "center", color: highlighted ? "C00000" : "333333", margin: 0 });
-    nativeText(slide, step.label, { x: x + 0.2, y: boxY + 0.34, w: stepW - 0.4, h: step.time ? Math.max(0.3, boxH * 0.38) : Math.max(0.4, boxH - 0.48), fontSize: 12, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333" });
+    nativeText(slide, step.label, { x: x + 0.2, y: boxY + 0.16, w: stepW - 0.4, h: step.time ? Math.max(0.3, boxH * 0.38) : Math.max(0.42, boxH - 0.24), fontSize: 12, bold: true, align: "center", valign: "mid", color: highlighted ? "C00000" : "333333", lineSpacingMultiple: 1.0 });
     if (step.time) {
       nativeText(slide, step.time, { x: x + 0.14, y: boxY + boxH - 0.32, w: stepW - 0.28, h: 0.2, fontSize: 10, align: "center", color: highlighted ? "C00000" : "595959" });
     }
@@ -2377,14 +3342,11 @@ function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 
 
   if (renderPath === "evidence") return drawNativeEvidence(slide, spec, area);
 
-  nativeRect(slide, area.x, area.y, area.w, area.h, { fill: "FFFFFF", stroke: "D9D9D9" });
-  const padX = Math.min(0.55, Math.max(0.04, area.w * 0.08));
-  const padY = Math.min(0.58, Math.max(0.04, area.h * 0.12));
   const inner = {
-    x: area.x + padX,
-    y: area.y + padY,
-    w: Math.max(0.12, area.w - padX * 2),
-    h: Math.max(0.12, area.h - padY * 2),
+    x: area.x,
+    y: area.y,
+    w: area.w,
+    h: area.h,
   };
 
   if (spec.kind === "Matrix" && spec.template === "table") return drawNativeTable(slide, visual, inner);
@@ -2394,7 +3356,7 @@ function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 
   if (spec.template === "bar_chart") return drawNativeBarChart(slide, visual, inner);
   if (spec.template === "line_chart") return drawNativeLineChart(slide, visual, inner);
   if (spec.template === "proportion_chart") return drawNativeLoop(slide, { center: visual.total_label, steps: (visual.segments || []).map((segment, idx) => ({ id: `s${idx}`, label: segment.label })), highlight: visual.highlight }, inner);
-  if (spec.template === "heatmap" || spec.template === "capability_matrix") return drawNativeGrid(slide, visual, inner);
+  if (spec.template === "heatmap" || spec.template === "capability_matrix") return drawNativeGrid(slide, visual, inner, spec.template);
   if (spec.template === "swimlane") return drawNativeSwimlane(slide, visual, inner);
   if (spec.template === "timeline") return drawNativeTimeline(slide, visual, inner);
   if (spec.template === "process") return drawNativeProcess(slide, visual, inner);
@@ -2402,12 +3364,13 @@ function renderVisualAnchorPptNative(slide, spec, area = { x: 0.85, y: 1.42, w: 
   if (["tree", "layered_architecture", "capability_stack"].includes(spec.template)) return drawNativeHierarchy(slide, spec, inner);
   if (["hub_spoke_network", "dependency_graph", "module_interaction_map", "causal_influence_graph"].includes(spec.template)) return drawNativeNetwork(slide, visual, inner);
   if (spec.template === "quadrant_matrix") {
-    nativeRect(slide, inner.x, inner.y, inner.w, inner.h, { fill: "FFFFFF", stroke: "8C8C8C" });
-    slide.addShape(ShapeType.line, { x: inner.x + inner.w / 2, y: inner.y, w: 0, h: inner.h, line: { color: "D9D9D9", width: 0.5 } });
-    slide.addShape(ShapeType.line, { x: inner.x, y: inner.y + inner.h / 2, w: inner.w, h: 0, line: { color: "D9D9D9", width: 0.5 } });
+    const matrixArea = fitNaturalNativeArea(inner, estimateNativeQuadrantArea(visual, inner), { alignY: "top", minW: 1.4, minH: 1.1 });
+    nativeRect(slide, matrixArea.x, matrixArea.y, matrixArea.w, matrixArea.h, { fill: "FFFFFF", stroke: "8C8C8C" });
+    slide.addShape(ShapeType.line, { x: matrixArea.x + matrixArea.w / 2, y: matrixArea.y, w: 0, h: matrixArea.h, line: { color: "D9D9D9", width: 0.5 } });
+    slide.addShape(ShapeType.line, { x: matrixArea.x, y: matrixArea.y + matrixArea.h / 2, w: matrixArea.w, h: 0, line: { color: "D9D9D9", width: 0.5 } });
     (visual.items || []).forEach((item) => {
-      const x = inner.x + item.x * inner.w - 0.32;
-      const y = inner.y + (1 - item.y) * inner.h - 0.16;
+      const x = matrixArea.x + item.x * matrixArea.w - 0.32;
+      const y = matrixArea.y + (1 - item.y) * matrixArea.h - 0.16;
       nativeTextCell(slide, item.label, { x, y, w: 0.64, h: 0.32, fontSize: 10, align: "center", valign: "mid", fill: item.label === visual.highlight ? "FFF1EF" : "F7F7F7", stroke: item.label === visual.highlight ? "C00000" : "BFBFBF", margin: 0 });
     });
     return undefined;
@@ -2760,6 +3723,7 @@ module.exports = {
   readImageDimensions,
   renderVisualAnchorPptNative,
   renderVisualAnchorRoughSvg,
+  resolveRoughSvgSizeTierForArea,
   resolveVisualAnchorRenderPath,
   validateVisualAnchorSpec,
   writeVisualAnchorImage,

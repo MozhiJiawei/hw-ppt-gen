@@ -268,6 +268,78 @@ function assertContentLayoutAutoResolvesTallEvidenceSideText() {
   assert(moduleLayout.block_areas[0].visible_area.x > moduleLayout.block_areas[0].area.x, "tall source evidence should be horizontally centered inside its visual block");
 }
 
+function assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText() {
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
+  const sourcePath = writeSourceSvg(".tmp/visual_anchor_contract/wide_source.svg", 670, 273, "wide evidence");
+  const pptx = createHuaweiDeck({ title: "data card height contract" });
+  addVisualAnchorContentSlide(pptx, {
+    title: "证据图 + KPI + 正文",
+    sections: ["测试"],
+    currentSection: "测试",
+    summary: { body: [{ label: "拥挤", text: "同一模块内有证据图、KPI 卡和正文时，KPI 卡不能被压成小框。" }] },
+    contentLayout: {
+      type: "two_column",
+      reference: "05 内容 二分栏",
+      modules: [
+        {
+          role: "content_panel",
+          title: "算法：验证与预草稿重叠",
+          blocks: [
+            { type: "visual_anchor", visual_anchor: evidenceSourceAnchor("wide_evidence_with_cards", sourcePath) },
+            {
+              type: "supporting_component",
+              visual_anchor: {
+                id: "readable_data_cards_with_evidence",
+                title: "三段 token 读数",
+                claim: "KPI 卡在证据图和正文之间仍应保持可读高度。",
+                kind: "Quantity",
+                template: "data_cards",
+                visual_spec: {
+                  cards: [
+                    { id: "prefix", label: "prefix段", value: "已确认" },
+                    { id: "prev", label: "上一批draft", value: "验证" },
+                    { id: "mask", label: "mask区", value: "预草稿" },
+                  ],
+                  highlight: "mask",
+                },
+                highlight_reason: "高亮预草稿，因为它承载下一批 proposal 的准备。",
+              },
+            },
+            {
+              type: "text",
+              body: [
+                "TiDAR用三段token组织和混合attention mask，在单forward内并行完成验证与预草稿",
+                "机制变化：本步接受多少 token，都有对应下一批 proposal。",
+                "收益入口：one-step diffusion 把草稿计算压进当前 forward。",
+              ],
+              emphasis: ["单forward", "对应下一批", "当前 forward"],
+              fontSize: 10,
+            },
+          ],
+        },
+        {
+          role: "content_panel",
+          title: "辅助模块",
+          blocks: [{ type: "text", body: "保持二分栏结构完整。" }],
+        },
+      ],
+    },
+    page: "01",
+  });
+  const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_data_card_height_manifest.json"));
+  const moduleLayout = manifest.slides[0].content_layout_schema.module_layouts[0];
+  const cardBlock = moduleLayout.block_areas.find((block) => block.template === "data_cards");
+  const evidenceBlock = moduleLayout.block_areas.find((block) => block.kind === "Evidence");
+  const textBlock = moduleLayout.block_areas.find((block) => block.type === "text");
+  assert(cardBlock, "supporting data_cards block should be recorded in layout metrics");
+  assert(evidenceBlock, "evidence block should be recorded in layout metrics");
+  assert(textBlock, "text block should be recorded in layout metrics");
+  assert(cardBlock.area.h >= 0.78, "data_cards should keep a readable minimum height instead of shrinking into a tiny strip");
+  assert(cardBlock.area.h >= cardBlock.data_cards_estimated_height * 0.88, "data_cards layout height should track the estimated text/card height");
+  assert(evidenceBlock.area.h >= 1.45, "evidence should remain readable after preserving KPI card height");
+}
+
 function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
@@ -492,6 +564,7 @@ function main() {
   collect("content-slide entrypoint records fixed output evidence", assertContentSlideRecordsFixedOutputEvidence, failures);
   collect("content-slide images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
   collect("content layout auto-resolves tall evidence side text", assertContentLayoutAutoResolvesTallEvidenceSideText, failures);
+  collect("supporting data cards keep readable height with evidence and text", assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText, failures);
   collect("content-slide captions stay outside visual_spec", assertContentSlideRendersEditableCaptionOutsideVisualSpec, failures);
   collect("dense column layouts suppress visual captions", assertTwoAndThreeColumnLayoutsSuppressVisualCaptions, failures);
   collect("diagram helper exports remain available", assertDiagramExportsStayAvailable, failures);

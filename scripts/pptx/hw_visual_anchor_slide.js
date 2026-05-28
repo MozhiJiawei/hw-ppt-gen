@@ -17,6 +17,7 @@ const {
   createVisualAnchorImage,
   readImageDimensions,
   renderVisualAnchorPptNative,
+  resolveRoughSvgSizeTierForArea,
   resolveVisualAnchorRenderPath,
   validateVisualAnchorSpec,
 } = require("./hw_diagram_helpers");
@@ -62,7 +63,9 @@ function addEvidenceModule(slide, visualAnchor, area) {
 }
 
 function addSvgVisualAnchorImage(slide, visualAnchor, area) {
-  const image = createVisualAnchorImage(visualAnchor, { width: 1400 });
+  const sizeTier = resolveRoughSvgSizeTierForArea(area);
+  const widthByTier = { large: 1400, medium: 1100, small: 860 };
+  const image = createVisualAnchorImage(visualAnchor, { width: widthByTier[sizeTier] || 1400, sizeTier });
   const imageArea = fitAreaContain(area, image.width, image.height);
   const data = `data:${image.mimeType};base64,${Buffer.from(image.svg, "utf8").toString("base64")}`;
   slide.addImage({
@@ -72,7 +75,7 @@ function addSvgVisualAnchorImage(slide, visualAnchor, area) {
     w: imageArea.w,
     h: imageArea.h,
   });
-  return { ...image, imageArea };
+  return { ...image, imageArea, sizeTier };
 }
 
 function renderVisualAnchor(slide, visualAnchor, area) {
@@ -85,6 +88,7 @@ function renderVisualAnchor(slide, visualAnchor, area) {
       image_format: image.format,
       image_width: image.width,
       image_height: image.height,
+      image_size_tier: image.sizeTier,
       image_area: image.imageArea,
     };
   }
@@ -562,9 +566,17 @@ function minimumVerticalBlockSize(block, area, options = {}, currentSize = 0.45)
     const imageRatio = dimensions.width / dimensions.height;
     const readable = evidenceReadableHeightTarget(options.layoutType || "", imageRatio);
     const natural = area.w / imageRatio;
-    return Math.min(currentSize, Math.max(0.72, Math.min(readable, natural, area.h * 0.52)));
+    const readableFloor = (options.layoutType || "") === "three_column" && imageRatio < 3
+      ? 1.1
+      : imageRatio < 3
+        ? 1.25
+        : 0.72;
+    return Math.min(currentSize, Math.max(readableFloor, Math.min(readable, natural, area.h * 0.52, currentSize * 0.72)));
   }
   if (isTableAnchor(visualAnchor)) return Math.min(currentSize, Math.max(0.62, area.h * 0.18));
+  if (isDataCardsAnchor(visualAnchor)) {
+    return Math.min(currentSize, Math.max(0.72, estimateDataCardsBlockHeight(visualAnchor, area) * 0.9));
+  }
   return Math.min(currentSize, 0.45);
 }
 
@@ -572,9 +584,8 @@ function adjustedBlockSize(block, area, horizontal, options = {}) {
   const visualAnchor = block.visual_anchor || block.visualAnchor;
   const explicitSize = Number(horizontal ? (block.width || block.w) : (block.height || block.h));
   if (!horizontal && visualAnchor?.kind === "Quantity" && visualAnchor?.template === "data_cards") {
-    const cards = visualAnchor.visual_spec?.cards || [];
-    const compactHeight = cards.length >= 3 ? 0.95 : 0.82;
-    return Math.min(explicitSize > 0 ? explicitSize : compactHeight, compactHeight);
+    const estimated = estimateDataCardsBlockHeight(visualAnchor, area);
+    return explicitSize > 0 ? Math.max(explicitSize, estimated) : estimated;
   }
   if (!horizontal && isTableAnchor(visualAnchor)) {
     const estimated = estimateTableBlockHeight(visualAnchor, area);
@@ -652,6 +663,10 @@ function isTableAnchor(visualAnchor) {
   return visualAnchor?.kind === "Matrix" && visualAnchor?.template === "table";
 }
 
+function isDataCardsAnchor(visualAnchor) {
+  return visualAnchor?.kind === "Quantity" && visualAnchor?.template === "data_cards";
+}
+
 function isStructuredSupportingComponent(visualAnchor) {
   const kind = safeText(visualAnchor?.kind);
   const template = safeText(visualAnchor?.template);
@@ -681,6 +696,57 @@ function estimateTableBlockHeight(visualAnchor, area = {}) {
     return Math.max(minRow, maxLines * 0.24 + 0.1);
   });
   return Math.ceil(rowHeights.reduce((sum, height) => sum + height, 0) * 20) / 20;
+}
+
+function estimateDataCardsBlockHeight(visualAnchor, area = {}) {
+  const cards = visualAnchor?.visual_spec?.cards || [];
+  if (!Array.isArray(cards) || !cards.length) return 0.82;
+  const width = Number(area.w || 3);
+  const tier = width >= 6.4 ? "large" : width >= 4.15 ? "medium" : "small";
+  const valueFontSize = tier === "large" ? 24 : 18;
+  const unitFontSize = tier === "small" ? 10 : 12;
+  const labelFontSize = tier === "small" ? 10 : 12;
+  const gap = 0.14;
+  const count = Math.max(1, cards.length);
+  const baseCardW = tier === "large" ? 1.55 : tier === "medium" ? 1.36 : 1.18;
+  const minWShare = tier === "large" ? 0.5 : tier === "medium" ? 0.58 : 0.6;
+  const maxWShare = tier === "large" ? 0.82 : tier === "medium" ? 0.9 : 0.96;
+  const maxTextW = Math.max(0, ...cards.flatMap((card) => [
+    estimateDataCardTextWidth(card.label || "", labelFontSize) + 0.22,
+    estimateDataCardTextWidth(card.value || "", valueFontSize) + 0.2,
+  ]));
+  const naturalCardW = Math.max(count >= 4 ? baseCardW * 0.9 : count === 3 ? baseCardW : baseCardW * 1.12, Math.min(tier === "large" ? 2.1 : 1.8, maxTextW));
+  const naturalW = count * naturalCardW + gap * Math.max(0, count - 1);
+  const minFitW = Math.max(0.8, width * minWShare);
+  const maxFitW = Math.max(minFitW, width * maxWShare);
+  const fittedW = Math.min(width, maxFitW, Math.max(minFitW, naturalW));
+  const cardW = Math.max(0.4, (fittedW - gap * Math.max(0, count - 1)) / count);
+  const contentW = Math.max(0.12, cardW - 0.1);
+  const heights = cards.map((card) => {
+    const unit = safeText(card.unit);
+    const fittedValueFontSize = chooseDataCardValueFontSize(card.value || "", valueFontSize, contentW);
+    const valueH = Math.max(fittedValueFontSize / 54 + 0.08, (fittedValueFontSize / 72) * 1.12 + 0.1);
+    const unitH = unit ? Math.max(unitFontSize / 54 + 0.08, estimateTextBoxHeight(unit, { fontSize: unitFontSize, w: contentW, margin: 0.04 })) : 0;
+    const labelH = Math.max(0.26, estimateTextBoxHeight(card.label || "", { fontSize: labelFontSize, w: contentW, margin: 0.04 }));
+    return 0.05 + valueH + (unit ? 0.02 + unitH : 0) + 0.02 + labelH + 0.05;
+  });
+  const naturalH = Math.max(0.78, ...heights);
+  return Math.ceil(naturalH * 20) / 20;
+}
+
+function chooseDataCardValueFontSize(text, startSize, width) {
+  const allowed = [24, 22, 20, 18, 16, 14, 12, 10, 9, 8].filter((fontSize) => fontSize <= startSize);
+  return allowed.find((fontSize) => estimateWrappedLines(text, fontSize, Math.max(0.1, width - 0.08), { bulletIndentUnits: 0 }) <= 1)
+    || allowed[allowed.length - 1]
+    || 8;
+}
+
+function estimateDataCardTextWidth(text, fontSize) {
+  return safeText(text).split(/\r?\n/).reduce((max, line) => {
+    let units = 0;
+    for (const ch of line) units += /[\u4e00-\u9fff]/.test(ch) ? 1 : /[A-Z0-9]/.test(ch) ? 0.62 : 0.5;
+    return Math.max(max, units * fontSize / 72);
+  }, 0);
 }
 
 function buildEmphasisRuns(text, emphasisTerms, options = {}) {
@@ -883,6 +949,9 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}) {
   } else if (isTableAnchor(visualAnchor)) {
     descriptor.table_estimated_height = estimateTableBlockHeight(visualAnchor, blockArea || { w: 1, h: 1 });
     descriptor.table_rows = Array.isArray(visualAnchor.visual_spec?.rows) ? visualAnchor.visual_spec.rows.length : 0;
+  } else if (isDataCardsAnchor(visualAnchor)) {
+    descriptor.data_cards_estimated_height = estimateDataCardsBlockHeight(visualAnchor, blockArea || { w: 1, h: 1 });
+    descriptor.data_cards_count = Array.isArray(visualAnchor.visual_spec?.cards) ? visualAnchor.visual_spec.cards.length : 0;
   }
   if (options.suppressVisualAnchorCaptions) descriptor.caption_suppressed = true;
   return descriptor;

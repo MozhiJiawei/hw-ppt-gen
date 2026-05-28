@@ -8,6 +8,16 @@ const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 const ROOT = path.resolve(__dirname, "..", "..");
 const DEFAULT_SPEC = path.join(ROOT, "scripts", "smoke", "fixtures", "visual_diagram_test_cases.js");
 const DEFAULT_OUT = path.join(ROOT, ".tmp", "diagram_component_smoke");
+const ROUGH_SIZE_TIERS = [
+  { tier: "large", label: "偏分栏大图", width: 1400 },
+  { tier: "medium", label: "二分栏中图", width: 1100 },
+  { tier: "small", label: "三分栏小图", width: 860 },
+];
+const NATIVE_SIZE_TIERS = [
+  { tier: "large", label: "偏分栏大图", share: "3/4", area: { x: 0.45, y: 1.22, w: 9.18, h: 5.3 } },
+  { tier: "medium", label: "二分栏中图", share: "1/2", area: { x: 0.45, y: 1.22, w: 6.12, h: 5.3 } },
+  { tier: "small", label: "三分栏小图", share: "1/3", area: { x: 0.45, y: 1.22, w: 4.08, h: 5.3 } },
+];
 
 function parseArgs(argv) {
   const args = { spec: DEFAULT_SPEC, out: DEFAULT_OUT };
@@ -55,12 +65,25 @@ async function writeDiagramAssets(spec, outRoot) {
   const caseDir = path.join(outRoot, kindDir, templateDir);
   fs.mkdirSync(caseDir, { recursive: true });
 
-  const image = createVisualAnchorImage(spec, spec.render_options || { aspectRatio: "16:9" });
+  const baseOptions = spec.render_options || { aspectRatio: "16:9" };
   const baseName = safePathPart(spec.id || spec.template);
-  const svgPath = path.join(caseDir, `${baseName}.svg`);
-  const pngPath = path.join(caseDir, `${baseName}.png`);
-  fs.writeFileSync(svgPath, image.svg, "utf8");
-  await sharp(Buffer.from(image.svg)).png().toFile(pngPath);
+  const variants = [];
+  for (const variant of ROUGH_SIZE_TIERS) {
+    const image = createVisualAnchorImage(spec, { ...baseOptions, width: variant.width, sizeTier: variant.tier });
+    const svgPath = path.join(caseDir, `${baseName}_${variant.tier}.svg`);
+    const pngPath = path.join(caseDir, `${baseName}_${variant.tier}.png`);
+    fs.writeFileSync(svgPath, image.svg, "utf8");
+    await sharp(Buffer.from(image.svg)).png().toFile(pngPath);
+    variants.push({
+      tier: variant.tier,
+      label: variant.label,
+      svg: path.relative(ROOT, svgPath).replace(/\\/g, "/"),
+      png: path.relative(ROOT, pngPath).replace(/\\/g, "/"),
+      width: image.width,
+      height: image.height,
+    });
+  }
+  const image = variants[0];
 
   return {
     id: spec.id,
@@ -69,10 +92,11 @@ async function writeDiagramAssets(spec, outRoot) {
     scenario: spec.scenario,
     kind: spec.kind,
     template: spec.template,
-    svg: path.relative(ROOT, svgPath).replace(/\\/g, "/"),
-    png: path.relative(ROOT, pngPath).replace(/\\/g, "/"),
+    svg: image.svg,
+    png: image.png,
     width: image.width,
     height: image.height,
+    variants,
   };
 }
 
@@ -192,16 +216,41 @@ function getCaseDescription(asset) {
 
 function addCaseImageSlide(slide, asset) {
   const pngPath = path.join(ROOT, asset.png);
-  const imageArea = { x: 0.45, y: 1.12, w: 12.25, h: 5.86 };
+  const targetWidths = { large: 9.18, medium: 6.12, small: 4.08 };
+  const targetW = targetWidths[asset.tier] || 12.25;
+  const imageArea = { x: 0.45, y: 1.12, w: targetW, h: 5.86 };
   const fitted = fitAreaContain(imageArea, asset.width, asset.height);
-  slide.addShape(ShapeType.rect, {
-    ...imageArea,
-    fill: { color: "FFFFFF" },
-    line: { color: "D9D9D9", width: 0.5 },
-  });
   slide.addImage({
     path: pngPath,
     ...fitted,
+  });
+  if (asset.label) {
+    slide.addText(`${asset.label}：按版面 ${asset.tier === "large" ? "3/4" : asset.tier === "medium" ? "1/2" : asset.tier === "small" ? "1/3" : "full"} 宽度检查`, {
+      x: 0.45,
+      y: 6.9,
+      w: targetW,
+      h: 0.18,
+      fontFace: "Microsoft YaHei",
+      fontSize: 10,
+      color: "595959",
+      margin: 0,
+      fit: "shrink",
+    });
+  }
+}
+
+function addNativeTierLabel(slide, variant) {
+  if (!variant?.label) return;
+  slide.addText(`${variant.label}：按版面 ${variant.share} 宽度检查`, {
+    x: variant.area.x,
+    y: 6.9,
+    w: variant.area.w,
+    h: 0.18,
+    fontFace: "Microsoft YaHei",
+    fontSize: 10,
+    color: "595959",
+    margin: 0,
+    fit: "shrink",
   });
 }
 
@@ -256,19 +305,23 @@ function addRejectedSlide(pptx, spec, renderPath, error, pageNo, totalPages) {
 function addRenderedSlide(pptx, spec, renderPath, payload, pageNo, totalPages) {
   const slide = pptx.addSlide();
   slide.background = { color: "FFFFFF" };
-  addSlideTitle(slide, getCaseDescription(spec), `${renderPath} · ${spec.kind} / ${spec.template} · ${spec.id}`);
+  const variant = payload.asset || payload.nativeVariant;
+  const variantSuffix = variant?.label ? ` · ${variant.label}` : "";
+  addSlideTitle(slide, getCaseDescription(spec), `${renderPath} · ${spec.kind} / ${spec.template} · ${spec.id}${variantSuffix}`);
   if (renderPath === "rough_svg") {
     addCaseImageSlide(slide, payload.asset);
   } else {
-    renderVisualAnchorPptNative(slide, spec);
+    const area = payload.nativeVariant?.area;
+    renderVisualAnchorPptNative(slide, spec, area);
+    addNativeTierLabel(slide, payload.nativeVariant);
   }
   addFooter(slide, pageNo, totalPages);
 }
 
-function verifyNativeCaseCapacity(spec) {
+function verifyNativeCaseCapacity(spec, area) {
   const pptx = new pptxgen();
   pptx.layout = "LAYOUT_WIDE";
-  renderVisualAnchorPptNative(pptx.addSlide(), spec);
+  renderVisualAnchorPptNative(pptx.addSlide(), spec, area);
 }
 
 async function writeTemplateReviewPpt(group, outRoot) {
@@ -287,9 +340,19 @@ async function writeTemplateReviewPpt(group, outRoot) {
   pptx.lang = "zh-CN";
   pptx.theme = { headFontFace: "Microsoft YaHei", bodyFontFace: "Microsoft YaHei", lang: "zh-CN" };
 
-  cases.forEach((entry, idx) => {
+  const reviewEntries = cases.flatMap((entry) => {
+    if (!entry.error && entry.renderPath === "rough_svg" && Array.isArray(entry.asset?.variants)) {
+      return entry.asset.variants.map((variant) => ({ ...entry, asset: variant }));
+    }
+    if (!entry.error && entry.renderPath === "ppt_native" && Array.isArray(entry.nativeVariants)) {
+      return entry.nativeVariants.map((variant) => ({ ...entry, nativeVariant: variant }));
+    }
+    return [entry];
+  });
+
+  reviewEntries.forEach((entry, idx) => {
     const pageNo = idx + 1;
-    const totalPages = cases.length;
+    const totalPages = reviewEntries.length;
     if (entry.error) addRejectedSlide(pptx, entry.spec, entry.renderPath, entry.error, pageNo, totalPages);
     else addRenderedSlide(pptx, entry.spec, entry.renderPath, entry, pageNo, totalPages);
   });
@@ -337,8 +400,10 @@ async function main() {
     const renderPath = resolveVisualAnchorRenderPath(spec);
     try {
       const asset = renderPath === "rough_svg" ? await writeDiagramAssets(spec, args.out) : null;
-      if (renderPath === "ppt_native" || renderPath === "evidence") verifyNativeCaseCapacity(spec);
-      addGroupEntry(spec, renderPath, { asset });
+      const nativeVariants = renderPath === "ppt_native" ? NATIVE_SIZE_TIERS : null;
+      if (renderPath === "ppt_native") nativeVariants.forEach((variant) => verifyNativeCaseCapacity(spec, variant.area));
+      else if (renderPath === "evidence") verifyNativeCaseCapacity(spec);
+      addGroupEntry(spec, renderPath, { asset, nativeVariants });
       renderedCases.push({
         id: spec.id,
         title: spec.title,
@@ -350,6 +415,7 @@ async function main() {
         png: asset?.png,
         width: asset?.width,
         height: asset?.height,
+        variants: renderPath === "rough_svg" ? asset?.variants?.map((variant) => variant.tier) : nativeVariants?.map((variant) => variant.tier),
       });
     } catch (error) {
       if (!isTextCapacityError(error)) throw error;

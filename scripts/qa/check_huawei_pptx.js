@@ -969,12 +969,18 @@ function checkVisualAnchorImagePresenceAndScale(slide, entry) {
   if (!isRectLike(imageArea) || !isRectLike(visualArea)) return issues;
 
   const coverage = imageCoverage(imageArea, visualArea);
+  const widthCoverage = imageArea.w / visualArea.w;
+  const heightCoverage = imageArea.h / visualArea.h;
+  const fillsOneAxis = Math.max(widthCoverage, heightCoverage) >= 0.92;
   const minimumCoverage = isEvidenceImage ? 0.38 : 0.32;
-  if (coverage < minimumCoverage) {
-    issues.push(issue(slide, "content_visual_anchor_image_too_small", "error", "Visual anchor image occupies too little of its intended visual area; redesign the layout or choose a better-fitted source crop/region instead of accepting a tiny image.", {
+  if (!fillsOneAxis) {
+    issues.push(issue(slide, "content_visual_anchor_image_too_small", "error", "Visual anchor image does not fill either dimension of its intended visual area; resize the image box or choose a better-fitted source crop/region instead of forcing aspect-ratio distortion.", {
       visual_anchor_id: entry.visual_anchor_id || spec.id || "",
       coverage: Math.round(coverage * 1000) / 1000,
       minimum_coverage: minimumCoverage,
+      minimum_axis_coverage: 0.92,
+      width_coverage: Math.round(widthCoverage * 1000) / 1000,
+      height_coverage: Math.round(heightCoverage * 1000) / 1000,
       image_area: imageArea,
       visual_area: visualArea,
     }));

@@ -34,6 +34,13 @@ function renderNativeForTest(spec) {
   renderVisualAnchorPptNative(slide, spec);
 }
 
+function renderNativeSlideForTest(spec, area) {
+  const pptx = createHuaweiDeck({ title: "native canonical test" });
+  const slide = pptx.addSlide();
+  renderVisualAnchorPptNative(slide, spec, area);
+  return slide;
+}
+
 function assertIncludes(svg, values, context) {
   for (const value of values) {
     assert(svg.includes(String(value)), `${context} should render ${value}`);
@@ -435,6 +442,210 @@ function testDenseQuadrantLabelsRenderWithAdaptiveText() {
   assertIncludes(svg, ["对象13"], "dense quadrant matrix");
 }
 
+function testRoughSvgUsesTightTransparentCanvas() {
+  const svg = createVisualAnchorSvg(baseSpec({
+    id: "transparent_tight_canvas",
+    kind: "Quantity",
+    template: "bar_chart",
+    visual_spec: {
+      y_label: "Score",
+      categories: ["A", "B"],
+      series: [{ name: "S", values: [1, 2] }],
+    },
+  }));
+  const viewBox = parseViewBox(svg);
+  assert(!svg.includes(`<rect width="1600" height="900"`), "rough SVG should not draw a full-canvas white background");
+  assert(!svg.includes("M80 120 C310"), "rough SVG should not include decorative full-canvas guide lines");
+  assert(viewBox.w < 1400 && viewBox.h < 760, "rough SVG should be cropped to the rendered content instead of the full design canvas");
+}
+
+function testPptNativeDoesNotDrawOuterVisualFrame() {
+  const area = { x: 0.7, y: 1.1, w: 6, h: 2.4 };
+  const slide = renderNativeSlideForTest(baseSpec({
+    id: "native_no_outer_frame",
+    kind: "Sequence",
+    template: "process",
+    visual_spec: {
+      steps: [
+        { id: "s1", label: "规划" },
+        { id: "s2", label: "交付" },
+      ],
+      highlight: "s1",
+    },
+  }), area);
+  const outerFrames = (slide._slideObjects || []).filter((object) => {
+    const options = object.options || {};
+    return object.shape === "rect"
+      && Math.abs(Number(options.x) - area.x) < 0.001
+      && Math.abs(Number(options.y) - area.y) < 0.001
+      && Math.abs(Number(options.w) - area.w) < 0.001
+      && Math.abs(Number(options.h) - area.h) < 0.001
+      && options.fill?.color === "FFFFFF"
+      && options.line?.color === "D9D9D9";
+  });
+  assert.strictEqual(outerFrames.length, 0, "ppt_native render should not add a white outer frame around the visual area");
+}
+
+function testStructuredNativeComponentsUseNaturalBounds() {
+  const area = { x: 0.7, y: 1.1, w: 7.4, h: 3.4 };
+
+  const dataSlide = renderNativeSlideForTest(baseSpec({
+    id: "native_natural_cards",
+    kind: "Quantity",
+    template: "data_cards",
+    visual_spec: {
+      cards: [
+        { id: "a", label: "A", value: "1" },
+        { id: "b", label: "B", value: "2" },
+        { id: "c", label: "C", value: "3" },
+      ],
+    },
+  }), area);
+  const cardRects = (dataSlide._slideObjects || []).filter((object) => object.shape === "rect" && object.options?.fill?.color === "F7F7F7");
+  assert(cardRects.length >= 3, "data_cards should render native card rectangles");
+  assert(cardRects.every((object) => object.options.h < area.h * 0.5), "data_cards should keep natural card height instead of stretching to the module height");
+  const cardStripW = cardRects.reduce((max, object) => Math.max(max, object.options.x + object.options.w), 0) - Math.min(...cardRects.map((object) => object.options.x));
+  assert(cardStripW > area.w * 0.55 && cardStripW < area.w * 0.75, "data_cards should use a readable natural strip without stretching across the whole module");
+  const cardTexts = (dataSlide._slideObjects || []).filter((object) => object._type === "text" && object.options?.fontFace);
+  assert(cardTexts.every((object) => object.options.fontFace === "Microsoft YaHei"), "data_cards should use Microsoft YaHei for native text");
+  assert(cardTexts.some((object) => object.options.fontSize >= 24), "large data_cards should keep prominent value text");
+
+  const gridSlide = renderNativeSlideForTest(baseSpec({
+    id: "native_natural_heatmap",
+    kind: "Quantity",
+    template: "heatmap",
+    visual_spec: {
+      rows: ["R1", "R2"],
+      columns: ["C1", "C2"],
+      values: [[1, 2], [3, 4]],
+    },
+  }), area);
+  const gridCells = (gridSlide._slideObjects || []).filter((object) => object.shape === "rect" && ["FFFFFF", "F7F7F7"].includes(object.options?.fill?.color));
+  assert(gridCells.length >= 4, "heatmap should render native grid cells");
+  assert(gridCells.reduce((sum, object) => sum + object.options.h, 0) / gridCells.length < area.h / 3, "heatmap cells should keep natural height instead of stretching to fill the module");
+
+  const smallHeatmapArea = { x: 0.45, y: 1.22, w: 4.08, h: 5.3 };
+  const smallGridSlide = renderNativeSlideForTest(baseSpec({
+    id: "native_small_heatmap_labels",
+    kind: "Quantity",
+    template: "heatmap",
+    visual_spec: {
+      rows: ["维度1", "维度2职责清晰", "维度3统一调度"],
+      columns: ["方案1职责清晰", "方案2统一调度", "方案3生成导出", "方案4规则检查"],
+      values: [[0.2, 0.3, 0.4, 0.5], [0.4, 0.6, 0.8, 0], [0.6, 0.9, 0.2, 0.5]],
+      highlight: { row: "维度3统一调度", column: "方案4规则检查" },
+    },
+  }), smallHeatmapArea);
+  const smallGridTextObjects = smallGridSlide._slideObjects || [];
+  const smallCells = smallGridTextObjects.filter((object) => object._type === "text" && ["F7F7F7", "FFFFFF", "FFF1EF"].includes(object.options?.fill?.color) && object.options?.line?.color);
+  const firstCell = smallCells.find((object) => object.options?.fill?.color === "F7F7F7" && object.options?.line?.color === "D9D9D9");
+  const rowLabel = smallGridTextObjects.find((object) => object._type === "text" && object.options?.align === "right" && object.text?.[0]?.text === "维度2职责清晰");
+  assert(firstCell, "small heatmap should render grid cells");
+  assert(rowLabel, "small heatmap should render row labels");
+  assert(firstCell.options.x - (rowLabel.options.x + rowLabel.options.w) >= 0.1, "small heatmap row labels should keep a visible gutter before the first cell");
+  assert(Math.max(...smallCells.map((object) => object.options.h)) <= 0.85, "small heatmap cells should keep compact natural row height instead of stretching down the module");
+
+  const tableSlide = renderNativeSlideForTest(baseSpec({
+    id: "native_natural_table",
+    kind: "Matrix",
+    template: "table",
+    visual_spec: {
+      rows: [
+        ["指标", "当前", "目标"],
+        ["质量", "可用", "优秀"],
+        ["效率", "手工", "自动"],
+      ],
+    },
+  }), area);
+  const table = (tableSlide._slideObjects || []).find((object) => object._type === "table");
+  assert(table, "Matrix/table should render an editable native table");
+  assert(table.options.w / 914400 < area.w && table.options.h / 914400 < area.h, "Matrix/table should keep natural table bounds instead of filling the module");
+}
+
+function testStructuredNativeComponentsUseTieredFonts() {
+  const spec = baseSpec({
+    id: "native_tiered_cards",
+    kind: "Quantity",
+    template: "data_cards",
+    visual_spec: {
+      cards: [
+        { id: "a", label: "转化率", value: "4.71x", unit: "加速" },
+        { id: "b", label: "平均长度", value: "7.45", unit: "token" },
+        { id: "c", label: "吞吐", value: "5.91x", unit: "倍" },
+      ],
+    },
+  });
+  const large = renderNativeSlideForTest(spec, { x: 0.7, y: 1.1, w: 7.4, h: 3.4 });
+  const medium = renderNativeSlideForTest(spec, { x: 0.7, y: 1.1, w: 5, h: 2.8 });
+  const small = renderNativeSlideForTest(spec, { x: 0.7, y: 1.1, w: 3.8, h: 2.2 });
+  const maxFont = (slide) => Math.max(...(slide._slideObjects || [])
+    .filter((object) => object._type === "text")
+    .map((object) => object.options?.fontSize || 0));
+  const fontSet = (slide) => new Set((slide._slideObjects || [])
+    .filter((object) => object._type === "text")
+    .map((object) => object.options?.fontSize || 0));
+  assert.strictEqual(maxFont(large), 24, "biased-column native data cards should use the large PPT font tier");
+  assert.strictEqual(maxFont(medium), 18, "two-column native data cards should use the medium PPT value tier");
+  assert.strictEqual(maxFont(small), 18, "three-column native data cards should keep readable value text instead of shrinking values below 18pt");
+  assert(fontSet(medium).has(12), "two-column native data cards should preserve 12pt supporting text");
+  assert(fontSet(small).has(10), "three-column native data cards should use the compact 10pt supporting tier");
+
+  const previewMedium = renderNativeSlideForTest(spec, { x: 0.45, y: 1.22, w: 6.12, h: 5.3 });
+  const previewSmall = renderNativeSlideForTest(spec, { x: 0.45, y: 1.22, w: 4.08, h: 5.3 });
+  const cardHeights = (slide) => (slide._slideObjects || [])
+    .filter((object) => object.shape === "rect" && ["F7F7F7", "FFF1EF"].includes(object.options?.fill?.color))
+    .map((object) => object.options?.h || 0);
+  assert(Math.max(...cardHeights(previewMedium)) <= 1.45, "two-column preview data_cards should keep natural card height instead of stretching vertically");
+  assert(Math.max(...cardHeights(previewSmall)) <= 1.25, "three-column preview data_cards should keep natural card height instead of stretching vertically");
+
+  const compactCards = renderNativeSlideForTest(baseSpec({
+    id: "native_compact_cards_fit_labels",
+    kind: "Quantity",
+    template: "data_cards",
+    visual_spec: {
+      cards: [
+        { id: "train", label: "继续训练", value: "50B/150B", unit: "tokens" },
+        { id: "h100", label: "主评测条件", value: "H100 b=1" },
+        { id: "kernel", label: "改造面", value: "KV/kernel" },
+      ],
+    },
+  }), { x: 0.45, y: 1.22, w: 4.08, h: 1.15 });
+  const compactObjects = compactCards._slideObjects || [];
+  const compactRects = compactObjects.filter((object) => object.shape === "rect" && object.text == null && object.options?.fill?.color === "F7F7F7");
+  assert.strictEqual(compactRects.length, 3, "compact data_cards should render three card rectangles");
+  compactRects.forEach((rect) => {
+    const rectRight = rect.options.x + rect.options.w;
+    const rectBottom = rect.options.y + rect.options.h;
+    const innerTexts = compactObjects.filter((object) =>
+      object._type === "text"
+      && object.text
+      && object.options.x >= rect.options.x
+      && object.options.x < rectRight
+    );
+    assert(innerTexts.length >= 2, "compact data_cards should render value and label text in each card");
+    assert(innerTexts.every((object) => object.options.y + object.options.h <= rectBottom + 0.001), "compact data_cards text should stay inside its card rectangle");
+  });
+}
+
+function testNativeProcessHeightTracksTextSize() {
+  const slide = renderNativeSlideForTest(baseSpec({
+    id: "native_process_height_tracks_text",
+    kind: "Sequence",
+    template: "process",
+    visual_spec: {
+      steps: [
+        { id: "s1", label: "阶段1" },
+        { id: "s2", label: "阶段2职责清晰" },
+        { id: "s3", label: "阶段3统一调度" },
+      ],
+      highlight: "s3",
+    },
+  }), { x: 0.45, y: 1.22, w: 6.12, h: 5.3 });
+  const processRects = (slide._slideObjects || []).filter((object) => object.shape === "rect" && ["FFFFFF", "FFF1EF"].includes(object.options?.fill?.color));
+  assert(processRects.length >= 3, "process should render native step rectangles");
+  assert(Math.max(...processRects.map((object) => object.options.h)) < 0.75, "process card height should shrink with smaller text instead of retaining a fixed tall box");
+}
+
 async function testNativeRendererRejectsShrinkFitAndOverflow() {
   const pptx = createHuaweiDeck({ title: "native text guard" });
   const slide = pptx.addSlide();
@@ -794,6 +1005,28 @@ function testTemplateLayoutDefaults() {
   assert.throws(() => createVisualAnchorImage(spec, { aspectRatio: "9:16", width: 900 }), /Unsupported diagram aspectRatio: 9:16/);
 }
 
+function testRoughSvgSizeTiersKeepSmallColumnTextReadable() {
+  const spec = baseSpec({
+    id: "tiered_bar_chart",
+    kind: "Quantity",
+    template: "bar_chart",
+    visual_spec: {
+      y_label: "清晰度",
+      categories: ["偏分栏大图", "二分栏中图", "三分栏小图"],
+      series: [{ name: "文字", values: [3, 2, 1] }],
+      highlight: { category: "三分栏小图", series: "文字" },
+    },
+  });
+  const large = createVisualAnchorImage(spec, { width: 1400, sizeTier: "large" });
+  const small = createVisualAnchorImage(spec, { width: 860, sizeTier: "small" });
+  const largeCrop = parseViewBox(large.svg);
+  const smallCrop = parseViewBox(small.svg);
+  assert(smallCrop.w < largeCrop.w * 0.8, "small tier should export a narrower logical viewBox instead of reusing the large-column image geometry");
+  assert(small.svg.includes("三分栏小图"), "small tier should still render the original label text");
+  assert(extractSvgTextLines(small.svg).some((line) => line.size >= 18), "small tier should preserve normal SVG text sizes after geometry compaction");
+  assert.throws(() => createVisualAnchorImage(spec, { sizeTier: "poster" }), /Unsupported rough_svg size tier/);
+}
+
 function testGeneratedCaseMatrixCoverage() {
   assert(generatedCaseMatrix.length >= 200, "generated case matrix should provide at least 10 variants per template");
   const byTemplate = new Map();
@@ -887,10 +1120,16 @@ async function main() {
   testReasonableLongTextWrapsInsideSvgViews();
   testStandaloneExplanationTextStaysOutOfSvg();
   testDenseQuadrantLabelsRenderWithAdaptiveText();
+  testRoughSvgUsesTightTransparentCanvas();
+  testPptNativeDoesNotDrawOuterVisualFrame();
+  testStructuredNativeComponentsUseNaturalBounds();
+  testStructuredNativeComponentsUseTieredFonts();
+  testNativeProcessHeightTracksTextSize();
   testLayeredArchitectureKeepsSideModuleEdges();
   testValidatorRejectsDroppedRelationships();
   testAllVisualBaseTemplatesExportImages();
   testTemplateLayoutDefaults();
+  testRoughSvgSizeTiersKeepSmallColumnTextReadable();
   testGeneratedCaseMatrixCoverage();
   await testNativeNetworkUsesPowerPointSafeExtents();
   await testNativeRendererRejectsShrinkFitAndOverflow();

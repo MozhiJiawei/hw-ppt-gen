@@ -54,13 +54,13 @@ function tableAnchor(id, rows) {
 function evidenceAnchor(id, imagePath) {
   return {
     id,
-    title: "源图缩放",
-    claim: "源图必须在视觉区域内保持可读尺寸。",
+    title: "源图按比例放置",
+    claim: "源图只要有一端占满视觉区域，就不应为了面积密度被强行拉伸。",
     kind: "Evidence",
     template: "source_figure",
     source: {
       path: imagePath,
-      caption: "极宽源图用于复现缩放过小的证据图问题。",
+      caption: "极宽源图用于复现按比例留白不应被面积覆盖率误伤。",
     },
   };
 }
@@ -204,10 +204,10 @@ async function generateDeck() {
     },
     {
       page: "06",
-      title: "证据图缩放过小必须被 QA 拦截",
+      title: "证据图按比例留白不应被面积规则误伤",
       sections,
       currentSection: "规则复现",
-      summary: { body: [{ label: "可读优先", text: "源图即使按比例放置，也不能小到失去证据作用。" }] },
+      summary: { body: [{ label: "比例优先", text: "源图按比例放置时只要一端占满，就不能为了面积覆盖率强行拉伸。" }] },
       contentLayout: {
         type: "two_column",
         reference: "05 内容 二分栏",
@@ -219,10 +219,10 @@ async function generateDeck() {
               type: "visual_anchor",
               height: 3.7,
               visual_anchor: evidenceAnchor("tiny_evidence_source_figure", tinyEvidencePath),
-              visualAnchorCaption: { text: "证据图缩放：极宽图在常规模块中会被压得过小", source: "来源：QA 规则回归测试" },
+              visualAnchorCaption: { text: "证据图缩放：极宽图按比例放置时允许另一端留白", source: "来源：QA 规则回归测试" },
             }],
           },
-          { role: "content_panel", title: "阅读风险", blocks: [{ type: "text", body: "如果 hard QA 不拦截，最终视觉审阅才会发现图像过小。" }] },
+          { role: "content_panel", title: "阅读原则", blocks: [{ type: "text", body: "保持原始比例，避免为满足稀疏度而把源图拉伸变形。" }] },
         ],
       },
     },
@@ -462,7 +462,7 @@ async function main() {
   assert(supportingCardEntry.content_layout_schema, "#8: supportingCards path should expose unified content layout schema evidence");
 
   assert(issuesOf(result, "content_visual_anchor_table_overflow", 5).length >= 1, "#10: tall Matrix/table supporting components in four-column modules should be blocking QA issues");
-  assert(issuesOf(result, "content_visual_anchor_image_too_small", 6).length >= 1, "#11: evidence images that occupy too little visual area should be blocking QA issues");
+  assert.equal(issuesOf(result, "content_visual_anchor_image_too_small", 6).length, 0, "#11: evidence images that fill one axis should not be blocked just because the other axis is sparse");
   assert(issuesOf(result, "sparse_large_card").some((item) => item.severity === "error"), "#12: very sparse large cards should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_alignment", 8).length >= 1, "#13: misaligned column module content should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_anchor_missing", 7).length >= 1, "#19: text-only two/three/four-column modules should be blocking QA issues");

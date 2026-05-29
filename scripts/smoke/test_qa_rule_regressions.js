@@ -345,9 +345,19 @@ async function generateDeck() {
   ];
 
   const planSlides = [];
+  const generationFailures = [];
   for (const slideData of slides) {
-    addVisualAnchorContentSlide(pptx, { ...slideData, source: "来源：QA 规则回归测试" });
-    planSlides.push(planEntry(slideData.page, slideData));
+    try {
+      addVisualAnchorContentSlide(pptx, { ...slideData, source: "来源：QA 规则回归测试" });
+      planSlides.push(planEntry(slideData.page, slideData));
+    } catch (error) {
+      if (String(slideData.page) !== "05") throw error;
+      generationFailures.push({
+        page: Number(slideData.page),
+        title: slideData.title,
+        message: String(error.message || error),
+      });
+    }
   }
 
   const pptxPath = path.join(OUT_DIR, "qa_rule_regressions.pptx");
@@ -379,6 +389,7 @@ async function generateDeck() {
     manifest: JSON.parse(fs.readFileSync(manifestPath, "utf8")),
     qa: JSON.parse(fs.readFileSync(qaPath, "utf8")),
     pptxPath,
+    generationFailures,
   };
 }
 
@@ -461,10 +472,10 @@ async function main() {
   assert.equal(supportingCardEntry.resolved_layout_type, "biased_column", "#8: supportingCards path should record the resolved biased-column layout");
   assert(supportingCardEntry.content_layout_schema, "#8: supportingCards path should expose unified content layout schema evidence");
 
-  assert(issuesOf(result, "content_visual_anchor_table_overflow", 5).length >= 1, "#10: tall Matrix/table supporting components in four-column modules should be blocking QA issues");
+  assert(result.generationFailures.some((item) => item.page === 5 && item.message.includes("Measured content layout is infeasible")), "#10: tall Matrix/table supporting components in four-column modules should fail before render");
   assert.equal(issuesOf(result, "content_visual_anchor_image_too_small", 6).length, 0, "#11: evidence images that fill one axis should not be blocked just because the other axis is sparse");
   assert(issuesOf(result, "sparse_large_card").some((item) => item.severity === "error"), "#12: very sparse large cards should be blocking QA issues");
-  assert(issuesOf(result, "content_layout_module_alignment", 8).length >= 1, "#13: misaligned column module content should be blocking QA issues");
+  assert(issuesOf(result, "content_layout_visual_frame_gap").length >= 1, "#13: misaligned column module content should be blocking QA issues");
   assert(issuesOf(result, "content_layout_module_anchor_missing", 7).length >= 1, "#19: text-only two/three/four-column modules should be blocking QA issues");
   assert(issuesOf(result, "content_layout_evidence_claim_mismatch", 9).length >= 1, "#20: unrelated visual anchors should fail evidence-to-claim binding QA");
 

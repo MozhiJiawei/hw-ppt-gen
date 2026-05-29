@@ -41,9 +41,15 @@ npm run export-sample
 npm run test:visual-anchor-contract
 npm run test:diagram
 npm run diagram-smoke
+npm run test:powerpoint-measurement
+npm run com-measurement-review
 npm run test:powerpoint-com
 npm run smoke
 ```
+
+`test:powerpoint-measurement` 是 COM measurement 能力验证的唯一入口。它会生成 `.tmp/com_measurement_quality_guard/com_measurement_quality_guard.json` 和 `.tmp/com_measurement_quality_guard/com_measurement_quality_guard_review.pptx`，覆盖当前脚本里实际注册的 Evidence、KPI/readout、Matrix/table、关系图、流程图、路线图等画图/排版组件；新增组件必须先进入这个 guard。
+
+`com-measurement-review` 只是同一个 guard 的人工审视包装：先跑 `test:powerpoint-measurement`，再把 review PPTX 导出为 `.tmp/com_measurement_quality_guard/png/`。不要再新增平行的 measurement review、calibration review 或非 COM 高度估算测试入口。
 
 `test:powerpoint-com` 需要 Windows PowerPoint COM 可用；不可用时应视为环境限制，而不是跨平台基础测试失败。
 
@@ -55,6 +61,7 @@ npm run smoke
 
 ```text
 forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout/main-agent-prompt.md
+forward-tests/huawei-ppt-gen/tidar-evidence-readability/main-agent-prompt.md
 ```
 
 运行时由人类把 `main-agent-prompt.md` 的内容交给主 agent。主 agent 负责派发独立候选 agent、隔离 judge-only 资料，并把判题结果写回对应 `.tmp/forward-tests/.../<run-id>/judgment.md`。

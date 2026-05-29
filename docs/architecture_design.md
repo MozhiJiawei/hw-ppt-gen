@@ -206,28 +206,40 @@ Constraints:
 
 Owned by:
 
+- `scripts/pptx/contracts/visual_templates.js`
+- `scripts/pptx/contracts/content_layout_types.js`
 - `scripts/pptx/hw_visual_anchor_slide.js`
+- `scripts/pptx/layout/*`
 
 Responsibility:
 
+- define the shared kind/template, supporting-component, renderer-path, measurement-support, resize-policy, and `contentLayout.type` facts used by renderer, planner, QA, and smoke tests;
 - create Huawei content pages;
 - apply fixed content layouts such as `two_column`, `biased_column`, `three_column`, and `four_column`;
+- classify body-content blocks into Huawei layout primitives;
+- measure primitive minimum, preferred, and maximum useful sizes before rendering;
+- allocate module-internal boxes and record diagnostics;
 - place module blocks;
 - invoke visual rendering for `visual_anchor` and `supporting_component` blocks through the same implementation path;
+- keep official body-content primitives backed by PowerPoint COM measurement; non-COM height estimates are not accepted as layout measurement input;
 - write manifest entries for rendered visual anchors and supporting components.
 
 Constraints:
 
+- contract modules are the code-level source of truth; renderer, QA, and tests should import them instead of copying official template/layout lists;
 - `contentLayout` is a layout container, not a visual-template layer;
 - allowed blocks are layout/text blocks, `visual_anchor` blocks, and `supporting_component` blocks;
 - do not add layout-specific visual roles such as `image_text`, `metric_row`, `mini_card_grid`, or `sectioned_card_grid`;
 - if a module needs multiple visuals, supporting readouts, and text fragments, represent them as multiple `visual_anchor`, `supporting_component`, and `text` blocks;
 - source images must enter through `Evidence`, not a direct image block.
+- primitive diagnostics may explain a layout decision, but they must not become a second rendering path.
+- `legacy_fallback` and `unsupported` are hard failures in strict content layout; they are not accepted render-success states.
 
 ### Visual Output
 
 Owned by:
 
+- `scripts/pptx/contracts/visual_templates.js`
 - `scripts/pptx/hw_diagram_helpers.js`
 
 Responsibility:
@@ -459,4 +471,5 @@ Before merging architecture-sensitive changes, verify:
 - QA checks the behavior being introduced;
 - smoke tests cover affected visual-anchor templates when relevant;
 - PowerPoint COM export remains part of the quality bar;
+- PowerPoint COM calls go through the repository broker (`scripts/pptx/powerpoint_com_broker.js` / `.ps1`) so measurement, export, QA probes, and parallel forward-test agents reuse one serialized desktop COM instance instead of creating, quitting, or racing PowerPoint directly;
 - `SKILL.md`, references, scripts, QA, and smoke tests agree.

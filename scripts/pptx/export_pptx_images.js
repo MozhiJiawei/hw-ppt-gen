@@ -3,6 +3,7 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { repairPptxForPowerPointCom } = require("./hw_pptx_helpers");
+const { requestPowerPointBroker } = require("./powerpoint_com_broker");
 
 function usage() {
   console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice]");
@@ -53,40 +54,14 @@ function commandExists(command) {
   return !probe.error;
 }
 
-function escapePowerShellSingleQuoted(value) {
-  return String(value).replace(/'/g, "''");
-}
-
-function powerpointAvailable() {
+async function powerpointAvailable() {
   if (process.platform !== "win32") return false;
-  cleanupPowerPointProcesses();
-  const ps = spawnSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "$ErrorActionPreference='Stop'; $app = New-Object -ComObject PowerPoint.Application; $v = $app.Version; $app.Quit(); Write-Output $v",
-    ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
-  );
-  return ps.status === 0 && /\d/.test(ps.stdout || "");
-}
-
-function cleanupPowerPointProcesses() {
-  if (process.platform !== "win32") return;
-  spawnSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "Get-Process POWERPNT -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
-    ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
-  );
+  try {
+    const response = await requestPowerPointBroker("ping", {}, { timeoutMs: 30000 });
+    return Boolean(response.version);
+  } catch {
+    return false;
+  }
 }
 
 function refreshWindowsPathFromRegistry() {
@@ -188,75 +163,35 @@ function exportWithLibreOffice(inputPath, outDir, dpi) {
   }
 }
 
-function exportWithPowerPoint(inputPath, outDir) {
+async function exportWithPowerPoint(inputPath, outDir) {
   if (process.platform !== "win32") throw new Error("PowerPoint rendering is only available on Windows.");
-  cleanupPowerPointProcesses();
-  const scriptPath = path.join(os.tmpdir(), `hw-ppt-render-${Date.now()}-${Math.random().toString(16).slice(2)}.ps1`);
-  const inputPs = escapePowerShellSingleQuoted(inputPath);
-  const outPs = escapePowerShellSingleQuoted(outDir);
-  const psScript = `
-$ErrorActionPreference = 'Stop'
-$inputPath = '${inputPs}'
-$outDir = '${outPs}'
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$app = $null
-$presentation = $null
-try {
-  for ($attempt = 1; $attempt -le 3; $attempt++) {
-    try {
-      $app = New-Object -ComObject PowerPoint.Application
-      if ($app -ne $null) { break }
-    } catch {
-      if ($attempt -eq 3) { throw }
-      Start-Sleep -Milliseconds 800
-    }
+  const response = await requestPowerPointBroker("export", {
+    inputPath: path.resolve(inputPath),
+    outDir: path.resolve(outDir),
+    width: 2400,
+    height: 1350,
+  }, { timeoutMs: 180000 });
+  const pages = Number(response.result?.slide_count || 0);
+  if (!pages) throw new Error("PowerPoint export did not report a slide count.");
+  const finalFiles = fs.readdirSync(outDir)
+    .filter((name) => /^slide_\d+\.png$/i.test(name))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (finalFiles.length !== pages) {
+    throw new Error(`PowerPoint rendered ${finalFiles.length} PNGs, expected ${pages}.`);
   }
-  if ($app -eq $null) { throw "PowerPoint COM application could not be created." }
-  $presentation = $app.Presentations.Open($inputPath, $true, $false, $false)
-  $count = $presentation.Slides.Count
-  for ($i = 1; $i -le $count; $i++) {
-    $name = 'slide_{0:D2}.png' -f $i
-    $file = Join-Path $outDir $name
-    $presentation.Slides.Item($i).Export($file, 'PNG', 2400, 1350) | Out-Null
-  }
-  Write-Output $count
-}
-finally {
-  if ($presentation -ne $null) {
-    try { $presentation.Close() } catch { Write-Warning ("PowerPoint presentation cleanup failed: " + $_.Exception.Message) }
-  }
-  if ($app -ne $null) {
-    try { $app.Quit() } catch { Write-Warning ("PowerPoint application cleanup failed: " + $_.Exception.Message) }
-  }
-}
-`;
-  fs.writeFileSync(scriptPath, psScript, "utf8");
-  try {
-    const stdout = run("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], { timeout: 120000 });
-    const pages = Number((stdout.match(/(\d+)\s*$/) || [])[1] || 0);
-    if (!pages) throw new Error(`PowerPoint export did not report a slide count.\n${stdout}`);
-    const finalFiles = fs.readdirSync(outDir)
-      .filter((name) => /^slide_\d+\.png$/i.test(name))
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    if (finalFiles.length !== pages) {
-      throw new Error(`PowerPoint rendered ${finalFiles.length} PNGs, expected ${pages}.`);
-    }
-    return {
-      input: inputPath,
-      output_dir: outDir,
-      generated_at: new Date().toISOString(),
-      renderer: "powerpoint",
-      toolchain: {
-        pptx_to_png: "PowerPoint COM",
-        width: 2400,
-        height: 1350,
-      },
-      slide_count: pages,
-      slides: finalFiles.map((name) => path.join(outDir, name)),
-    };
-  } finally {
-    fs.rmSync(scriptPath, { force: true });
-  }
+  return {
+    input: inputPath,
+    output_dir: outDir,
+    generated_at: new Date().toISOString(),
+    renderer: "powerpoint",
+    toolchain: {
+      pptx_to_png: "PowerPoint COM broker",
+      width: 2400,
+      height: 1350,
+    },
+    slide_count: pages,
+    slides: finalFiles.map((name) => path.join(outDir, name)),
+  };
 }
 
 async function main() {
@@ -276,11 +211,11 @@ async function main() {
   cleanPreviousSlides(outDir);
 
   const renderer = args.renderer === "auto"
-    ? (powerpointAvailable() ? "powerpoint" : "libreoffice")
+    ? ((await powerpointAvailable()) ? "powerpoint" : "libreoffice")
     : args.renderer;
   if (renderer === "powerpoint") await repairPptxForPowerPointCom(inputPath);
   const manifest = renderer === "powerpoint"
-    ? exportWithPowerPoint(inputPath, outDir)
+    ? await exportWithPowerPoint(inputPath, outDir)
     : exportWithLibreOffice(inputPath, outDir, args.dpi);
   writeManifest(outDir, manifest);
 }

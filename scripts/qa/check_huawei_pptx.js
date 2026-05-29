@@ -3,7 +3,12 @@ const path = require("path");
 const JSZip = require("jszip");
 const { parsePptContentBrief } = require("../pptx/parse_ppt_content_brief");
 const { resolveVisualAnchorRenderPath, validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
+const { CONTENT_LAYOUT_TYPES } = require("../pptx/contracts/content_layout_types");
 const {
+  isStructuredSupportingComponentSpec: isStructuredSupportingComponentByContract,
+} = require("../pptx/contracts/visual_templates");
+const {
+  HW_STYLE,
   estimateTextBoxHeight: estimateGeneratedTextBoxHeight,
   estimateWrappedLines: estimateGeneratedWrappedLines,
 } = require("../pptx/hw_pptx_helpers");
@@ -41,12 +46,7 @@ const ALLOWED_COLORS = new Set([
 const STANDARD_LINE_WIDTH = 6350;
 const ALLOWED_FONT_SIZES = new Set([8, 10, 12, 14, 18, 24]);
 const CONTENT_CARD_FILLS = new Set(["F2F2F2", "F7F7F7", "FFF1EF", "FCE4E0"]);
-const CONTENT_LAYOUT_SCHEMA_RULES = Object.freeze({
-  two_column: { reference: "05 内容 二分栏", moduleCount: 2 },
-  biased_column: { reference: "06 内容 偏分栏", minModuleCount: 2, maxModuleCount: 4 },
-  three_column: { reference: "07 内容 三分栏", moduleCount: 3 },
-  four_column: { reference: "08 内容 四分栏", moduleCount: 4 },
-});
+const CONTENT_LAYOUT_SCHEMA_RULES = CONTENT_LAYOUT_TYPES;
 const LANGUAGE_ALLOWLIST = new Set([
   "ai",
   "api",
@@ -537,6 +537,52 @@ function hasSectionIndicator(shapes) {
   return activeTab && topRightTabs.length >= 2;
 }
 
+function chromeGapTextShapes(shapes) {
+  return shapes.filter((shape) => {
+    const text = safeText(shape.text);
+    return text
+      && shape.x !== null
+      && shape.y !== null
+      && shape.x < 7.4
+      && shape.y >= 0.86
+      && shape.y < HW_STYLE.summary.y - 0.01;
+  });
+}
+
+function checkContentChromeGeometry(slide, shapes) {
+  const issues = [];
+  const title = titleShape(shapes);
+  if (title && title.y !== null && title.y > 0.52) {
+    issues.push(issue(slide, "page_title_chrome_drift", "error", "Content-slide title must stay in the fixed Huawei chrome area; body layout must not push the title down.", {
+      y: Math.round(title.y * 100) / 100,
+      expected_max_y: 0.52,
+      text: title.text,
+    }));
+  }
+  const summaryLabel = shapes.find((shape) =>
+    /分析总结/.test(shape.text)
+    && shape.x !== null
+    && shape.y !== null
+    && shape.x >= 0.5
+    && shape.x <= 1.0
+    && shape.y >= 1.1
+    && shape.y <= 1.45
+  );
+  if (summaryLabel && Math.abs(summaryLabel.y - 1.32) > 0.18) {
+    issues.push(issue(slide, "analysis_summary_chrome_drift", "error", "The 分析总结 label must stay in the fixed Huawei summary band; body layout must not move it.", {
+      y: Math.round(summaryLabel.y * 100) / 100,
+      expected_y: 1.32,
+    }));
+  }
+  const illegalGapText = chromeGapTextShapes(shapes);
+  if (illegalGapText.length) {
+    issues.push(issue(slide, "chrome_gap_manual_text", "error", "Do not add manual text between the page-title rule and 分析总结 band; title note and summary must be rendered by the fixed shell helpers.", {
+      texts: illegalGapText.map((shape) => shape.text.slice(0, 80)),
+    }));
+  }
+  return issues;
+}
+
 function sectionIndicatorInfo(shapes) {
   const tabLabels = shapes
     .filter((shape) =>
@@ -705,10 +751,6 @@ function checkSlideXml(name, xml) {
       if (titleColors.size && !titleColors.has("C00000")) {
         issues.push(issue(slide, "page_title_color", "error", `Page title should be Huawei red (C00000), found ${[...titleColors].join(", ")}.`, { text: title.text }));
       }
-      const titleLines = estimatePageTitleLines(title.text, title.w || 12.2, maxSize || 24);
-      if (title.h && availableTextLines(title, maxSize || 24, 1.15) < titleLines) {
-        issues.push(issue(slide, "page_title_overflow_estimate", "error", "Page title text is estimated to exceed its text box height.", { estimated_lines: titleLines, available_lines: Math.round(availableTextLines(title, maxSize || 24, 1.15) * 10) / 10, text: title.text }));
-      }
     }
   }
 
@@ -723,6 +765,10 @@ function checkSlideXml(name, xml) {
 
   if (isContentSlide(slide, shapes) && !hasAnalysisSummary(shapes)) {
     issues.push(issue(slide, "analysis_summary_missing", "error", "Content slide is missing the required top analysis summary block with an 分析总结 label and semantic summary labels."));
+  }
+
+  if (isContentSlide(slide, shapes)) {
+    issues.push(...checkContentChromeGeometry(slide, shapes));
   }
 
   if (isContentSlide(slide, shapes) && hasGenericConclusionLabels(shapes)) {
@@ -1038,7 +1084,65 @@ function checkContentLayoutSchema(slide, entries) {
     issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema must be grounded in one of the 05-08 content reference images."));
   }
   issues.push(...checkContentLayoutModuleAlignment(slide, first));
+  issues.push(...checkContentLayoutDiagnostics(slide, first));
   issues.push(...checkContentLayoutBlockFrames(slide, first));
+  return issues;
+}
+
+function checkContentLayoutDiagnostics(slide, schema = {}) {
+  const modules = Array.isArray(schema.module_layouts) ? schema.module_layouts : [];
+  const issues = [];
+  for (const [moduleIdx, module] of modules.entries()) {
+    const title = module.title || `module_${moduleIdx + 1}`;
+    const moduleDiagnostics = Array.isArray(module.layout_diagnostics) ? module.layout_diagnostics : [];
+    for (const diag of moduleDiagnostics) {
+      if (diag.severity !== "error") continue;
+      issues.push(issue(slide, "content_layout_diagnostic", "error", diag.message || "Layout diagnostic reported by primitive layout manager.", {
+        layout_type: schema.type,
+        module_index: moduleIdx + 1,
+        module_title: title,
+        code: diag.code || "",
+        diagnostic: diag,
+      }));
+    }
+    if (module.layout_status === "infeasible") {
+      issues.push(issue(slide, "content_layout_infeasible", "error", "Measured module layout is infeasible; reduce content density or move detail to another slide.", {
+        layout_type: schema.type,
+        module_index: moduleIdx + 1,
+        module_title: title,
+        layout_budget: module.layout_budget || {},
+        diagnostics: moduleDiagnostics,
+      }));
+    }
+    const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
+    for (const [blockIdx, block] of blocks.entries()) {
+      const diagnostics = Array.isArray(block.layout_diagnostics) ? block.layout_diagnostics : [];
+      for (const diag of diagnostics) {
+        if (diag.severity !== "error") continue;
+        issues.push(issue(slide, "content_layout_primitive_diagnostic", "error", diag.message || "Primitive measurement reported a hard diagnostic.", {
+          layout_type: schema.type,
+          module_index: moduleIdx + 1,
+          module_title: title,
+          block_index: blockIdx + 1,
+          code: diag.code || "",
+          diagnostic: diag,
+        }));
+      }
+      const floor = Number(block.measure?.min_size?.h);
+      const finalH = Number(block.final_size?.h || block.area?.h);
+      if (block.taxonomy?.family === "Evidence" && Number.isFinite(floor) && Number.isFinite(finalH) && finalH + 0.001 < floor) {
+        issues.push(issue(slide, "content_layout_evidence_below_floor", "error", "Evidence final box is below its measured readable floor.", {
+          layout_type: schema.type,
+          module_index: moduleIdx + 1,
+          module_title: title,
+          block_index: blockIdx + 1,
+          final_height: Math.round(finalH * 1000) / 1000,
+          readable_floor: Math.round(floor * 1000) / 1000,
+          taxonomy_key: block.taxonomy?.taxonomy_key || "",
+        }));
+      }
+    }
+  }
   return issues;
 }
 
@@ -1062,11 +1166,7 @@ function isStrictVisualAnchorSpec(spec = {}) {
 }
 
 function isStructuredSupportingComponentSpec(spec = {}) {
-  const kind = safeText(spec.kind);
-  const template = safeText(spec.template);
-  return (kind === "Quantity" && ["data_cards", "heatmap"].includes(template))
-    || (kind === "Matrix" && ["table", "capability_matrix", "heatmap"].includes(template))
-    || (kind === "Hierarchy" && template === "capability_stack");
+  return isStructuredSupportingComponentByContract(spec);
 }
 
 function estimatePageTitleLines(text, widthInches, titleFontSize = 24) {
@@ -1187,10 +1287,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     for (const [blockIdx, block] of blocks.entries()) {
       const area = block.area;
       if (!isRectLike(area)) continue;
-      if (block.type === "text" && Number.isFinite(Number(block.estimated_height))) {
-        const estimated = Number(block.estimated_height);
-        const excess = Number(area.h) - estimated;
-        const shortage = estimated - Number(area.h);
+      if (block.type === "text") {
         const textLength = Number(block.text_length || 0);
         const lineCount = textBlockLineCount(block);
         const maxLineLength = Number(block.max_line_length || 0);
@@ -1216,18 +1313,6 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
             block_index: blockIdx + 1,
             text_length: textLength,
             emphasis_count: Number(block.emphasis_count || 0),
-          }));
-        }
-        if ((excess > 0.26 && excess / Math.max(estimated, 0.1) > 0.22) || shortage > 0.12) {
-          issues.push(issue(slide, "content_layout_text_frame_mismatch", "error", "Text block frame height does not match the renderer's text-height estimate; fix the sizing rule or adjust content before relying on visual QA.", {
-            layout_type: schema.type,
-            module_index: idx + 1,
-            module_title: title,
-            block_index: blockIdx + 1,
-            frame_height: Math.round(Number(area.h) * 1000) / 1000,
-            estimated_height: Math.round(estimated * 1000) / 1000,
-            excess: Math.round(excess * 1000) / 1000,
-            shortage: Math.round(shortage * 1000) / 1000,
           }));
         }
       }
@@ -1259,18 +1344,14 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
           }));
         }
       }
-      if (Number.isFinite(Number(block.table_estimated_height))) {
-        const estimated = Number(block.table_estimated_height);
-        const shortage = estimated - Number(area.h);
-        if (shortage > 0.65 || (Number(block.table_rows || 0) > 0 && Number(area.h) / Number(block.table_rows || 1) < 0.24)) {
+      if (Number(block.table_rows || 0) > 0) {
+        if (Number(area.h) / Number(block.table_rows || 1) < 0.24) {
           issues.push(issue(slide, "content_layout_table_frame_too_short", "error", "Matrix/table block frame is too short for its rows; enlarge the table block, reduce rows/cell text, or move detail to another structured block.", {
             layout_type: schema.type,
             module_index: idx + 1,
             module_title: title,
             block_index: blockIdx + 1,
             frame_height: Math.round(Number(area.h) * 1000) / 1000,
-            estimated_height: Math.round(estimated * 1000) / 1000,
-            shortage: Math.round(shortage * 1000) / 1000,
             table_rows: Number(block.table_rows || 0),
           }));
         }
@@ -1307,8 +1388,6 @@ function checkCoverSubtitle(shapes) {
 }
 
 function textBlockLineCount(block) {
-  const wrapped = Number(block?.estimated_wrapped_line_count);
-  if (Number.isFinite(wrapped) && wrapped > 0) return wrapped;
   return Number(block?.line_count || 0);
 }
 

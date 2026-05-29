@@ -3,6 +3,11 @@ const path = require("path");
 const pptxgen = require("pptxgenjs");
 const rough = require("roughjs");
 const { estimateTextBoxHeight } = require("./hw_pptx_helpers");
+const {
+  OFFICIAL_TEMPLATES_BY_KIND,
+  TEMPLATE_LAYOUTS,
+  TEMPLATE_RENDERERS,
+} = require("./contracts/visual_templates");
 
 const ShapeType = pptxgen.ShapeType || { rect: "rect", line: "line" };
 
@@ -51,60 +56,6 @@ const ROUGH_SVG_SIZE_TIERS = Object.freeze({
   large: { scale: 1, label: "biased_column_large" },
   medium: { scale: 1, label: "two_column_medium" },
   small: { scale: 1, label: "three_column_small" },
-});
-
-const TEMPLATE_LAYOUTS = Object.freeze({
-  bar_chart: "16:9",
-  line_chart: "16:9",
-  proportion_chart: "16:9",
-  data_cards: "16:9",
-  heatmap: "16:9",
-  layered_architecture: "16:9",
-  tree: "16:9",
-  capability_stack: "16:9",
-  closed_loop: "16:9",
-  dual_loop: "16:9",
-  spiral_iteration_ladder: "16:9",
-  process: "16:9",
-  timeline: "16:9",
-  swimlane: "16:9",
-  table: "16:9",
-  quadrant_matrix: "16:9",
-  capability_matrix: "16:9",
-  hub_spoke_network: "16:9",
-  dependency_graph: "16:9",
-  module_interaction_map: "16:9",
-  causal_influence_graph: "16:9",
-});
-
-const TEMPLATE_RENDERERS = Object.freeze({
-  source_figure: "evidence",
-  source_table: "evidence",
-  source_screenshot: "evidence",
-  source_chart: "evidence",
-
-  data_cards: "ppt_native",
-  heatmap: "ppt_native",
-  process: "ppt_native",
-  timeline: "ppt_native",
-  capability_stack: "ppt_native",
-  capability_matrix: "ppt_native",
-  table: "ppt_native",
-
-  bar_chart: "rough_svg",
-  line_chart: "rough_svg",
-  proportion_chart: "rough_svg",
-  swimlane: "ppt_native",
-  closed_loop: "rough_svg",
-  dual_loop: "rough_svg",
-  spiral_iteration_ladder: "rough_svg",
-  tree: "rough_svg",
-  layered_architecture: "rough_svg",
-  quadrant_matrix: "rough_svg",
-  hub_spoke_network: "rough_svg",
-  dependency_graph: "rough_svg",
-  module_interaction_map: "rough_svg",
-  causal_influence_graph: "rough_svg",
 });
 
 const STANDALONE_VISUAL_SPEC_TEXT_FIELDS = Object.freeze([
@@ -3390,7 +3341,7 @@ function validateVisualAnchorSpec(spec) {
   if ("renderer" in spec) errors.push("renderer is a runtime setting; do not include it in visual anchor specs.");
   if ("intent" in spec) errors.push("Use kind instead of the old intent field.");
   if ("visual_strategy" in spec) errors.push("visual_strategy has been removed; use kind and template only.");
-  const validKinds = new Set(["Evidence", "Quantity", "Sequence", "Loop", "Hierarchy", "Matrix", "Network"]);
+  const validKinds = new Set(Object.keys(OFFICIAL_TEMPLATES_BY_KIND));
   if (spec.kind && !validKinds.has(spec.kind)) errors.push(`Unsupported kind: ${spec.kind}`);
 
   if (spec.kind === "Evidence") {
@@ -3410,14 +3361,9 @@ function validateVisualAnchorSpec(spec) {
     collectForbiddenVisualFields(visual, "visual_spec").forEach((error) => errors.push(error));
   }
   const template = spec.template;
-  const templatesByKind = {
-    Quantity: new Set(["data_cards", "bar_chart", "line_chart", "proportion_chart", "heatmap"]),
-    Sequence: new Set(["process", "timeline", "swimlane"]),
-    Loop: new Set(["closed_loop", "dual_loop", "spiral_iteration_ladder"]),
-    Hierarchy: new Set(["tree", "layered_architecture", "capability_stack"]),
-    Matrix: new Set(["table", "quadrant_matrix", "capability_matrix", "heatmap"]),
-    Network: new Set(["hub_spoke_network", "dependency_graph", "module_interaction_map", "causal_influence_graph"]),
-  };
+  const templatesByKind = Object.fromEntries(
+    Object.entries(OFFICIAL_TEMPLATES_BY_KIND).map(([kind, templates]) => [kind, new Set(templates)])
+  );
   if (spec.kind && templatesByKind[spec.kind] && !templatesByKind[spec.kind].has(template)) {
     errors.push(`Unsupported template for ${spec.kind}: ${template}`);
   }
@@ -3720,6 +3666,10 @@ module.exports = {
   chooseTemplateLayout,
   createVisualAnchorImage,
   createVisualAnchorSvg,
+  estimateNativeDataCardsArea,
+  estimateNativeTableArea,
+  estimateNativeTextLines,
+  estimateNativeTextWidth,
   readImageDimensions,
   renderVisualAnchorPptNative,
   renderVisualAnchorRoughSvg,

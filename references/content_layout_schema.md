@@ -168,6 +168,14 @@ For dense `two_column` and `three_column` pages, the renderer suppresses module 
 
 For `biased_column`, the first module is visual-only and conclusions belong in right-side stacked cards/modules.
 
+## Layout Measurement Diagnostics
+
+The renderer classifies body blocks into Huawei layout primitives before drawing. This does not change the authoring schema: agents still provide `visual_anchor`, `supporting_component`, and `text` blocks, not coordinates.
+
+For module stacks, the manifest records primitive taxonomy, measured min/preferred/final sizes, resize policy, layout status, and diagnostics. Official body-content templates are expected to be measured. `legacy_fallback` or `unsupported` is a hard layout failure, not a successful render path.
+
+Use diagnostics to reduce content density when QA reports an infeasible module, evidence below readable floor, width overflow, or excessive shrink. Do not solve those failures by adding manual coordinates or direct image/table blocks.
+
 ## Flow Arrows
 
 `flowArrows` is an optional page-level annotation for red column-to-column markers in `three_column` layouts.

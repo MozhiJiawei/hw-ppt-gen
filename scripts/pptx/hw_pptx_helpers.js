@@ -283,6 +283,7 @@ function addPageTitle(slide, title, options = {}) {
   const kicker = opts.kicker || "";
   const subtitle = opts.subtitle || opts.titleNote || "";
   const hasSectionTabs = Array.isArray(opts.sections) && opts.sections.length > 0;
+  const fixedChrome = Boolean(opts.fixedChrome || opts.fixedShell || opts.lockChrome);
   const titleW = 12.2;
   const titleY = opts.titleY ?? (hasSectionTabs ? 0.46 : HW_STYLE.slide.titleY);
   const subtitleText = safeText(subtitle);
@@ -291,10 +292,12 @@ function addPageTitle(slide, title, options = {}) {
     ? chooseInlineTitlePair(titleText, subtitleText, titleW)
     : { titleFontSize: HW_STYLE.size.pageTitle, subtitleFontSize: HW_STYLE.size.pageTitle };
   const plainTitle = subtitleText ? `${titleText} - ${subtitleText}` : titleText;
-  const estimatedLines = Math.max(1, estimateWrappedLines(plainTitle, titlePair.titleFontSize, titleW - 0.1, { margin: 0.05 }));
+  const estimatedLines = fixedChrome
+    ? 1
+    : Math.max(1, estimateWrappedLines(plainTitle, titlePair.titleFontSize, titleW - 0.1, { margin: 0.05 }));
   const baseRuleY = hasSectionTabs ? 1.0 : HW_STYLE.slide.titleRuleY;
-  const titleH = estimatedLines <= 1 ? 0.5 : Math.min(1.22, estimatedLines * 0.42 + 0.12);
-  const titleRuleY = opts.titleRuleY ?? (estimatedLines <= 1 ? baseRuleY : Math.max(baseRuleY, titleY + titleH + 0.08));
+  const titleH = fixedChrome ? 0.5 : (estimatedLines <= 1 ? 0.5 : Math.min(1.22, estimatedLines * 0.42 + 0.12));
+  const titleRuleY = opts.titleRuleY ?? (fixedChrome ? baseRuleY : (estimatedLines <= 1 ? baseRuleY : Math.max(baseRuleY, titleY + titleH + 0.08)));
   if (kicker) {
     textBox(slide, kicker, {
       x: HW_STYLE.slide.marginX,

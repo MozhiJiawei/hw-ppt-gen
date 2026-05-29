@@ -11,13 +11,15 @@
     "export-sample": "node scripts/pptx/export_pptx_images.js .tmp/sample_huawei_deck.pptx --out .tmp/sample_huawei_deck_slides",
     "test:diagram": "node scripts/smoke/test_diagram_helpers.js",
     "test:qa-rules": "node scripts/smoke/test_qa_rule_regressions.js",
-    "test:text-height": "node scripts/smoke/test_text_height_estimation.js",
     "test:ppt-content-brief": "node scripts/smoke/test_ppt_content_brief_consumption.js",
     "test:visual-anchor-contract": "node scripts/smoke/test_visual_anchor_content_contract.js",
     "content-layout-smoke": "node scripts/smoke/generate_content_layout_schema_smoke.js && node scripts/qa/check_huawei_pptx.js .tmp/content_layout_schema_smoke/content_layout_schema_smoke.pptx --out .tmp/content_layout_schema_smoke/content_layout_schema_smoke.qa.json --require-plan .tmp/content_layout_schema_smoke/content_layout_schema_smoke_plan.json --require-visual-anchor-manifest .tmp/content_layout_schema_smoke/content_layout_schema_smoke_visual_anchor_manifest.json",
+    "test:powerpoint-measurement": "node scripts/smoke/layout/test_powerpoint_measurement_harness.js",
     "test:powerpoint-com": "node scripts/smoke/test_powerpoint_com_export.js",
+    "test:layout": "node scripts/smoke/layout/test_content_body_taxonomy.js && node scripts/smoke/layout/test_taxonomy_coverage_contract.js && node scripts/smoke/layout/test_primitive_measurement.js && node scripts/smoke/layout/test_all_official_primitive_measurement.js && node scripts/smoke/layout/test_module_stack_layout.js && node scripts/smoke/layout/test_layout_diagnostics.js && node scripts/smoke/layout/test_tidar_three_column_primitives.js",
+    "com-measurement-review": "npm run test:powerpoint-measurement && node scripts/pptx/export_pptx_images.js .tmp/com_measurement_quality_guard/com_measurement_quality_guard_review.pptx --out .tmp/com_measurement_quality_guard/png --renderer powerpoint",
     "diagram-smoke": "node scripts/smoke/verify_diagram_components.js",
-    "smoke": "npm run test:ppt-content-brief && npm run test:visual-anchor-contract && npm run test:text-height && npm run test:qa-rules && npm run content-layout-smoke && npm run sample && npm run check-sample && npm run diagram-smoke && npm run test:powerpoint-com"
+    "smoke": "npm run test:ppt-content-brief && npm run test:visual-anchor-contract && npm run test:qa-rules && npm run test:layout && npm run content-layout-smoke && npm run sample && npm run check-sample && npm run diagram-smoke && npm run test:powerpoint-measurement && npm run test:powerpoint-com"
   },
   "dependencies": {
     "jszip": "^3.10.1",

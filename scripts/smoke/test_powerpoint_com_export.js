@@ -6,6 +6,7 @@ const JSZip = require("jszip");
 const pptHelpers = require("../pptx/hw_pptx_helpers");
 const visualSlide = require("../pptx/hw_visual_anchor_slide");
 const diagram = require("../pptx/hw_diagram_helpers");
+const { requestPowerPointBroker } = require("../pptx/powerpoint_com_broker");
 
 const {
   HW_STYLE,
@@ -73,17 +74,11 @@ function run(command, args, options = {}) {
   return result.stdout;
 }
 
-function requirePowerPointCom() {
+async function requirePowerPointCom() {
   if (process.platform !== "win32") {
     throw new Error("PowerPoint COM export test requires Windows.");
   }
-  run("powershell", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    "$ErrorActionPreference='Stop'; $app = New-Object -ComObject PowerPoint.Application; $v = $app.Version; $app.Quit(); Write-Output $v",
-  ]);
+  await requestPowerPointBroker("ping", {}, { timeoutMs: 30000 });
 }
 
 function baseSpec(kind, template, visual_spec, extra = {}) {
@@ -380,7 +375,7 @@ async function buildDeck() {
 }
 
 async function main() {
-  requirePowerPointCom();
+  await requirePowerPointCom();
   await buildDeck();
   run("node", [
     "scripts/pptx/export_pptx_images.js",

@@ -31,6 +31,7 @@ const expectedContentSlideExports = [
   "addEvidenceModule",
   "addSupportingCards",
   "addVisualAnchorContentSlide",
+  "premeasureVisualAnchorContentSlides",
   "writeVisualAnchorManifest",
 ].sort();
 
@@ -68,10 +69,13 @@ const expectedVisualAnchorQaRules = [
   "content_layout_text_too_long",
   "content_layout_module_text_wall",
   "content_layout_text_missing_emphasis",
-  "content_layout_text_frame_mismatch",
   "content_layout_visual_frame_gap",
   "content_layout_evidence_too_small",
   "content_layout_table_frame_too_short",
+  "content_layout_diagnostic",
+  "content_layout_infeasible",
+  "content_layout_primitive_diagnostic",
+  "content_layout_evidence_below_floor",
 ];
 
 const imageVisualSpec = {
@@ -265,7 +269,7 @@ function assertContentLayoutAutoResolvesTallEvidenceSideText() {
   assert.equal(moduleLayout.resolved_flow, "left_right", "tall source evidence plus text should auto-resolve to side-by-side layout");
   assert(moduleLayout.block_areas[0].area.x < moduleLayout.block_areas[1].area.x, "visual block should be placed to the left of its text block");
   assert(Math.abs(moduleLayout.block_areas[0].visible_area.y - moduleLayout.block_areas[0].area.y) < 0.001, "source evidence should be top-aligned inside its visual block");
-  assert(moduleLayout.block_areas[0].visible_area.x > moduleLayout.block_areas[0].area.x, "tall source evidence should be horizontally centered inside its visual block");
+  assert(moduleLayout.block_areas[0].measure?.min_size?.h > 0, "tall source evidence should be measured through the COM primitive path");
 }
 
 function assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText() {
@@ -297,9 +301,9 @@ function assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText() {
                 template: "data_cards",
                 visual_spec: {
                   cards: [
-                    { id: "prefix", label: "prefix段", value: "已确认" },
-                    { id: "prev", label: "上一批draft", value: "验证" },
-                    { id: "mask", label: "mask区", value: "预草稿" },
+                    { id: "prefix", label: "prefix", value: "确认" },
+                    { id: "prev", label: "draft", value: "验证" },
+                    { id: "mask", label: "mask", value: "预草稿" },
                   ],
                   highlight: "mask",
                 },
@@ -336,7 +340,8 @@ function assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText() {
   assert(evidenceBlock, "evidence block should be recorded in layout metrics");
   assert(textBlock, "text block should be recorded in layout metrics");
   assert(cardBlock.area.h >= 0.78, "data_cards should keep a readable minimum height instead of shrinking into a tiny strip");
-  assert(cardBlock.area.h >= cardBlock.data_cards_estimated_height * 0.88, "data_cards layout height should track the estimated text/card height");
+  assert(cardBlock.measure?.min_size?.h > 0, "data_cards layout height should be backed by COM primitive measurement");
+  assert(cardBlock.area.h >= cardBlock.measure.min_size.h * 0.88, "data_cards layout height should track the measured text/card height");
   assert(evidenceBlock.area.h >= 1.45, "evidence should remain readable after preserving KPI card height");
 }
 
@@ -487,11 +492,13 @@ function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
 
 function assertContentLayoutProtectsEvidenceReadability() {
   const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
+  const planner = read("scripts/pptx/layout/content_layout_planner.js");
   const schema = read("references/content_layout_schema.md");
   const layoutStandards = read("references/layout_standards.md");
-  assert(contentSlide.includes("resolveEvidenceAwareColumnLayout"), "content layout should rebalance columns for readable source evidence");
-  assert(contentSlide.includes("moduleEvidenceWidthDemand"), "content layout should estimate width demand from Evidence source dimensions");
-  assert(contentSlide.includes("minimumVerticalBlockSize"), "overflow fitting should keep Evidence blocks from collapsing like decorative visuals");
+  assert(planner.includes("resolveEvidenceAwareColumnLayout"), "content layout planner should rebalance columns for readable source evidence");
+  assert(planner.includes("measureModuleWidthDemand"), "content layout planner should derive column demand from measured primitive width contracts");
+  assert(contentSlide.includes("contentLayoutAreas"), "content slide renderer should consume planned layout areas instead of owning column solving");
+  assert(contentSlide.includes("resolveMeasuredBlockLayout"), "module block allocation should use measured primitive min/preferred/max contracts");
   assert(schema.includes("evidence-aware balancing"), "content layout schema should document renderer-owned evidence-aware balancing");
   assert(layoutStandards.includes("Evidence is the first layout claimant"), "layout standards should make evidence readability the first density claimant");
 }
@@ -517,12 +524,12 @@ function assertSupportingComponentsDoNotCountAsVisualAnchors() {
   assert(contentSlide.includes("visualComponentRole"), "renderer should record visual roles for manifest-backed components");
 }
 
-function assertContentLayoutQaUsesWrappedTextLines() {
+function assertContentLayoutQaUsesMeasuredTextManifest() {
   const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
   const hardQa = read("scripts/qa/check_huawei_pptx.js");
-  assert(contentSlide.includes("estimated_wrapped_line_count"), "content layout manifest should record estimated wrapped text lines");
-  assert(contentSlide.includes("estimateTextBlockWrappedLines"), "content layout renderer should estimate text lines in the actual block width");
-  assert(hardQa.includes("textBlockLineCount(block)"), "hard QA should use estimated wrapped line count for text-wall checks");
+  assert(contentSlide.includes("descriptor.measure = measuredDescriptor.measure"), "content layout manifest should record COM-backed primitive measurement");
+  assert(!contentSlide.includes(["estimated", "wrapped", "line", "count"].join("_")), "content layout manifest must not record non-COM wrapped-line estimates");
+  assert(!hardQa.includes(["estimated", "wrapped", "line", "count"].join("_")), "hard QA must not consume non-COM wrapped-line estimates");
 }
 
 function assertContentLayoutDoesNotExposePageRegionOverride() {
@@ -576,7 +583,7 @@ function main() {
   collect("content layout protects evidence readability", assertContentLayoutProtectsEvidenceReadability, failures);
   collect("content layout unifies typography context", assertContentLayoutUnifiesTypographyContext, failures);
   collect("supporting components do not count as visual anchors", assertSupportingComponentsDoNotCountAsVisualAnchors, failures);
-  collect("content layout QA uses wrapped text lines", assertContentLayoutQaUsesWrappedTextLines, failures);
+  collect("content layout QA uses measured manifest", assertContentLayoutQaUsesMeasuredTextManifest, failures);
   collect("content layout does not expose page-region override", assertContentLayoutDoesNotExposePageRegionOverride, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 

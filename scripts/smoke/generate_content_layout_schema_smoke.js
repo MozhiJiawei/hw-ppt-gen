@@ -8,6 +8,7 @@ const {
 } = require("../pptx/hw_pptx_helpers");
 const {
   addVisualAnchorContentSlide,
+  premeasureVisualAnchorContentSlides,
   writeVisualAnchorManifest,
 } = require("../pptx/hw_visual_anchor_slide");
 
@@ -132,7 +133,7 @@ function tableAnchor(id, title, rows) {
   };
 }
 
-function metricStripAnchor(id, title, prefix = "内容文字") {
+function metricStripAnchor(id, title, prefix = "内容文字", count = 4) {
   return {
     id,
     title,
@@ -140,7 +141,7 @@ function metricStripAnchor(id, title, prefix = "内容文字") {
     kind: "Quantity",
     template: "data_cards",
     visual_spec: {
-      cards: standardMetrics(prefix).map((metric, idx) => ({
+      cards: standardMetrics(prefix).slice(0, count).map((metric, idx) => ({
         id: `m${idx + 1}`,
         label: metric.label,
         value: metric.value,
@@ -357,7 +358,7 @@ async function main() {
                 emphasis: ["支撑组件", "真实锚点"],
                 body: "规则：支撑组件不能替代真实锚点。",
               },
-              { type: "supporting_component", height: 0.55, visual_anchor: metricStripAnchor("layout_three_mid_readout", "三分栏读数", "规则") },
+              { type: "supporting_component", height: 0.55, visual_anchor: metricStripAnchor("layout_three_mid_readout", "三分栏读数", "规则", 2) },
             ],
           },
           {
@@ -417,8 +418,8 @@ async function main() {
             role: "content_panel",
             title: "标题2",
             blocks: [
-              { type: "visual_anchor", height: 1.0, visual_anchor: metricStripAnchor("layout_four_metrics", "四分栏 KPI", "线索") },
-              { type: "text", fontSize: 10, body: ["这里为内容区域样式这里为内容区域样式，这里为内容区域样式。", "这里为内容区域样式这里为内容区域，这里为内容区域样式。"] },
+              { type: "visual_anchor", height: 1.0, visual_anchor: metricStripAnchor("layout_four_metrics", "四分栏 KPI", "线索", 2) },
+              { type: "text", fontSize: 10, body: ["内容区域用于补充 KPI 口径。"] },
             ],
           },
           {
@@ -446,7 +447,6 @@ async function main() {
                 visual_anchor: tableAnchor("layout_four_table", "四分栏表格", [
                   ["分支", "支持"],
                   ["表格", "是"],
-                  ["SVG", "是"],
                   ["原生", "是"],
                 ]),
               },
@@ -459,7 +459,9 @@ async function main() {
 
   const limit = Number(process.env.HW_CONTENT_LAYOUT_SMOKE_LIMIT || slides.length);
   const start = Math.max(0, Number(process.env.HW_CONTENT_LAYOUT_SMOKE_START || 0));
-  slides.slice(start, start + limit).forEach((data) => {
+  const selectedSlides = slides.slice(start, start + limit);
+  premeasureVisualAnchorContentSlides(pptx, selectedSlides);
+  selectedSlides.forEach((data) => {
     const slideData = { ...data, sections, source };
     addVisualAnchorContentSlide(pptx, slideData);
     planSlides.push(planEntry(data.page, slideData));

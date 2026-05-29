@@ -27,6 +27,8 @@ Required:
 - keeps each evidence object readable;
 - uses KPI/cards/tables only as supporting components that explain the evidence.
 
+For summary and content pages, the page chrome is fixed: title, title note, section tabs, `分析总结`, summary body, footer, and page number are rendered by the shared Huawei shell helpers from the parsed brief. Content layout starts below the `分析总结` band and must not move or redraw those shell elements. Do not add manual text boxes in the title-summary gap to patch density or repeat summary content.
+
 Reject:
 
 - three columns of KPI cards when the brief names source figures;

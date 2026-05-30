@@ -6,32 +6,12 @@
 
 - `scripts/pptx/`: PPTX 生成与导出辅助脚本。包含页面框架、视觉锚点/画图 helper、PPT 导出图片工具和渲染工具 PATH 设置脚本。
 - `scripts/qa/`: 交付前硬规则校验脚本。
-- `scripts/smoke/`: 开发态冒烟测试、契约测试和样例 deck 生成脚本。这里的脚本不写入 `SKILL.md`，避免使用者把内部维护检查当成交付流程。
+- `scripts/smoke/`: 开发态冒烟测试和契约测试。这里的脚本不写入 `SKILL.md`，避免使用者把内部维护检查当成交付流程。
 - `forward-tests/`: 面向 Skill 能力演进的前向验证夹具。用于让独立候选 agent 只基于输入 brief 和当前 Skill 生成 deck，再由主 agent 按 rubric 判题。
 - `docs/`: 维护态文档和设计归档。`docs/architecture_design.md` 是维护者和 coding agent 的架构契约，`docs/brainstorms/` 保存阶段性探索产物。
-- `references/`: 面向生成 agent 的交付标准、brief 合同、版式标准、证据接口和手绘视觉 schema。测试夹具放在 `scripts/smoke/fixtures/`，不作为运行时参考。
+- `references/`: 面向生成 agent 的交付标准、brief 合同、版式标准、证据接口和手绘视觉 schema。
 - `assets/`: 参考图片和可复用静态资源。
 - `.tmp/`: 本地生成产物、QA 报告、导出图片和临时脚本。不要把交付过程中的生成产物写到其他目录。
-
-## 常用命令
-
-生成样例 deck：
-
-```bash
-npm run sample
-```
-
-校验样例 deck：
-
-```bash
-npm run check-sample
-```
-
-导出样例 deck 图片：
-
-```bash
-npm run export-sample
-```
 
 ## 开发态冒烟测试
 
@@ -40,7 +20,6 @@ npm run export-sample
 ```bash
 npm run test:visual-anchor-contract
 npm run test:diagram
-npm run diagram-smoke
 npm run test:powerpoint-measurement
 npm run com-measurement-review
 npm run test:powerpoint-com
@@ -49,13 +28,13 @@ npm run smoke
 
 `test:powerpoint-measurement` 是 COM measurement 能力验证的唯一入口。它会生成 `.tmp/com_measurement_quality_guard/com_measurement_quality_guard.json` 和 `.tmp/com_measurement_quality_guard/com_measurement_quality_guard_review.pptx`，覆盖当前脚本里实际注册的 Evidence、KPI/readout、Matrix/table、关系图、流程图、路线图等画图/排版组件；新增组件必须先进入这个 guard。
 
-`com-measurement-review` 只是同一个 guard 的人工审视包装：先跑 `test:powerpoint-measurement`，再把 review PPTX 导出为 `.tmp/com_measurement_quality_guard/png/`。不要再新增平行的 measurement review、calibration review 或非 COM 高度估算测试入口。
+`com-measurement-review` 是同一个 guard 的人工审视包装：先跑 `test:powerpoint-measurement`，再把 review PPTX 导出为 `.tmp/com_measurement_quality_guard/png/`。不要再新增平行的 measurement review、calibration review 或非 COM 高度估算测试入口。
 
 `test:powerpoint-com` 需要 Windows PowerPoint COM 可用；不可用时应视为环境限制，而不是跨平台基础测试失败。
 
 ## 前向测试
 
-`forward-tests/` 下的测试用于验证阶段性 Skill 修改是否真的提升了端到端 PPT 生成能力。每次完成 `SKILL.md`、`references/`、PPT 生成 helper、QA 规则或 layout 相关能力的阶段性修改后，Codex 应在最终回复中建议人类触发相关 forward test。
+`forward-tests/` 下的测试用于验证阶段性 Skill 修改是否真的提升了端到端 PPT 生成能力。每次完成 `SKILL.md`、`references/`、PPT 生成 helper 或 layout 相关能力的阶段性修改后，Codex 应在最终回复中建议人类触发相关 forward test。
 
 当前可用夹具：
 

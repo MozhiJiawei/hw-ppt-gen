@@ -18,11 +18,11 @@ Every body-content block should derive:
 
 ### Layout Containers
 
-`ContentArea`, `ColumnGrid`, `BiasedGrid`, `FourGrid`, `ModuleFrame`, `ModuleStack`, `HorizontalGroup`, `VerticalGroup`, and `OverlayGroup`.
+`BodyRegion`, `ColumnGrid`, `BiasedGrid`, `FourGrid`, `ModuleFrame`, `ModuleStack`, `HorizontalGroup`, `VerticalGroup`, and `OverlayGroup`.
 
 ### Evidence
 
-`SourceFigure`, `SourceChart`, `SourceTableImage`, `SourceScreenshot`, `SourceDiagram`, `DerivedCrop`, and `EvidenceComposite`.
+`SourceFigure`, `SourceChart`, `SourceTableImage`, `SourceScreenshot`, and `SourceDiagram`.
 
 Evidence is normally `real_anchor`. Source-backed evidence should preserve aspect ratio and fail or warn when it falls below a readable floor.
 

@@ -97,7 +97,6 @@ The refactor should make "knows how to lay out content" a first-class subsystem,
 - `scripts/pptx/hw_diagram_helpers.js`: renderer routing and visual-anchor validation.
 - `scripts/qa/check_huawei_pptx.js`: hard QA, including manifest, layout, brief, and render checks.
 - `scripts/smoke/layout/test_powerpoint_measurement_harness.js`: canonical COM measurement quality guard.
-- `scripts/smoke/generate_content_layout_schema_smoke.js`: content layout integration smoke.
 - `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout`: forward-test gate for content-aware layout.
 - `forward-tests/huawei-ppt-gen/tidar-evidence-readability`: forward-test gate for evidence readability.
 
@@ -275,7 +274,6 @@ QA may import contracts for validation, but contracts must not import renderer, 
 - Modify: `scripts/qa/check_huawei_pptx.js`
 - Modify: `references/content_layout_schema.md`
 - Test: `scripts/smoke/test_visual_anchor_content_contract.js`
-- Test: `scripts/smoke/test_qa_rule_regressions.js`
 
 **Approach:**
 - Move layout type metadata out of `hw_visual_anchor_slide.js` and `check_huawei_pptx.js`:
@@ -339,7 +337,7 @@ QA may import contracts for validation, but contracts must not import renderer, 
 **Test scenarios:**
 - Happy path: `contentLayout.modules[].blocks[]` normalizes without changing block order.
 - Happy path: legacy module with `role: "visual_anchor"` normalizes into a single visual block.
-- Error path: root `contentArea` or `content_area` is rejected.
+- Error path: removed manual page-region fields from the content slide contract.
 - Error path: direct `image` or `table` block is rejected or marked invalid before render.
 - Error path: module with only supporting components does not satisfy strict anchor requirement.
 
@@ -399,11 +397,10 @@ QA may import contracts for validation, but contracts must not import renderer, 
 - Modify: `scripts/pptx/layout/adapters.js`
 - Test: `scripts/smoke/layout/test_module_stack_layout.js`
 - Test: `scripts/smoke/layout/test_tidar_three_column_primitives.js`
-- Test: `scripts/smoke/generate_content_layout_schema_smoke.js`
 
 **Approach:**
 - Move page-level layout functions out of the renderer:
-  - fixed content area calculation
+  - fixed layout bounds calculation
   - column/four-grid/biased-grid module areas
   - evidence-aware column balancing
   - module width demand measurement
@@ -448,7 +445,6 @@ QA may import contracts for validation, but contracts must not import renderer, 
 **Files:**
 - Modify: `scripts/pptx/hw_visual_anchor_slide.js`
 - Modify: `scripts/pptx/layout/content_layout_planner.js`
-- Modify: `scripts/smoke/generate_content_layout_schema_smoke.js`
 - Modify: `scripts/smoke/test_visual_anchor_content_contract.js`
 - Test: `scripts/smoke/layout/test_module_stack_layout.js`
 
@@ -525,7 +521,6 @@ QA may import contracts for validation, but contracts must not import renderer, 
 **Files:**
 - Modify: `scripts/pptx/hw_diagram_helpers.js`
 - Test: `scripts/smoke/test_diagram_helpers.js`
-- Test: `scripts/smoke/verify_diagram_components.js`
 - Test: `scripts/smoke/layout/test_powerpoint_measurement_harness.js`
 
 **Approach:**
@@ -562,8 +557,6 @@ QA may import contracts for validation, but contracts must not import renderer, 
 
 **Files:**
 - Modify: `scripts/smoke/test_visual_anchor_content_contract.js`
-- Modify: `scripts/smoke/test_qa_rule_regressions.js`
-- Modify: `scripts/smoke/generate_content_layout_schema_smoke.js`
 - Modify: `scripts/qa/check_huawei_pptx.js`
 - Create: `scripts/smoke/layout/test_com_broker_queue.js`
 - Create or extend: `scripts/smoke/layout/test_final_layout_readback.js`
@@ -699,8 +692,8 @@ This phase removes misleading code and makes the new architecture durable.
 - `biased_column` emits measured module/block descriptors through the same pipeline as other layouts.
 - Known-kind/unknown-template cases fail as unsupported.
 - COM measurement tests cannot pass from stale cache after contract/renderer version changes.
-- `npm run smoke` passes.
 - `npm run com-measurement-review` produces the review PPTX/PNGs.
+- `npm run smoke` passes.
 - Forward tests pass:
   - `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout`
   - `forward-tests/huawei-ppt-gen/tidar-evidence-readability`
@@ -713,15 +706,13 @@ Minimum local checks after implementation:
 
 - `npm run test:layout`
 - `npm run test:powerpoint-measurement`
-- `npm run content-layout-smoke`
 - `npm run test:visual-anchor-contract`
-- `npm run test:qa-rules`
+- `npm run com-measurement-review`
 - `npm run test:powerpoint-com`
 - `npm run smoke`
 
 Human/visual acceptance:
 
-- `npm run com-measurement-review`
 - Inspect exported PNGs from `.tmp/com_measurement_quality_guard/png/`.
 - Run both forward-test fixtures with isolated candidate agents and write `judgment.md` for each run.
 

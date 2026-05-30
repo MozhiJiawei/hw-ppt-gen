@@ -16,7 +16,7 @@ Design standards live in `references/layout_standards.md`. This file only define
 }
 ```
 
-`contentLayout.type` is authoritative. The Chinese `reference` label is optional derived compatibility metadata.
+`contentLayout.type` is authoritative. The Chinese `reference` label is derived review metadata.
 
 Supported types:
 
@@ -61,7 +61,7 @@ Structured text components should be written as `type: "supporting_component"` b
 
 Use those components only after the module already has evidence or a real diagram. They are density/readout helpers, not substitutes for the anchor.
 
-Do not provide page-region coordinates such as `contentArea`, `content_area`, `x`, `y`, `w`, or `h` at the `contentLayout` root. The renderer owns the fixed Huawei page region.
+Do not provide Do not provide page-region coordinates at the `contentLayout` root. The renderer owns the fixed Huawei page region.
 
 Do not provide a `flow` field. The renderer owns internal visual/text flow based on module size and source image dimensions.
 
@@ -90,14 +90,14 @@ Use `references/evidence_schema.md` for source evidence. Use `references/generat
 
 Do not choose a visual anchor from another page section only to satisfy the module-anchor rule. If the module claim is about cache-retention performance, use the evidence that compares retention levels. If the module claim is about training-time random routing, use the figure or generated mechanism diagram that shows stochastic cross-layer attention.
 
-Do not make a source crop just to fit the layout. If you use a derived source image, it must be a complete subfigure or source-provided region with axes, labels, legends, borders, and decisive annotations preserved. Layout should adapt around evidence; evidence should not be damaged to fit the layout.
+Do not alter source evidence to fit the layout. The image file passed to Evidence is the image that appears in the deck. Layout should adapt around evidence; evidence should not be damaged to fit the layout.
 
 ## Supporting Component Block
 
 ```json
 {
   "type": "supporting_component",
-  "visual_anchor": {
+  "component": {
     "id": "stable_readout_id",
     "title": "KPI readout",
     "claim": "结构化读数支撑旁边证据。",
@@ -113,7 +113,7 @@ Do not make a source crop just to fit the layout. If you use a derived source im
 }
 ```
 
-The nested `visual_anchor` object is a renderer spec kept for implementation compatibility. The block's semantic role is still `supporting_component`; it is not a strict visual anchor.
+The nested `component` object uses the same `kind` / `template` contract as rendered visuals, but its semantic role is still `supporting_component`; it is not a strict visual anchor.
 
 ## Text Block
 
@@ -190,6 +190,3 @@ Use diagnostics to reduce content density when QA reports an infeasible module, 
 }
 ```
 
-## Smoke Check
-
-`npm run content-layout-smoke` generates a review deck and runs hard QA under `.tmp/content_layout_schema_smoke/`.

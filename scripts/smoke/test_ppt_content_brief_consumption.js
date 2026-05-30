@@ -173,6 +173,7 @@ function assertIssueContractIsDocumentedInSkillAndReferences() {
   const skill = read("SKILL.md");
   const reference = read("references/brief_contract.md");
   const pkg = JSON.parse(read("package.json"));
+  const softwareReport = read("scripts/quality/software_test_report.js");
 
   assert(skill.includes("ppt_content_brief.md"), "SKILL should document the optional ppt_content_brief input branch");
   assert(skill.includes("parse_ppt_content_brief.js"), "SKILL should require the parser before generation");
@@ -182,7 +183,8 @@ function assertIssueContractIsDocumentedInSkillAndReferences() {
   assert(reference.includes("Layout Family"), "reference should document summary-count-driven content layout");
   assert(reference.includes("source locators"), "reference should document absolute paths as source locators");
   assert(reference.includes("research_audit.md"), "reference should document audit file as verification-only");
-  assert(pkg.scripts.smoke.includes("test:ppt-content-brief"), "npm run smoke should cover content brief parsing");
+  assert(pkg.scripts.smoke.includes("scripts/quality/software_test_report.js"), "npm run smoke should generate the software test report");
+  assert(softwareReport.includes("scripts/smoke/test_ppt_content_brief_consumption.js"), "software test report should cover content brief parsing");
 }
 
 function assertSummaryCountRecommendsContentLayout() {

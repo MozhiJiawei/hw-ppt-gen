@@ -51,7 +51,7 @@ Local paths and Markdown image URLs inside `正文内容` or `参考图片` are 
 
 `核心结论` is deck-level source material, not a cover subtitle. Use it to guide the summary page and speaker notes. If the cover needs a subtitle, use the Summary Page `标题说明` or a shorter positioning phrase that fits one line. The hard-field immutability rule applies to summary/content page `titleNote`; it does not require rendering the full `核心结论` inside the cover.
 
-When a brief captions a source figure with what it proves, preserve that evidence relationship. A source image cited for one page section may be reused or cropped if it proves another local module claim, but it must not be borrowed as a generic image placeholder for an unrelated claim.
+When a brief captions a source figure with what it proves, preserve that evidence relationship. A source image cited for one page section may be reused if it proves another local module claim, but it must not be borrowed as a generic image placeholder for an unrelated claim.
 
 ## Forbidden Patterns
 

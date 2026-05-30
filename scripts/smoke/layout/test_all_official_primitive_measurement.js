@@ -55,7 +55,7 @@ const rows = OFFICIAL.map((key) => {
   assert(fixture, `missing fixture for ${key}`);
   const block = {
     type: supportingKey(key) ? "supporting_component" : "visual_anchor",
-    visual_anchor: {
+    [supportingKey(key) ? "component" : "visual_anchor"]: {
       id: `measure_${key.replace(/[^\w]+/g, "_")}`,
       title: `${key} measurement`,
       claim: `${key} measurement fixture.`,

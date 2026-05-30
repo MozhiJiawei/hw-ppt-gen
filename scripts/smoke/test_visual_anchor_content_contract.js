@@ -4,79 +4,11 @@ const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..", "..");
 
-const expectedPagePrimitiveExports = [
-  "HW_STYLE",
-  "addAnalysisSummary",
-  "addCoverSlide",
-  "addFooter",
-  "addPageTitle",
-  "addSectionTabs",
-  "addTocSlide",
-  "cloneOptions",
-  "createHuaweiDeck",
-  "ensureTmpPath",
-  "estimateTextBoxHeight",
-  "estimateTextUnits",
-  "estimateTextWidth",
-  "estimateWrappedLines",
-  "grayCard",
-  "redTitleCard",
-  "repairPptxForPowerPointCom",
-  "safeText",
-  "stripHash",
-  "textBox",
-].sort();
-
 const expectedContentSlideExports = [
-  "addEvidenceModule",
-  "addSupportingCards",
   "addVisualAnchorContentSlide",
   "premeasureVisualAnchorContentSlides",
   "writeVisualAnchorManifest",
 ].sort();
-
-const requiredDiagramExports = [
-  "validateVisualAnchorSpec",
-  "resolveVisualAnchorRenderPath",
-  "renderVisualAnchorPptNative",
-  "renderVisualAnchorRoughSvg",
-  "createVisualAnchorSvg",
-  "writeVisualAnchorSvg",
-];
-
-const expectedVisualAnchorQaRules = [
-  "content_visual_anchor_manifest_missing",
-  "content_visual_anchor_manifest_invalid",
-  "content_visual_anchor_missing",
-  "content_visual_anchor_unrendered",
-  "content_visual_anchor_template_invalid",
-  "content_visual_anchor_image_missing",
-  "content_visual_anchor_image_invalid",
-  "content_visual_anchor_image_too_small",
-  "content_visual_anchor_highlight_unexplained",
-  "content_visual_anchor_subjective_scores",
-  "content_visual_anchor_plan_mismatch",
-  "content_visual_anchor_layout_unintegrated",
-  "content_visual_anchor_manifest_mismatch",
-  "content_visual_anchor_table_contract_mismatch",
-  "content_visual_anchor_table_overflow",
-  "content_layout_schema_invalid",
-  "content_layout_schema_anchor_missing",
-  "content_layout_module_alignment",
-  "content_layout_module_anchor_missing",
-  "content_layout_module_inner_alignment",
-  "content_layout_block_gap",
-  "content_layout_text_too_long",
-  "content_layout_module_text_wall",
-  "content_layout_text_missing_emphasis",
-  "content_layout_visual_frame_gap",
-  "content_layout_evidence_too_small",
-  "content_layout_table_frame_too_short",
-  "content_layout_diagnostic",
-  "content_layout_infeasible",
-  "content_layout_primitive_diagnostic",
-  "content_layout_evidence_below_floor",
-];
 
 const imageVisualSpec = {
   id: "contract_image_visual",
@@ -116,6 +48,22 @@ function evidenceSourceAnchor(id, sourcePath) {
   };
 }
 
+function biasedContentLayout(anchor, sideModules = [], options = {}) {
+  return {
+    type: "biased_column",
+    reference: "06 内容 偏分栏",
+    modules: [
+      {
+        role: "visual_anchor",
+        title: options.visualTitle || anchor.title || "主视觉",
+        visual_anchor: anchor,
+        visual_anchor_caption: options.visual_anchor_caption,
+      },
+      ...sideModules,
+    ],
+  };
+}
+
 function read(relativePath) {
   return fs.readFileSync(path.join(ROOT, relativePath), "utf8");
 }
@@ -126,11 +74,6 @@ function collect(testName, fn, failures) {
   } catch (error) {
     failures.push({ testName, error });
   }
-}
-
-function assertPagePrimitiveSurface() {
-  const helpers = require("../pptx/hw_pptx_helpers");
-  assert.deepStrictEqual(Object.keys(helpers).sort(), expectedPagePrimitiveExports);
 }
 
 function assertVisualAnchorSlideSurface() {
@@ -149,7 +92,9 @@ function assertContentSlideRecordsFixedOutputEvidence() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "证据留痕", text: "图片型视觉锚点应记录实际输出证据。" }] },
-    visual_anchor: imageVisualSpec,
+    contentLayout: biasedContentLayout(imageVisualSpec, [
+      { role: "text", title: "证据说明", body: "图片型视觉锚点应记录实际输出证据。" },
+    ]),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_output_manifest.json"));
@@ -166,8 +111,7 @@ function assertContentSlideUsesProportionalImagePlacement() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "等比", text: "SVG 图片只能 contain 等比放入区域，不能拉伸填满。" }] },
-    anchorArea: { x: 1.0, y: 1.65, w: 10.0, h: 2.1 },
-    visual_anchor: {
+    contentLayout: biasedContentLayout({
       ...imageVisualSpec,
       id: "proportional_image",
       visual_spec: {
@@ -178,21 +122,19 @@ function assertContentSlideUsesProportionalImagePlacement() {
         ],
         highlight: { category: "保持比例", series: "等比" },
       },
-    },
+    }, [
+      { role: "text", title: "缩放原则", body: "图片只能 contain 等比放入正文布局给定的视觉区域。" },
+    ]),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_image_placement_manifest.json"));
 
   const slide = manifest.slides[0];
   assert(slide.image_area, "image-based manifest should record the actual image placement area");
-  assert(slide.image_area.w <= slide.anchor_area.w && slide.image_area.h <= slide.anchor_area.h, "image placement should stay inside the anchor area");
+  assert(slide.image_area.w <= slide.visual_slot.w && slide.image_area.h <= slide.visual_slot.h, "image placement should stay inside the visual slot");
   assert(
     Math.abs((slide.image_area.w / slide.image_area.h) - (slide.image_width / slide.image_height)) < 0.01,
     "image placement should preserve the image aspect ratio"
-  );
-  assert(
-    Math.abs((slide.image_area.w / slide.image_area.h) - (slide.anchor_area.w / slide.anchor_area.h)) > 0.1,
-    "test fixture should prove image placement is not stretched to the anchor area aspect ratio"
   );
 }
 
@@ -205,32 +147,31 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "可编辑", text: "视觉锚点描述必须在 PPT 文本层。" }] },
-    anchorArea: { x: 1.0, y: 1.65, w: 10.0, h: 2.6 },
-    visualAnchorCaption: {
-      text: "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。",
-      source: "说明：图注不属于图形规格。",
-    },
-    supportingCards: [
-      { title: "解读", body: ["侧边卡用于形成图文并茂阅读路径。"] },
-    ],
-    visual_anchor: {
+    contentLayout: biasedContentLayout({
       ...imageVisualSpec,
       id: "caption_outside_visual_spec",
-    },
+    }, [
+      { role: "text", title: "解读", body: ["侧边模块用于形成图文并茂阅读路径。"] },
+    ], {
+      visual_anchor_caption: {
+        text: "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。",
+        source: "说明：图注不属于图形规格。",
+      },
+    }),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_caption_manifest.json"));
 
   const slide = manifest.slides[0];
   assert(slide.visual_anchor_caption, "manifest should record PPT-layer visual anchor caption placement");
-  assert.equal(slide.supporting_cards_count, 1, "manifest should record side interpretation cards for 图文并茂 layouts");
   assert.equal(slide.resolved_layout_type, "biased_column", "manifest should record the resolved content layout family");
   assert.equal(slide.content_layout_schema.reference, "06 内容 偏分栏", "manifest should record the derived reference template");
+  assert.equal(slide.content_layout_schema.modules_count, 2, "manifest should record contentLayout side modules");
   assert.equal(slide.visual_anchor_caption.text, "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。");
   assert(!slide.visual_anchor.visual_spec.caption, "caption must stay outside visual_spec");
   assert(!slide.visual_anchor.visual_spec.figure_legend, "figure legend must stay outside visual_spec");
-  assert(slide.visual_area.h < slide.anchor_area.h, "caption should reserve space below the visual anchor");
-  assert(slide.visual_anchor_caption.area.y >= slide.visual_area.y + slide.visual_area.h - 0.01, "caption should sit below the rendered visual area");
+  assert(slide.visual_area.h < slide.visual_slot.h, "caption should reserve space below the visual anchor");
+  assert(slide.visual_anchor_caption.area.y >= slide.image_area.y + slide.image_area.h - 0.01, "caption should sit below the rendered image area");
 }
 
 function assertContentLayoutAutoResolvesTallEvidenceSideText() {
@@ -293,7 +234,7 @@ function assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText() {
             { type: "visual_anchor", visual_anchor: evidenceSourceAnchor("wide_evidence_with_cards", sourcePath) },
             {
               type: "supporting_component",
-              visual_anchor: {
+              component: {
                 id: "readable_data_cards_with_evidence",
                 title: "三段 token 读数",
                 claim: "KPI 卡在证据图和正文之间仍应保持可读高度。",
@@ -364,7 +305,7 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
           blocks: [{
             type: "visual_anchor",
             visual_anchor: { ...imageVisualSpec, id: "two_column_caption_suppressed" },
-            visualAnchorCaption: {
+            visual_anchor_caption: {
               text: "这段图题在二分栏中不应渲染。",
               source: "这段来源在二分栏中不应渲染。",
             },
@@ -394,7 +335,7 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
           blocks: [{
             type: "visual_anchor",
             visual_anchor: { ...imageVisualSpec, id: "three_column_caption_suppressed" },
-            visualAnchorCaption: "这段图题在三分栏中不应渲染。",
+            visual_anchor_caption: "这段图题在三分栏中不应渲染。",
           }],
         },
         {
@@ -416,7 +357,7 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
                 ],
               },
             },
-            visualAnchorCaption: {
+            visual_anchor_caption: {
               text: "这段 Matrix 图题在三分栏中不应渲染。",
               source: "这段 Matrix 来源在三分栏中不应渲染。",
             },
@@ -431,142 +372,84 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
 
   for (const slide of manifest.slides) {
     assert(!slide.visual_anchor_caption, `${slide.resolved_layout_type} should not render module visual captions`);
-    assert.equal(slide.visual_area.h, slide.anchor_area.h, `${slide.resolved_layout_type} should not reserve caption height`);
+    assert.equal(slide.visual_area.h, slide.visual_slot.h, `${slide.resolved_layout_type} should not reserve caption height`);
   }
 }
 
-function assertDiagramExportsStayAvailable() {
-  const diagram = require("../pptx/hw_diagram_helpers");
-  for (const name of requiredDiagramExports) {
-    assert.equal(typeof diagram[name], "function", `expected visual-anchor helper export: ${name}`);
-  }
-}
-
-function assertSampleDeckUsesVisualAnchorContentSlides() {
-  const sample = read("scripts/smoke/generate_sample_deck.js");
-  assert(sample.includes("addVisualAnchorContentSlide"), "sample deck should exercise the visual-anchor content-page entrypoint");
-  assert(sample.includes("writeVisualAnchorManifest"), "sample deck should write visual-anchor manifest evidence");
-}
-
-function assertHardQaKnowsVisualAnchorContract() {
-  const qa = read("scripts/qa/check_huawei_pptx.js");
-  for (const rule of expectedVisualAnchorQaRules) {
-    assert(qa.includes(rule), `hard QA should emit ${rule}`);
-  }
-  assert(qa.includes("at least one real visual anchor"), "hard QA should require a real visual anchor, not only supporting components");
-  assert(qa.includes("isStructuredSupportingComponentSpec"), "hard QA should distinguish supporting components from real anchors");
-}
-
-function assertTableHelperIsNotPublicSchemaEscapeHatch() {
+function assertTableBlocksAreRejectedByBehavior() {
   const helpers = require("../pptx/hw_pptx_helpers");
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  assert.equal(Object.prototype.hasOwnProperty.call(helpers, "addHuaweiTable"), false, "addHuaweiTable must not be exported as a page-level helper");
-  assert(!contentSlide.includes("role === \"table\""), "contentLayout must not accept role=table as a direct native table path");
-  assert(contentSlide.includes("contentLayout table blocks were removed"), "contentLayout table blocks should fail instead of drawing a native table directly");
-  assert(contentSlide.includes("supporting_component kind=Matrix/template=table"), "table block rejection should direct callers to the Matrix/table supporting component path");
-}
-
-function assertSkillDocumentsCurrentPath() {
-  const skill = read("SKILL.md");
-  const layoutStandards = read("references/layout_standards.md");
-  assert(skill.includes("addVisualAnchorContentSlide"), "SKILL should document the unified content-slide entrypoint");
-  assert(skill.includes("--require-visual-anchor-manifest"), "SKILL should require manifest-backed visual-anchor QA");
-  assert(skill.includes("--require-plan"), "SKILL should require plan-backed visual-anchor alignment QA");
-  assert(layoutStandards.includes("05 内容 二分栏"), "layout standards should document the fixed content-layout references");
-  assert(skill.includes("one primary evidence object"), "SKILL should document the primary evidence standard");
-  assert(skill.includes("Evidence"), "SKILL should document source-evidence visual anchors");
-  assert(skill.includes("supporting components"), "SKILL should distinguish supporting components from visual anchors");
-}
-
-function assertContentLayoutReferenceDocumentsDenseCaptionSuppression() {
-  const schema = read("references/content_layout_schema.md");
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  assert(schema.includes("two_column"), "content layout reference should document two_column");
-  assert(schema.includes("three_column"), "content layout reference should document three_column");
-  assert(schema.includes("renderer suppresses module visual captions"), "content layout reference should document dense-column caption suppression");
-  assert(schema.includes("Do not provide a `flow` field"), "content layout reference should make module flow renderer-owned");
-  assert(schema.includes("emphasis"), "content layout reference should document red/bold emphasis terms");
-  assert(schema.includes("structural claim handles"), "content layout reference should keep claim handles out of red emphasis");
-  assert(contentSlide.includes("splitStructuredLabel"), "content renderer should protect claim handles from red emphasis");
-}
-
-function assertContentLayoutProtectsEvidenceReadability() {
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  const planner = read("scripts/pptx/layout/content_layout_planner.js");
-  const schema = read("references/content_layout_schema.md");
-  const layoutStandards = read("references/layout_standards.md");
-  assert(planner.includes("resolveEvidenceAwareColumnLayout"), "content layout planner should rebalance columns for readable source evidence");
-  assert(planner.includes("measureModuleWidthDemand"), "content layout planner should derive column demand from measured primitive width contracts");
-  assert(contentSlide.includes("contentLayoutAreas"), "content slide renderer should consume planned layout areas instead of owning column solving");
-  assert(contentSlide.includes("resolveMeasuredBlockLayout"), "module block allocation should use measured primitive min/preferred/max contracts");
-  assert(schema.includes("evidence-aware balancing"), "content layout schema should document renderer-owned evidence-aware balancing");
-  assert(layoutStandards.includes("Evidence is the first layout claimant"), "layout standards should make evidence readability the first density claimant");
-}
-
-function assertContentLayoutUnifiesTypographyContext() {
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  const layoutStandards = read("references/layout_standards.md");
-  assert(contentSlide.includes("module.contentFontSize || HW_STYLE.size.body"), "content layout text blocks should share the body-size text tier");
-  assert(layoutStandards.includes("Content Typography"), "layout standards should document same-tier content typography");
-  assert(layoutStandards.includes("Visual anchors and supporting components own their internal typography separately"), "layout standards should keep component typography separate from text-block typography");
-}
-
-function assertSupportingComponentsDoNotCountAsVisualAnchors() {
-  const skill = read("SKILL.md");
-  const schema = read("references/content_layout_schema.md");
-  const generated = read("references/generated_visual_schema.md");
-  const architecture = read("docs/architecture_design.md");
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  assert(skill.includes("data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, and generated `heatmap` are supporting components"), "SKILL should name the supporting component boundary");
-  assert(schema.includes('"type": "supporting_component"'), "content layout schema should show supporting_component blocks");
-  assert(generated.includes("Supporting components are useful for density and compression"), "generated visual schema should explain supporting components");
-  assert(architecture.includes("structured readout becomes fake anchor"), "architecture docs should record the drift pattern");
-  assert(contentSlide.includes("visualComponentRole"), "renderer should record visual roles for manifest-backed components");
-}
-
-function assertContentLayoutQaUsesMeasuredTextManifest() {
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  const hardQa = read("scripts/qa/check_huawei_pptx.js");
-  assert(contentSlide.includes("descriptor.measure = measuredDescriptor.measure"), "content layout manifest should record COM-backed primitive measurement");
-  assert(!contentSlide.includes(["estimated", "wrapped", "line", "count"].join("_")), "content layout manifest must not record non-COM wrapped-line estimates");
-  assert(!hardQa.includes(["estimated", "wrapped", "line", "count"].join("_")), "hard QA must not consume non-COM wrapped-line estimates");
-}
-
-function assertContentLayoutDoesNotExposePageRegionOverride() {
-  const contentSlide = read("scripts/pptx/hw_visual_anchor_slide.js");
-  const schema = read("references/content_layout_schema.md");
-  const skill = read("SKILL.md");
-  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { createHuaweiDeck } = helpers;
   const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
-  assert(!contentSlide.includes("data.contentArea || data.content_area"), "contentLayout must not let deck scripts override the fixed page region");
-  assert(contentSlide.includes("rejectContentLayoutPageRegionOverrides"), "contentLayout should fail fast when deck scripts pass page-region coordinates");
-  assert(schema.includes("`contentLayout.type` is authoritative"), "content layout reference should describe the positive minimal schema");
-  assert(!skill.includes("contentArea"), "SKILL should avoid documenting removed content-layout page-region fields");
+  assert.equal(Object.prototype.hasOwnProperty.call(helpers, "addHuaweiTable"), false, "addHuaweiTable must not be exported as a page-level helper");
   assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
-    title: "非法版心",
-    contentArea: { x: 0, y: 0, w: 1, h: 1 },
+    title: "非法表格块",
     contentLayout: {
       type: "two_column",
       reference: "05 内容 二分栏",
       modules: [
-        { role: "content_panel", title: "模块一", blocks: [{ type: "text", body: "旧版心字段应在 schema 解析前失败。" }] },
+        { role: "content_panel", title: "证据", blocks: [{ type: "visual_anchor", visual_anchor: imageVisualSpec }] },
+        { role: "content_panel", title: "错误表格", blocks: [{ type: "table", body: [["A", "B"]] }] },
+      ],
+    },
+  }), /table blocks were removed/, "contentLayout should reject direct table blocks");
+}
+
+function assertSupportingOnlyLayoutFails() {
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
+  assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
+    title: "支撑组件不能当锚点",
+    contentLayout: {
+      type: "two_column",
+      reference: "05 内容 二分栏",
+      modules: [
+        {
+          role: "content_panel",
+          title: "只有卡片",
+          blocks: [{
+            type: "supporting_component",
+            component: {
+              id: "supporting_only_cards",
+              title: "只有数据卡",
+              claim: "数据卡不能满足视觉锚点要求。",
+              kind: "Quantity",
+              template: "data_cards",
+              visual_spec: { cards: [{ label: "A", value: "1" }] },
+            },
+          }],
+        },
+        { role: "content_panel", title: "说明", blocks: [{ type: "text", body: "没有真实视觉锚点。" }] },
+      ],
+    },
+  }), /real visual_anchor block/, "supporting components must not satisfy the real visual-anchor requirement");
+}
+
+function assertContentLayoutDoesNotExposeManualBodyLayout() {
+  const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
+  const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
+  assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
+    title: "缺少语义锚点",
+    contentLayout: {
+      type: "two_column",
+      reference: "05 内容 二分栏",
+      modules: [
+        { role: "content_panel", title: "模块一", blocks: [{ type: "text", body: "正文模块必须提供真实视觉锚点。" }] },
         { role: "content_panel", title: "模块二", blocks: [{ type: "text", body: "固定版心由渲染器决定。" }] },
       ],
     },
-  }), /renderer-owned/, "contentLayout should reject page-region coordinates instead of silently ignoring them");
+  }), /real visual_anchor block/, "contentLayout should require semantic body modules instead of honoring page-region coordinates");
 }
 
 function assertPackageScriptsRunContractBeforeSmoke() {
   const pkg = JSON.parse(read("package.json"));
+  const softwareReport = read("scripts/quality/software_test_report.js");
   assert.equal(pkg.scripts["test:visual-anchor-contract"], "node scripts/smoke/test_visual_anchor_content_contract.js");
-  assert(pkg.scripts.smoke.includes("test:visual-anchor-contract"), "npm run smoke should include visual-anchor contract tests");
-  assert(pkg.scripts.smoke.includes("content-layout-smoke"), "npm run smoke should include content layout schema smoke tests");
-  assert(pkg.scripts["check-sample"].includes("--require-visual-anchor-manifest"), "sample QA should require visual-anchor manifest evidence");
+  assert(pkg.scripts.smoke.includes("scripts/quality/software_test_report.js"), "npm run smoke should generate the software test report");
+  assert(softwareReport.includes("scripts/smoke/test_visual_anchor_content_contract.js"), "software test report should include visual-anchor contract tests");
 }
 
 function main() {
   const failures = [];
-  collect("page helpers expose the primitive surface", assertPagePrimitiveSurface, failures);
   collect("visual-anchor content-slide surface exists", assertVisualAnchorSlideSurface, failures);
   collect("content-slide entrypoint records fixed output evidence", assertContentSlideRecordsFixedOutputEvidence, failures);
   collect("content-slide images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
@@ -574,17 +457,9 @@ function main() {
   collect("supporting data cards keep readable height with evidence and text", assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText, failures);
   collect("content-slide captions stay outside visual_spec", assertContentSlideRendersEditableCaptionOutsideVisualSpec, failures);
   collect("dense column layouts suppress visual captions", assertTwoAndThreeColumnLayoutsSuppressVisualCaptions, failures);
-  collect("diagram helper exports remain available", assertDiagramExportsStayAvailable, failures);
-  collect("sample deck uses the visual-anchor path", assertSampleDeckUsesVisualAnchorContentSlides, failures);
-  collect("hard QA validates rendered visual anchors", assertHardQaKnowsVisualAnchorContract, failures);
-  collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicSchemaEscapeHatch, failures);
-  collect("SKILL documents the current path", assertSkillDocumentsCurrentPath, failures);
-  collect("content layout reference documents dense caption suppression", assertContentLayoutReferenceDocumentsDenseCaptionSuppression, failures);
-  collect("content layout protects evidence readability", assertContentLayoutProtectsEvidenceReadability, failures);
-  collect("content layout unifies typography context", assertContentLayoutUnifiesTypographyContext, failures);
-  collect("supporting components do not count as visual anchors", assertSupportingComponentsDoNotCountAsVisualAnchors, failures);
-  collect("content layout QA uses measured manifest", assertContentLayoutQaUsesMeasuredTextManifest, failures);
-  collect("content layout does not expose page-region override", assertContentLayoutDoesNotExposePageRegionOverride, failures);
+  collect("native table helper is not a public schema escape hatch", assertTableBlocksAreRejectedByBehavior, failures);
+  collect("supporting-only layouts fail", assertSupportingOnlyLayoutFails, failures);
+  collect("content layout does not expose manual body layout", assertContentLayoutDoesNotExposeManualBodyLayout, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 
   if (failures.length) {

@@ -39,7 +39,7 @@ That has worked as incremental hardening, but it makes the architecture drift to
 - R2. Layout allocation happens before paint through a Flex-like subset, initially covering the module internals that replace `splitBlockAreas()`.
 - R3. The first prototype must preserve editable PPT output: text boxes, rectangles/cards, native tables where applicable, images, lines, and arrows.
 - R4. Layout diagnostics must be emitted before or alongside manifest entries: per block min/preferred/final size, shrink decisions, fallback decisions, and infeasible combinations.
-- R5. Existing visual-anchor manifest traceability must remain intact: every rendered visual anchor and supporting component still records `id`, `kind`, `template`, renderer, rendered state, anchor area, visual/image area, and content-layout context.
+- R5. Existing visual-anchor manifest traceability must remain intact: every rendered visual anchor and supporting component still records `id`, `kind`, `template`, renderer, rendered state, visual slot, visual/image area, and content-layout context.
 - R6. TiDAR Page 6-style density conflicts must be handled without local `data_cards` or evidence-height special cases: source evidence + KPI cards + text should allocate readable boxes or fail with actionable diagnostics.
 - R7. Existing runtime contracts stay aligned: `references/*`, `SKILL.md`, implementation, QA, and smoke tests must describe and enforce the same behavior.
 - R8. Reuse existing test capability rather than preserving test implementation shape: keep forward tests, diagram fixtures, source-image fixtures, and PowerPoint export checks as regression assets while allowing the smoke harness and QA internals to be rewritten.
@@ -69,8 +69,6 @@ That has worked as incremental hardening, but it makes the architecture drift to
 - `scripts/pptx/hw_visual_anchor_slide.js`: current composition path, especially block normalization, `splitBlockAreas()`, `addContentPanelModule()`, and manifest schema emission.
 - `scripts/pptx/hw_diagram_helpers.js`: reusable visual rendering and validation surface; should be kept as the paint/render backend rather than rewritten first.
 - `scripts/qa/check_huawei_pptx.js`: hard-QA rules to mine for layout diagnostics, then rewrite around pre-paint diagnostics plus manifest validation.
-- `scripts/smoke/generate_content_layout_schema_smoke.js`: current content-layout fixture with multi-block modules.
-- `scripts/smoke/test_qa_rule_regressions.js`: existing negative/positive cases for anchors, supporting components, evidence sizing, and brief fidelity.
 - `scripts/smoke/fixtures/visual_diagram_test_cases.js`: diagram rendering capability to preserve.
 - `forward-tests/huawei-ppt-gen/tidar-evidence-readability`: key behavioral regression for evidence readability and density conflict handling.
 - `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout`: key behavioral regression for content-aware Huawei layouts.
@@ -281,7 +279,6 @@ The exact file split may change during implementation, but layout engine code sh
 **Files:**
 - Modify: `scripts/pptx/hw_visual_anchor_slide.js`
 - Create: `scripts/pptx/layout/adapters.js`
-- Modify: `scripts/smoke/generate_content_layout_schema_smoke.js`
 - Modify: `scripts/smoke/test_visual_anchor_content_contract.js`
 
 **Approach:**
@@ -318,7 +315,6 @@ The exact file split may change during implementation, but layout engine code sh
 
 **Files:**
 - Modify: `scripts/qa/check_huawei_pptx.js`
-- Modify: `scripts/smoke/test_qa_rule_regressions.js`
 - Create: `scripts/smoke/layout/test_layout_qa_contract.js`
 
 **Approach:**
@@ -330,7 +326,6 @@ The exact file split may change during implementation, but layout engine code sh
 
 **Patterns to follow:**
 - Existing issue detail objects in `scripts/qa/check_huawei_pptx.js`
-- Existing assertions in `scripts/smoke/test_qa_rule_regressions.js`
 
 **Test scenarios:**
 - Happy path: A valid evidence + data cards + text module passes layout diagnostics and manifest QA.
@@ -353,9 +348,7 @@ The exact file split may change during implementation, but layout engine code sh
 **Dependencies:** U4, U5
 
 **Files:**
-- Modify: `scripts/smoke/generate_content_layout_schema_smoke.js`
 - Modify: `scripts/smoke/test_diagram_helpers.js`
-- Modify: `scripts/smoke/verify_diagram_components.js`
 - Modify: `scripts/smoke/test_powerpoint_com_export.js`
 - Modify: `package.json`
 - Modify: `forward-tests/huawei-ppt-gen/tidar-evidence-readability/judge/rubric.md`
@@ -487,8 +480,6 @@ The exact file split may change during implementation, but layout engine code sh
 - Current composer: `scripts/pptx/hw_visual_anchor_slide.js`
 - Current visual renderer: `scripts/pptx/hw_diagram_helpers.js`
 - Current hard QA: `scripts/qa/check_huawei_pptx.js`
-- Current content smoke: `scripts/smoke/generate_content_layout_schema_smoke.js`
-- QA regression smoke: `scripts/smoke/test_qa_rule_regressions.js`
 - Diagram fixtures: `scripts/smoke/fixtures/visual_diagram_test_cases.js`
 - TiDAR forward test: `forward-tests/huawei-ppt-gen/tidar-evidence-readability`
 - Aegaeon forward test: `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout`

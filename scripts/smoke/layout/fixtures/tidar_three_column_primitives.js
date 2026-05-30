@@ -70,7 +70,7 @@ function evidenceBlock(id, sourcePath) {
 function kpiBlock(id, cards) {
   return {
     type: "supporting_component",
-    visual_anchor: {
+    component: {
       id,
       title: id,
       claim: "supporting readout",

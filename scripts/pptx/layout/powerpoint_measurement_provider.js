@@ -181,7 +181,7 @@ function normalizeRequest(block, area, classification, options) {
 }
 
 function measurementKind(block, classification) {
-  if (!block.visual_anchor && !block.visualAnchor) return "text";
+  if (!block.visual_anchor && !block.component) return "text";
   if (classification.type === "KpiCardRow") return "kpi";
   if (classification.type === "NativeTable") return "table";
   return "visual";

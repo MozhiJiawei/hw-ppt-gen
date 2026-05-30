@@ -5,6 +5,10 @@ function visual(kind, template) {
   return { type: "visual_anchor", visual_anchor: { id: `${kind}_${template}`, kind, template } };
 }
 
+function component(kind, template) {
+  return { type: "supporting_component", component: { id: `${kind}_${template}`, kind, template } };
+}
+
 function assertClassification(block, expected) {
   const actual = classifyBlock(block);
   Object.entries(expected).forEach(([key, value]) => {
@@ -19,21 +23,21 @@ assertClassification(visual("Evidence", "source_figure"), {
   measureSupport: "measured",
 });
 
-assertClassification(visual("Quantity", "data_cards"), {
+assertClassification(component("Quantity", "data_cards"), {
   family: "QuantitativeReadout",
   type: "KpiCardRow",
   anchorEligibility: "supporting_component",
   measureSupport: "measured",
 });
 
-assertClassification(visual("Matrix", "table"), {
+assertClassification(component("Matrix", "table"), {
   family: "MatrixTable",
   type: "NativeTable",
   anchorEligibility: "supporting_component",
   measureSupport: "measured",
 });
 
-assertClassification(visual("Matrix", "heatmap"), {
+assertClassification(component("Matrix", "heatmap"), {
   family: "MatrixTable",
   type: "HeatmapMatrix",
   anchorEligibility: "supporting_component",

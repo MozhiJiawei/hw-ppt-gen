@@ -152,7 +152,7 @@ function collectTextValues(value, out = []) {
   }
   if (typeof value === "object") {
     Object.entries(value).forEach(([key, item]) => {
-      if (["path", "source", "id", "type", "kind", "template", "treatment"].includes(key)) return;
+      if (["path", "source", "id", "type", "kind", "template"].includes(key)) return;
       collectTextValues(item, out);
     });
   }
@@ -926,7 +926,7 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     const slideXml = slideEntries.find((item) => slideNumber(item.name) === slide)?.xml || "";
     const visibleText = extractShapes(slideXml).map((shape) => shape.text).filter(Boolean).join("\n");
     const pageEntries = byPage.get(slide) || [];
-    const strictEntries = pageEntries.filter((entry) => isStrictVisualAnchorSpec(entry.visual_anchor || entry));
+    const strictEntries = pageEntries.filter((entry) => isManifestRealAnchor(entry));
     if (pageEntries.length < 1) {
       issues.push(issue(slide, "content_visual_anchor_missing", "error", "Content slide must have at least one manifest-backed visual anchor.", {
         manifest_entries: pageEntries.length,
@@ -946,23 +946,24 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     if (entry.rendered !== true) {
       issues.push(issue(slide, "content_visual_anchor_unrendered", "error", "Content slide visual anchor exists in the manifest but is not marked rendered."));
     }
-    if (!entry.visual_anchor || typeof entry.visual_anchor !== "object") {
-      issues.push(issue(slide, "content_visual_anchor_manifest_invalid", "error", "Visual-anchor manifest entry must include the validated visual_anchor spec."));
+    const spec = manifestEntrySpec(entry);
+    if (!spec || typeof spec !== "object" || !Object.keys(spec).length) {
+      issues.push(issue(slide, "content_visual_anchor_manifest_invalid", "error", "Visual manifest entry must include a visual_anchor or supporting_component spec."));
       continue;
     }
     try {
-      validateVisualAnchorSpec(entry.visual_anchor);
+      validateVisualAnchorSpec(spec);
     } catch (error) {
       issues.push(issue(slide, "content_visual_anchor_template_invalid", "error", `Visual-anchor spec failed schema validation: ${error.message}`, {
-        visual_anchor_id: entry.visual_anchor_id || entry.visual_anchor.id || "",
+        visual_component_id: entry.visual_component_id || spec.id || "",
       }));
     }
-    if (entry.kind !== entry.visual_anchor.kind || entry.template !== entry.visual_anchor.template) {
+    if (entry.kind !== spec.kind || entry.template !== spec.template) {
       issues.push(issue(slide, "content_visual_anchor_manifest_invalid", "error", "Visual-anchor manifest kind/template must match the stored spec.", {
         entry_kind: entry.kind,
-        spec_kind: entry.visual_anchor.kind,
+        spec_kind: spec.kind,
         entry_template: entry.template,
-        spec_template: entry.visual_anchor.template,
+        spec_template: spec.template,
       }));
     }
     issues.push(...checkVisualAnchorSemantics(slide, entry, visibleText));
@@ -973,20 +974,20 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
     if (entry.renderer === "rough_svg") {
       const dimValid = Number.isFinite(Number(entry.image_width)) && Number(entry.image_width) > 0
         && Number.isFinite(Number(entry.image_height)) && Number(entry.image_height) > 0;
-      const areaValid = isRectLike(entry.anchor_area) && isRectLike(entry.image_area);
+      const areaValid = isRectLike(entry.visual_slot) && isRectLike(entry.image_area);
       if (!dimValid || !areaValid) {
         issues.push(issue(slide, "content_visual_anchor_image_missing", "error", "Image-based visual anchors must record positive image dimensions and actual image placement.", {
           image_width: entry.image_width,
           image_height: entry.image_height,
           image_area: entry.image_area,
-          anchor_area: entry.anchor_area,
+          visual_slot: entry.visual_slot,
         }));
-      } else if (!isContained(entry.image_area, entry.anchor_area) || !hasMatchingAspectRatio(entry.image_area, entry.image_width, entry.image_height)) {
-        issues.push(issue(slide, "content_visual_anchor_image_invalid", "error", "Image-based visual anchor output must stay inside the anchor area and preserve aspect ratio.", {
+      } else if (!isContained(entry.image_area, entry.visual_slot) || !hasMatchingAspectRatio(entry.image_area, entry.image_width, entry.image_height)) {
+        issues.push(issue(slide, "content_visual_anchor_image_invalid", "error", "Image-based visual anchor output must stay inside the visual slot and preserve aspect ratio.", {
           image_width: entry.image_width,
           image_height: entry.image_height,
           image_area: entry.image_area,
-          anchor_area: entry.anchor_area,
+          visual_slot: entry.visual_slot,
         }));
       }
     }
@@ -997,17 +998,17 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
 }
 
 function checkVisualAnchorImagePresenceAndScale(slide, entry) {
-  const spec = entry.visual_anchor || {};
+  const spec = manifestEntrySpec(entry);
   const isEvidenceImage = spec.kind === "Evidence" && /^source_(figure|table|screenshot|chart)$/.test(safeText(spec.template));
   const isImageRenderer = entry.renderer === "rough_svg" || entry.renderer === "evidence";
   if (!isImageRenderer) return [];
 
   const issues = [];
   const imageArea = entry.image_area;
-  const visualArea = entry.visual_area || entry.anchor_area;
+  const visualArea = entry.visual_area || entry.visual_slot;
   if (entry.placeholder === true || entry.renderResult?.placeholder === true) {
     issues.push(issue(slide, "content_visual_anchor_image_missing", "error", "Evidence visual anchor rendered a placeholder instead of the source image; fix the source path or replace the evidence.", {
-      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      visual_component_id: entry.visual_component_id || spec.id || "",
       source_path: spec.source?.path || "",
     }));
   }
@@ -1020,8 +1021,8 @@ function checkVisualAnchorImagePresenceAndScale(slide, entry) {
   const fillsOneAxis = Math.max(widthCoverage, heightCoverage) >= 0.92;
   const minimumCoverage = isEvidenceImage ? 0.38 : 0.32;
   if (!fillsOneAxis) {
-    issues.push(issue(slide, "content_visual_anchor_image_too_small", "error", "Visual anchor image does not fill either dimension of its intended visual area; resize the image box or choose a better-fitted source crop/region instead of forcing aspect-ratio distortion.", {
-      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+    issues.push(issue(slide, "content_visual_anchor_image_too_small", "error", "Visual anchor image does not fill either dimension of its intended visual area; rebalance the layout around the evidence instead of forcing aspect-ratio distortion.", {
+      visual_component_id: entry.visual_component_id || spec.id || "",
       coverage: Math.round(coverage * 1000) / 1000,
       minimum_coverage: minimumCoverage,
       minimum_axis_coverage: 0.92,
@@ -1048,7 +1049,7 @@ function checkContentLayoutSchema(slide, entries) {
     return issues;
   }
   if (schemas.some((schema) => JSON.stringify(schema) !== JSON.stringify(first))) {
-    issues.push(issue(slide, "content_layout_schema_invalid", "error", "All visual-anchor entries for a slide must record the same content layout schema.", {
+    issues.push(issue(slide, "content_layout_schema_invalid", "error", "All visual manifest entries for a slide must record the same content layout schema.", {
       schemas,
     }));
   }
@@ -1157,6 +1158,14 @@ function isStrictVisualAnchorBlock(block = {}) {
   return block.type === "visual_anchor";
 }
 
+function manifestEntrySpec(entry = {}) {
+  return entry.visual_anchor || entry.supporting_component || {};
+}
+
+function isManifestRealAnchor(entry = {}) {
+  return entry.visual_role === "visual_anchor" && isStrictVisualAnchorSpec(entry.visual_anchor);
+}
+
 function isStrictVisualAnchorSpec(spec = {}) {
   if (!spec || typeof spec !== "object") return false;
   const kind = safeText(spec.kind);
@@ -1220,7 +1229,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
   const issues = [];
   for (const [idx, module] of modules.entries()) {
     const title = module.title || `module_${idx + 1}`;
-    const contentArea = module.content_area;
+    const layoutBounds = module.module_body_slot;
     const occupied = module.occupied_area;
     const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
     if (!moduleHasVisualAnchorBlock(module)) {
@@ -1239,9 +1248,9 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       }));
       continue;
     }
-    if (isRectLike(contentArea) && isRectLike(occupied)) {
-      const topGap = Number(occupied.y) - Number(contentArea.y);
-      const bottomGap = (Number(contentArea.y) + Number(contentArea.h)) - (Number(occupied.y) + Number(occupied.h));
+    if (isRectLike(layoutBounds) && isRectLike(occupied)) {
+      const topGap = Number(occupied.y) - Number(layoutBounds.y);
+      const bottomGap = (Number(layoutBounds.y) + Number(layoutBounds.h)) - (Number(occupied.y) + Number(occupied.h));
       if (topGap > 0.08 || bottomGap > 0.42) {
         issues.push(issue(slide, "content_layout_module_inner_alignment", "error", "Column module content does not fill the module from top toward the bottom; add grounded bullets, enlarge a visual anchor, or choose a denser split instead of leaving a floating block.", {
           layout_type: schema.type,
@@ -1392,14 +1401,13 @@ function textBlockLineCount(block) {
 }
 
 function checkVisualAnchorLayout(slide, entry) {
-  const spec = entry.visual_anchor || {};
+  const spec = manifestEntrySpec(entry);
   const template = safeText(spec.template);
-  const hasSideCards = Number(entry.supporting_cards_count || 0) > 0;
   const isEvidenceFigure = spec.kind === "Evidence" && /source_(figure|chart)/.test(template);
   const hasContentLayout = Boolean(entry.content_layout_schema);
-  if (isEvidenceFigure && !hasSideCards && !hasContentLayout) {
+  if (isEvidenceFigure && !hasContentLayout) {
     return [issue(slide, "content_visual_anchor_layout_unintegrated", "error", "Evidence source figures/charts must use one of the four fixed 图文并茂 layouts with adjacent interpretation, not a picture-only composition.", {
-      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      visual_component_id: entry.visual_component_id || spec.id || "",
       template,
     })];
   }
@@ -1438,22 +1446,23 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide is missing from the deck plan.", { page }));
       continue;
     }
-    const plannedAnchors = Array.isArray(plannedSlide.visual_anchors) && plannedSlide.visual_anchors.length
-      ? plannedSlide.visual_anchors
-      : (plannedSlide.visual_anchor ? [plannedSlide.visual_anchor] : []);
+    const plannedAnchors = Array.isArray(plannedSlide.visual_anchors) ? plannedSlide.visual_anchors : [];
+    const plannedSupportingComponents = Array.isArray(plannedSlide.supporting_components) ? plannedSlide.supporting_components : [];
     if (!plannedAnchors.length) {
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchors[].kind and visual_anchors[].template."));
       continue;
     }
     issues.push(...checkPlannedModuleEvidenceBinding(page, plannedSlide));
     const actualEntries = manifestByPage.get(page) || [];
-    if (actualEntries.length < plannedAnchors.length) {
+    const actualAnchorEntries = actualEntries.filter((entry) => entry.visual_role === "visual_anchor");
+    const actualSupportingEntries = actualEntries.filter((entry) => entry.visual_role === "supporting_component");
+    if (actualAnchorEntries.length < plannedAnchors.length) {
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Rendered manifest has fewer visual anchors than the deck plan.", {
         planned_count: plannedAnchors.length,
-        actual_count: actualEntries.length,
+        actual_count: actualAnchorEntries.length,
       }));
     }
-    const actualById = new Map(actualEntries
+    const actualById = new Map(actualAnchorEntries
       .filter((entry) => entry?.visual_anchor?.id)
       .map((entry) => [entry.visual_anchor.id, entry]));
     plannedAnchors.forEach((planned, idx) => {
@@ -1466,7 +1475,7 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
         }));
         return;
       }
-      const actualEntry = planned.id && actualById.has(planned.id) ? actualById.get(planned.id) : actualEntries[idx];
+      const actualEntry = planned.id && actualById.has(planned.id) ? actualById.get(planned.id) : actualAnchorEntries[idx];
       const actual = actualEntry?.visual_anchor || {};
       if (!actual.kind || !actual.template) {
         issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Planned visual anchor is missing from the rendered manifest.", {
@@ -1499,19 +1508,45 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
       }
     });
 
+    const supportingById = new Map(actualSupportingEntries
+      .filter((entry) => entry?.supporting_component?.id)
+      .map((entry) => [entry.supporting_component.id, entry]));
+    plannedSupportingComponents.forEach((planned, idx) => {
+      const actualEntry = planned.id && supportingById.has(planned.id) ? supportingById.get(planned.id) : actualSupportingEntries[idx];
+      const actual = actualEntry?.supporting_component || {};
+      if (!actual.kind || !actual.template) {
+        issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Planned supporting component is missing from the rendered manifest.", {
+          planned_index: idx,
+          planned_id: planned.id || "",
+          planned_kind: planned.kind || "",
+          planned_template: planned.template || "",
+        }));
+        return;
+      }
+      if (planned.kind !== actual.kind || planned.template !== actual.template) {
+        issues.push(issue(page, "content_visual_anchor_plan_mismatch", "error", "Planned supporting component kind/template does not match the rendered manifest.", {
+          planned_id: planned.id || "",
+          planned_kind: planned.kind,
+          planned_template: planned.template,
+          actual_kind: actual.kind,
+          actual_template: actual.template,
+        }));
+      }
+    });
+
     for (const entry of actualEntries) {
-      const spec = entry.visual_anchor || {};
+      const spec = manifestEntrySpec(entry);
       const expectedEntryRenderer = resolveVisualAnchorRenderPath(spec);
       if (entry.renderer !== expectedEntryRenderer) {
         issues.push(issue(page, "content_visual_anchor_manifest_mismatch", "error", "Visual-anchor manifest output evidence does not match the fixed template contract.", {
-          visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+          visual_component_id: entry.visual_component_id || spec.id || "",
           expected_output: expectedEntryRenderer,
           actual_output: entry.renderer || "",
         }));
       }
       if (expectedEntryRenderer === "rough_svg" && entry.image_format !== "svg") {
         issues.push(issue(page, "content_visual_anchor_manifest_mismatch", "error", "Image-based visual anchors must record their image format in the manifest.", {
-          visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+          visual_component_id: entry.visual_component_id || spec.id || "",
           image_format: entry.image_format || "",
         }));
       }
@@ -1541,11 +1576,11 @@ function checkPlannedModuleEvidenceBinding(page, plannedSlide = {}) {
       }).join(" ");
       const overlap = semanticOverlap(moduleText, anchorText);
       if (overlap.length < 2) {
-        issues.push(issue(page, "content_layout_evidence_claim_mismatch", "error", "A module visual anchor does not semantically bind to its module title and nearby text; choose, crop, or generate evidence that proves the local claim instead of borrowing an unrelated figure.", {
+        issues.push(issue(page, "content_layout_evidence_claim_mismatch", "error", "A module visual anchor does not semantically bind to its module title and nearby text; choose evidence that proves the local claim instead of borrowing an unrelated figure.", {
           module_index: moduleIdx + 1,
           module_title: module.title || "",
           visual_anchor_index: anchorIdx + 1,
-          visual_anchor_id: spec.id || "",
+          visual_component_id: spec.id || "",
           visual_anchor_title: spec.title || "",
           visual_anchor_claim: spec.claim || "",
           source_caption: spec.source?.caption || "",
@@ -1560,18 +1595,18 @@ function checkPlannedModuleEvidenceBinding(page, plannedSlide = {}) {
 
 function checkVisualAnchorManifestContract(slide, entry) {
   const issues = [];
-  const spec = entry.visual_anchor || {};
+  const spec = manifestEntrySpec(entry);
   const expectedRenderer = resolveVisualAnchorRenderPath(spec);
   if (entry.renderer !== expectedRenderer) {
     issues.push(issue(slide, "content_visual_anchor_manifest_mismatch", "error", "Visual-anchor manifest output evidence does not match the fixed template contract.", {
-      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      visual_component_id: entry.visual_component_id || spec.id || "",
       expected_output: expectedRenderer,
       actual_output: entry.renderer || "",
     }));
   }
   if (spec.kind === "Matrix" && spec.template === "table" && entry.renderer !== "ppt_native") {
     issues.push(issue(slide, "content_visual_anchor_table_contract_mismatch", "error", "Matrix/table supporting components must remain editable table output.", {
-      visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+      visual_component_id: entry.visual_component_id || spec.id || "",
       actual_output: entry.renderer || "",
     }));
   }
@@ -1579,17 +1614,17 @@ function checkVisualAnchorManifestContract(slide, entry) {
 }
 
 function checkVisualAnchorTableCapacity(slide, entry) {
-  const spec = entry.visual_anchor || {};
+  const spec = manifestEntrySpec(entry);
   if (spec.kind !== "Matrix" || spec.template !== "table") return [];
   const layout = entry.content_layout_schema || {};
   if (layout.type !== "four_column") return [];
   const rows = Array.isArray(spec.visual_spec?.rows) ? spec.visual_spec.rows : [];
   const rowCount = rows.length;
-  const visualArea = entry.visual_area || entry.anchor_area || {};
+  const visualArea = entry.visual_area || entry.visual_slot || {};
   const estimatedRowHeight = Number(visualArea.h) > 0 && rowCount > 0 ? Number(visualArea.h) / rowCount : null;
   if (rowCount <= 4 && (estimatedRowHeight === null || estimatedRowHeight >= 0.3)) return [];
   return [issue(slide, "content_visual_anchor_table_overflow", "error", "Matrix/table supporting components in four-column modules are too dense; use at most four rows in small modules, split the content, enlarge the area, or switch to a shorter KPI readout.", {
-    visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+    visual_component_id: entry.visual_component_id || spec.id || "",
     layout_type: layout.type,
     row_count: rowCount,
     estimated_row_height: estimatedRowHeight === null ? null : Math.round(estimatedRowHeight * 100) / 100,
@@ -1598,20 +1633,20 @@ function checkVisualAnchorTableCapacity(slide, entry) {
 
 function checkVisualAnchorSemantics(slide, entry, visibleText) {
   const issues = [];
-  const spec = entry.visual_anchor || {};
+  const spec = manifestEntrySpec(entry);
   const visual = spec.visual_spec || {};
   const highlight = visual.highlight;
   if (highlight !== undefined && highlight !== null && JSON.stringify(highlight) !== "{}") {
     const reason = safeText(entry.highlight_reason || spec.highlight_reason || spec.why_highlight || "");
     if (reason.length < 12 || !hasCjk(reason)) {
       issues.push(issue(slide, "content_visual_anchor_highlight_unexplained", "error", "visual_spec.highlight requires a specific Chinese highlight_reason recorded outside visual_spec.", {
-        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        visual_component_id: entry.visual_component_id || spec.id || "",
         highlight,
       }));
     }
     if (!textExplainsHighlight(visibleText, reason)) {
       issues.push(issue(slide, "content_visual_anchor_highlight_unexplained", "error", "The visible slide text should explain why the highlighted visual item matters.", {
-        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        visual_component_id: entry.visual_component_id || spec.id || "",
         highlight_reason: reason,
       }));
     }
@@ -1621,7 +1656,7 @@ function checkVisualAnchorSemantics(slide, entry, visibleText) {
     const scoreBasis = safeText(entry.score_basis || spec.score_basis || "");
     if (scoreBasis.length < 12 || !hasCjk(scoreBasis)) {
       issues.push(issue(slide, "content_visual_anchor_subjective_scores", "error", "Decimal matrix/heatmap values that look like subjective scores require score_basis or should be converted to qualitative labels.", {
-        visual_anchor_id: entry.visual_anchor_id || spec.id || "",
+        visual_component_id: entry.visual_component_id || spec.id || "",
         template: spec.template,
       }));
     }
@@ -1668,9 +1703,7 @@ function slideVisibleTextMap(slideEntries) {
 }
 
 function plannedContentLayoutType(slide) {
-  return safeText(slide?.contentLayout?.type)
-    || safeText(slide?.content_layout?.type)
-    || safeText(slide?.layout_schema?.type);
+  return safeText(slide?.contentLayout?.type);
 }
 
 function checkPptContentBriefPlanAlignment(briefFileName, planFileName) {

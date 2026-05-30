@@ -76,4 +76,4 @@ If several figures cannot all remain readable:
 - split the material across pages if page count is not fixed;
 - record the limitation when page count is fixed.
 
-Do not crop source evidence merely to fill a panel. A crop is acceptable only when it preserves a complete subfigure or a human/source-provided evidence region with axes, legends, labels, borders, and decisive annotations intact.
+Do not alter source evidence merely to fill a panel. If evidence is too small, change the layout allocation, reduce supporting material, or split the claim.

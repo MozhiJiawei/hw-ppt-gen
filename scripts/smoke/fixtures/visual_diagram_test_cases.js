@@ -347,7 +347,6 @@ function buildTemplateCases() {
       path: "assets/slides_ref/10 内容 图文并茂2.png",
       caption: "图文并茂参考：大视觉区域与侧边解读共同构成证据模块。",
       relevance: "high",
-      treatment: "fit_with_legend",
     },
   });
 

@@ -96,7 +96,7 @@ async function buildProbeDeck(request, pptxPath) {
     const item = entry.request || entry;
     marker(slide, `${id}\nMEASURE_KIND:${item.kind || "unknown"}`);
     const block = item.block || {};
-    const visualAnchor = block.visual_anchor || block.visualAnchor;
+    const visualAnchor = block.type === "supporting_component" ? block.component : block.visual_anchor;
     const area = probeArea(item);
     if (visualAnchor) {
       renderProbeVisualAnchor(slide, normalizeVisualAnchor(visualAnchor), area);

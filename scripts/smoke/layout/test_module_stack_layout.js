@@ -26,7 +26,7 @@ function evidenceBlock() {
 function cardsBlock() {
   return {
     type: "supporting_component",
-    visual_anchor: {
+    component: {
       id: "cards",
       title: "KPI",
       claim: "Measured readout",

@@ -20,9 +20,10 @@ const taxonomyRows = [];
 for (const [kind, templates] of Object.entries(OFFICIAL_TEMPLATES_BY_KIND)) {
   for (const template of templates) {
     const key = `${kind}/${template}`;
+    const component = { id: key.replace(/[^\w]+/g, "_"), kind, template };
     const row = classifyBlock({
       type: SUPPORTING_COMPONENT_KEYS.has(key) ? "supporting_component" : "visual_anchor",
-      visual_anchor: { id: key.replace(/[^\w]+/g, "_"), kind, template },
+      [SUPPORTING_COMPONENT_KEYS.has(key) ? "component" : "visual_anchor"]: component,
     });
     taxonomyRows.push({ key, ...row });
   }
@@ -88,7 +89,7 @@ function buildMeasuredFixtureRows() {
       key: "Quantity/data_cards",
       block: {
         type: "supporting_component",
-        visual_anchor: {
+        component: {
           kind: "Quantity",
           template: "data_cards",
           visual_spec: { cards: [{ label: "A", value: "7.45" }, { label: "B", value: "8.25" }, { label: "C", value: "4.71x" }] },
@@ -99,7 +100,7 @@ function buildMeasuredFixtureRows() {
       key: "Matrix/table",
       block: {
         type: "supporting_component",
-        visual_anchor: {
+        component: {
           kind: "Matrix",
           template: "table",
           visual_spec: { rows: [["项", "判断"], ["收益", "可复现"], ["边界", "需评估"]] },

@@ -2846,11 +2846,9 @@ function addMatrixTable(slide, rows, options = {}) {
 function drawNativeEvidence(slide, spec, area) {
   const source = spec.source || {};
   const imagePath = source.path ? path.resolve(source.path) : "";
-  const pad = 0;
-  const imageBox = { x: area.x + pad, y: area.y + pad, w: area.w - pad * 2, h: area.h - pad * 2 };
   if (imagePath && fs.existsSync(imagePath)) {
     const dimensions = readImageDimensions(imagePath);
-    const fitted = dimensions ? fitAreaContain(imageBox, dimensions.width, dimensions.height) : imageBox;
+    const fitted = dimensions ? fitAreaContain(area, dimensions.width, dimensions.height) : area;
     slide.addImage({ path: imagePath, ...fitted });
     return {
       image_area: fitted,
@@ -2859,7 +2857,7 @@ function drawNativeEvidence(slide, spec, area) {
     };
   } else {
     nativeTextCell(slide, source.path || source.id, { x: area.x + 0.08, y: area.y + 0.08, w: area.w - 0.16, h: area.h - 0.16, fontSize: 12, bold: true, color: "595959", align: "center", fill: "F7F7F7", stroke: "D9D9D9" });
-    return { image_area: imageBox, placeholder: true };
+    return { image_area: area, placeholder: true };
   }
 }
 

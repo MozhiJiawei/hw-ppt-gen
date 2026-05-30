@@ -59,12 +59,12 @@ Then load only what the task needs:
 4. Plan the deck before coding:
    - Use cover and contents pages for decks over four slides.
    - Do not add standalone chapter divider pages.
-   - Every content and summary page rendered through `addVisualAnchorContentSlide` must have `分析总结`, a page title, Huawei content framing, footer, and at least one real visual anchor: source evidence, source-backed chart/screenshot/table, or a generated diagram/chart that can be understood without reading the surrounding prose.
+   - Every content and summary page rendered through `addVisualAnchorContentSlide` must pass `contentLayout`, have `分析总结`, a page title, Huawei content framing, footer, and at least one real visual anchor: source evidence, source-backed chart/screenshot/table, or a generated diagram/chart that can be understood without reading the surrounding prose.
    - Pass brief-derived `title`, `titleNote`, `summary`, `sections`, `currentSection`, `source`, and `page` into `addVisualAnchorContentSlide` verbatim. Do not draw extra title, title-note, analysis-summary, footer, or page-number text after the helper returns.
    - In `two_column`, `three_column`, and `four_column` content layouts, every module must include at least one real visual anchor. `data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, and generated `heatmap` can support the module, but they do not count as its anchor.
    - For each content/summary page, identify the primary evidence object first. Then choose a fixed layout and supporting text.
-   - Before rendering, do an evidence-binding pass for every module: the module title, visual-anchor `claim`, and text lines must be about the same claim. If the brief's best evidence for a module lives inside an existing source figure, reuse the complete source figure or complete subfigure that proves it; do not pull a figure from another section just because the module needs a visual anchor.
-   - Do not crop source evidence as a layout shortcut. Cropping is allowed only to extract a complete subfigure or a human/source-provided region, and the crop must preserve axes, legends, labels, titles, borders, and the full plotted/diagrammed evidence object. If a complete evidence object is too small, rebalance layout, reduce supporting components/text, or split the point instead of cutting the image.
+   - Before rendering, do an evidence-binding pass for every module: the module title, visual-anchor `claim`, and text lines must be about the same claim. If the brief's best evidence is one complete source object, pass that image file as Evidence; do not pull a figure from another section just because the module needs a visual anchor.
+   - Evidence is an identity component: the image file passed to `source.path` is the image that appears in the deck. Do not alter source evidence to fit a layout. If the evidence object is too small, rebalance layout, reduce supporting components/text, or split the point.
    - Content layout is measured before drawing. If generation fails with primitive min/preferred/max diagnostics, simplify the module: remove secondary prose, reduce supporting components, or split the claim onto another slide. Do not add manual coordinates or bypass `contentLayout`.
    - Compress visible prose into short conclusion lines. Each line should state the judgment the evidence supports, not explain how to read the slide.
    - Use `emphasis` in text blocks for 1-3 decisive terms after the claim handle. The claim handle before `：` is a structural label: keep it bold black, not red. Move longer material into KPI cards or conclusion notes first. Use a table only when a real two-axis relationship would be lost as prose.
@@ -109,7 +109,7 @@ Then load only what the task needs:
 - `createHuaweiDeck(metadata)`: creates a 16:9 deck.
 - `addCoverSlide(pptx, data)`: creates a Huawei red-band cover.
 - `addTocSlide(pptx, data)`: creates a numbered contents page.
-- `addVisualAnchorContentSlide(pptx, data)`: creates summary/content pages with title, section tabs, `分析总结`, visual anchors, optional `contentLayout`, footer, and manifest entries.
+- `addVisualAnchorContentSlide(pptx, data)`: creates summary/content pages with title, section tabs, `分析总结`, required `contentLayout`, visual anchors, footer, and manifest entries.
 - `writeVisualAnchorManifest(pptx, fileName)`: writes rendered visual-anchor evidence for QA.
 
 ## Runtime Script Map

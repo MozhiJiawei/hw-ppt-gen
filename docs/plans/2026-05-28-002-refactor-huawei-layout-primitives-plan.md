@@ -10,7 +10,7 @@ origin: https://github.com/MozhiJiawei/hw-ppt-gen/issues/20
 
 ## Overview
 
-Introduce a measure-driven layout layer into the existing Huawei PPT generation path by first defining a complete semantic taxonomy for the body content area below the analysis summary, then implementing measurement and layout for the highest-impact primitives.
+Introduce a measure-driven layout layer into the existing Huawei PPT generation path by first defining a complete semantic taxonomy for the body region below the analysis summary, then implementing measurement and layout for the highest-impact primitives.
 
 This is **not** a clean-room rewrite and not an HTML/CSS renderer migration. The current main path can already produce strong Huawei-style PPT pages. The change should preserve that renderer and visual language while adding the missing pre-render layout contract:
 
@@ -87,7 +87,7 @@ The analysis-summary area and page chrome are outside this taxonomy for the firs
 
 ### Layout Containers
 
-- `ContentArea`: total body area below the analysis summary and above footer.
+- `BodyRegion`: total body region below the analysis summary and above footer.
 - `ColumnGrid`: fixed equal-width column families such as `two_column` and `three_column`.
 - `BiasedGrid`: large visual plus side cards/text, matching `biased_column`.
 - `FourGrid`: two-by-two module grid, matching `four_column`.
@@ -201,9 +201,7 @@ The first implementation should define the complete taxonomy and mapping even th
 - `scripts/pptx/hw_diagram_helpers.js`: existing visual rendering backend for evidence, native tables, data cards, diagrams, and generated visuals.
 - `scripts/pptx/hw_pptx_helpers.js`: existing text measurement helpers such as `estimateTextBoxHeight()`.
 - `scripts/qa/check_huawei_pptx.js`: current hard-QA checks already include evidence readability, text-frame mismatch, module alignment, block gap, visual frame gap, table overflow, plan/manifest parity, and brief layout fidelity.
-- `scripts/smoke/generate_content_layout_schema_smoke.js`: content-layout smoke deck to adapt for layout diagnostics.
 - `scripts/smoke/test_visual_anchor_content_contract.js`: contract smoke coverage for content layouts.
-- `scripts/smoke/test_qa_rule_regressions.js`: negative/positive QA rule fixtures.
 - `forward-tests/huawei-ppt-gen/tidar-evidence-readability`: regression target for evidence readability and density conflict handling.
 - `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout`: regression target for layout family fidelity and source-evidence readability.
 
@@ -463,7 +461,7 @@ flowchart TD
 - Map current visual-anchor/supporting-component/text concepts into taxonomy families and types.
 - Define support levels: `measured`, `estimated`, `legacy_fallback`, `unsupported`.
 - Define anchor eligibility: `real_anchor`, `supporting_component`, `not_anchor`.
-- Define the primitive roles used by the first measured subset: `ContentArea`, `ContentGrid`, `ModuleFrame`, `EvidenceStack`, `KpiRow`, `ConceptCardRow`, `MatrixTable`, `SketchDiagram`, `RichBulletBlock`.
+- Define the primitive roles used by the first measured subset: `BodyRegion`, `ContentGrid`, `ModuleFrame`, `EvidenceStack`, `KpiRow`, `ConceptCardRow`, `MatrixTable`, `SketchDiagram`, `RichBulletBlock`.
 - State that primitives expose size needs and resize policy, not page coordinates.
 - Define hard constraints vs soft preferences.
 - Define diagnostic fields that may appear under `content_layout_schema.module_layouts[].block_areas[]`.
@@ -654,7 +652,6 @@ else:
 - Create: `scripts/pptx/layout/adapters.js`
 - Modify: `scripts/pptx/hw_visual_anchor_slide.js`
 - Modify: `scripts/smoke/test_visual_anchor_content_contract.js`
-- Modify: `scripts/smoke/generate_content_layout_schema_smoke.js`
 
 **Approach:**
 - Convert normalized module blocks into primitive inputs:
@@ -699,7 +696,6 @@ else:
 
 **Files:**
 - Modify: `scripts/qa/check_huawei_pptx.js`
-- Modify: `scripts/smoke/test_qa_rule_regressions.js`
 - Create: `scripts/smoke/layout/test_layout_diagnostics.js`
 
 **Approach:**
@@ -719,7 +715,6 @@ else:
 
 **Patterns to follow:**
 - Existing `issue()` detail style in `scripts/qa/check_huawei_pptx.js`
-- Existing QA regression cases in `scripts/smoke/test_qa_rule_regressions.js`
 
 **Test scenarios:**
 - Happy path: A slide with evidence shrunk above floor passes QA and records non-error shrink diagnostics.
@@ -857,8 +852,6 @@ else:
 - Current composer: `scripts/pptx/hw_visual_anchor_slide.js`
 - Current visual renderer: `scripts/pptx/hw_diagram_helpers.js`
 - Current hard QA: `scripts/qa/check_huawei_pptx.js`
-- Content layout smoke: `scripts/smoke/generate_content_layout_schema_smoke.js`
 - Visual-anchor content contract smoke: `scripts/smoke/test_visual_anchor_content_contract.js`
-- QA regression smoke: `scripts/smoke/test_qa_rule_regressions.js`
 - TiDAR forward test: `forward-tests/huawei-ppt-gen/tidar-evidence-readability`
 - Aegaeon forward test: `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout`

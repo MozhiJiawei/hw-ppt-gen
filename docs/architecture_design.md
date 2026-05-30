@@ -285,7 +285,7 @@ Owned by:
 Responsibility:
 
 - record every rendered visual anchor and supporting component;
-- capture page, id, kind, template, renderer, render status, image dimensions, anchor area, image area, and layout metadata.
+- capture page, id, kind, template, renderer, render status, image dimensions, visual slot, image area, and layout metadata.
 
 Constraints:
 

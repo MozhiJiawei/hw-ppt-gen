@@ -12,28 +12,28 @@ function fixedContentLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop
   };
 }
 
-function contentLayoutAreas(layout, contentArea, options = {}) {
+function contentLayoutAreas(layout, layoutBounds, options = {}) {
   const gap = 0.18;
   if (layout.schema.special === "large_visual_with_side_cards") {
-    premeasureModuleWidthDemands([layout.modules[0]], layout.type, contentArea.w * 0.59, contentArea.h, options);
-    const visualDemand = measureModuleWidthDemand(layout.modules[0], layout.type, contentArea.w * 0.59, contentArea.h, options).preferred;
-    const requestedVisualShare = Number(layout.visualWeight || layout.visual_weight);
+    premeasureModuleWidthDemands([layout.modules[0]], layout.type, layoutBounds.w * 0.59, layoutBounds.h, options);
+    const visualDemand = measureModuleWidthDemand(layout.modules[0], layout.type, layoutBounds.w * 0.59, layoutBounds.h, options).preferred;
+    const requestedVisualShare = Number(layout.visualWeight);
     const visualShare = Number.isFinite(requestedVisualShare)
       ? Math.min(0.72, Math.max(0.52, requestedVisualShare))
-      : Math.min(0.68, Math.max(0.59, visualDemand / Math.max(0.1, contentArea.w)));
+      : Math.min(0.68, Math.max(0.59, visualDemand / Math.max(0.1, layoutBounds.w)));
     const sideGap = visualShare >= 0.64 ? 0.28 : 0.38;
-    const visualW = contentArea.w * visualShare;
-    const sideW = contentArea.w - visualW - sideGap;
+    const visualW = layoutBounds.w * visualShare;
+    const sideW = layoutBounds.w - visualW - sideGap;
     const sideCount = Math.max(1, layout.modules.length - 1);
     const sideCardGap = 0.14;
-    const sideCardH = (contentArea.h - sideCardGap * (sideCount - 1)) / sideCount;
+    const sideCardH = (layoutBounds.h - sideCardGap * (sideCount - 1)) / sideCount;
     return layout.modules.map((_, idx) => {
       if (idx === 0) {
-        return { x: contentArea.x + 0.46, y: contentArea.y, w: visualW - 0.46, h: contentArea.h };
+        return { x: layoutBounds.x + 0.46, y: layoutBounds.y, w: visualW - 0.46, h: layoutBounds.h };
       }
       return {
-        x: contentArea.x + visualW + sideGap,
-        y: contentArea.y + (idx - 1) * (sideCardH + sideCardGap),
+        x: layoutBounds.x + visualW + sideGap,
+        y: layoutBounds.y + (idx - 1) * (sideCardH + sideCardGap),
         w: sideW,
         h: sideCardH,
       };
@@ -41,48 +41,48 @@ function contentLayoutAreas(layout, contentArea, options = {}) {
   }
   if (layout.schema.grid) {
     const { rows, columns } = layout.schema.grid;
-    const cellW = (contentArea.w - gap * (columns - 1)) / columns;
-    const cellH = (contentArea.h - gap * (rows - 1)) / rows;
+    const cellW = (layoutBounds.w - gap * (columns - 1)) / columns;
+    const cellH = (layoutBounds.h - gap * (rows - 1)) / rows;
     return layout.modules.map((_, idx) => {
       const row = Math.floor(idx / columns);
       const col = idx % columns;
       return {
-        x: contentArea.x + col * (cellW + gap),
-        y: contentArea.y + row * (cellH + gap),
+        x: layoutBounds.x + col * (cellW + gap),
+        y: layoutBounds.y + row * (cellH + gap),
         w: cellW,
         h: cellH,
       };
     });
   }
-  const columnLayout = resolveEvidenceAwareColumnLayout(layout, contentArea, gap, options);
-  let x = contentArea.x;
+  const columnLayout = resolveEvidenceAwareColumnLayout(layout, layoutBounds, gap, options);
+  let x = layoutBounds.x;
   return columnLayout.widths.map((w) => {
-    const area = { x, y: contentArea.y, w, h: contentArea.h };
+    const area = { x, y: layoutBounds.y, w, h: layoutBounds.h };
     x += w + columnLayout.gap;
     return area;
   });
 }
 
-function collectBaseWidthMeasurementItems(layout, contentArea, options = {}) {
+function collectBaseWidthMeasurementItems(layout, layoutBounds, options = {}) {
   const gap = 0.18;
   if (layout.schema.special === "large_visual_with_side_cards") {
     const bodyArea = moduleBodyArea({
       x: 0,
       y: 0,
-      w: Math.max(0.4, contentArea.w * 0.59),
-      h: Math.max(0.6, contentArea.h),
+      w: Math.max(0.4, layoutBounds.w * 0.59),
+      h: Math.max(0.6, layoutBounds.h),
     });
     return collectPremeasurePrimitiveItems(normalizeModuleBlocks(layout.modules[0], {}), bodyArea, { ...options, layoutType: layout.type });
   }
   if (layout.schema.grid) return [];
   const columnCount = layout.schema.columns.length;
-  const initialAvailableW = contentArea.w - gap * (columnCount - 1);
+  const initialAvailableW = layoutBounds.w - gap * (columnCount - 1);
   const baseModuleW = initialAvailableW / columnCount;
   const bodyArea = moduleBodyArea({
     x: 0,
     y: 0,
     w: Math.max(0.4, baseModuleW),
-    h: Math.max(0.6, contentArea.h),
+    h: Math.max(0.6, layoutBounds.h),
   });
   return collectPremeasurePrimitiveItems(
     layout.modules.flatMap((module) => normalizeModuleBlocks(module, {})),
@@ -91,15 +91,15 @@ function collectBaseWidthMeasurementItems(layout, contentArea, options = {}) {
   );
 }
 
-function resolveEvidenceAwareColumnLayout(layout, contentArea, baseGap, options = {}) {
+function resolveEvidenceAwareColumnLayout(layout, layoutBounds, baseGap, options = {}) {
   const columnCount = layout.schema.columns.length;
-  const initialAvailableW = contentArea.w - baseGap * (columnCount - 1);
+  const initialAvailableW = layoutBounds.w - baseGap * (columnCount - 1);
   const baseModuleW = initialAvailableW / columnCount;
-  premeasureModuleWidthDemands(layout.modules, layout.type, baseModuleW, contentArea.h, options);
-  const demands = layout.modules.map((module) => measureModuleWidthDemand(module, layout.type, baseModuleW, contentArea.h, options));
+  premeasureModuleWidthDemands(layout.modules, layout.type, baseModuleW, layoutBounds.h, options);
+  const demands = layout.modules.map((module) => measureModuleWidthDemand(module, layout.type, baseModuleW, layoutBounds.h, options));
   const largestDemand = Math.max(1, ...demands.map((demand) => demand.preferred / Math.max(0.1, baseModuleW)));
   const gap = largestDemand >= 1.28 ? 0.08 : (largestDemand >= 1.12 ? 0.11 : baseGap);
-  const availableW = contentArea.w - gap * (columnCount - 1);
+  const availableW = layoutBounds.w - gap * (columnCount - 1);
   const widths = allocateMeasuredWidths(demands, availableW);
   return { gap, widths, availableW, demands };
 }

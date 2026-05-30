@@ -1,11 +1,12 @@
 const { classifyBlock } = require("./classify_blocks");
+const { getBlockVisualSpec } = require("./content_model");
 const { MEASURE_SUPPORT, RESIZE_POLICY } = require("./content_body_taxonomy");
 const { diagnostic } = require("./diagnostics");
 const { measureBlockWithPowerPoint, premeasureBlocksWithPowerPoint } = require("./powerpoint_measurement_provider");
 
 function measurePrimitive(block = {}, area = {}, options = {}) {
   const classification = classifyBlock(block);
-  const visualAnchor = block.visual_anchor || block.visualAnchor;
+  const visualAnchor = getBlockVisualSpec(block);
   const base = {
     primitive: classification,
     minSize: { w: Number(area.w || 0), h: 0.3 },
@@ -21,7 +22,7 @@ function measurePrimitive(block = {}, area = {}, options = {}) {
   if (classification.family === "Evidence") return measureEvidencePrimitive(base, visualAnchor, area, options);
   if (classification.type === "KpiCardRow") return measureDataCardsPrimitive(base, visualAnchor, area, options);
   if (classification.type === "NativeTable") return measureTablePrimitive(base, visualAnchor, area, options);
-  return measureVisualPrimitive(base, { type: block.type || "visual_anchor", visual_anchor: visualAnchor }, area, options);
+  return measureVisualPrimitive(base, measurableVisualBlock(block, visualAnchor), area, options);
 }
 
 function premeasurePrimitives(blocks = [], area = {}, options = {}) {
@@ -33,7 +34,7 @@ function collectPremeasurePrimitiveItems(blocks = [], area = {}, options = {}) {
   const items = [];
   blocks.filter(Boolean).forEach((block) => {
     const classification = classifyBlock(block);
-    const visualAnchor = block.visual_anchor || block.visualAnchor;
+    const visualAnchor = getBlockVisualSpec(block);
     if (classification.measureSupport === MEASURE_SUPPORT.UNSUPPORTED) return;
     if (!visualAnchor) {
       items.push({ block, area, classification });
@@ -42,7 +43,7 @@ function collectPremeasurePrimitiveItems(blocks = [], area = {}, options = {}) {
     if (classification.type === "KpiCardRow") {
       kpiProbeWidths(visualAnchor, area).forEach((width) => {
         items.push({
-          block: { type: "supporting_component", visual_anchor: visualAnchor },
+          block: { type: "supporting_component", component: visualAnchor },
           area: { ...area, w: width },
           classification,
         });
@@ -50,12 +51,17 @@ function collectPremeasurePrimitiveItems(blocks = [], area = {}, options = {}) {
       return;
     }
     if (classification.type === "NativeTable") {
-      items.push({ block: { type: "supporting_component", visual_anchor: visualAnchor }, area, classification });
+      items.push({ block: { type: "supporting_component", component: visualAnchor }, area, classification });
       return;
     }
-    items.push({ block: { type: block.type || "visual_anchor", visual_anchor: visualAnchor }, area, classification });
+    items.push({ block: measurableVisualBlock(block, visualAnchor), area, classification });
   });
   return items;
+}
+
+function measurableVisualBlock(block = {}, visualSpec = {}) {
+  if (block.type === "supporting_component") return { type: "supporting_component", component: visualSpec };
+  return { type: block.type || "visual_anchor", visual_anchor: visualSpec };
 }
 
 function measureTextPrimitive(base, block, area, options = {}) {
@@ -85,15 +91,18 @@ function measureEvidencePrimitive(base, visualAnchor, area, options) {
   const measuredWidth = Math.ceil((Number(bounds.w || Number(area.w || 0)) + 0.12) * 20) / 20;
   const availableWidth = Number(area.w || measuredWidth || 0);
   const availableHeight = Number(area.h || measuredHeight || 0);
-  const minWidth = Math.max(1.0, Math.min(availableWidth || measuredWidth, measuredWidth * 0.72));
-  const minHeight = Math.max(0.72, Math.min(availableHeight || measuredHeight, measuredHeight * 0.72));
+  const minWidth = Math.max(1.0, Math.min(availableWidth || measuredWidth, measuredWidth * 0.5));
+  const minHeight = Math.max(0.72, Math.min(availableHeight || measuredHeight, measuredHeight * 0.5));
   const preferredWidth = Math.max(minWidth, Math.min(availableWidth || measuredWidth, measuredWidth));
   const preferredHeight = Math.max(minHeight, Math.min(availableHeight || measuredHeight, measuredHeight));
   return {
     ...base,
     minSize: { w: minWidth, h: minHeight },
     preferredSize: { w: preferredWidth, h: preferredHeight },
-    maxUsefulSize: { w: Math.max(preferredWidth, availableWidth || preferredWidth), h: Math.max(preferredHeight, availableHeight || preferredHeight) },
+    maxUsefulSize: {
+      w: Math.max(preferredWidth, Math.min(availableWidth || preferredWidth, measuredWidth * 1.2)),
+      h: Math.max(preferredHeight, Math.min(availableHeight || preferredHeight, measuredHeight * 1.2)),
+    },
     resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT,
     measurement: measured.result,
     diagnostics: base.diagnostics,
@@ -101,7 +110,7 @@ function measureEvidencePrimitive(base, visualAnchor, area, options) {
 }
 
 function measureTablePrimitive(base, visualAnchor, area = {}, options = {}) {
-  const measured = powerPointMeasureOrError(base, { type: "supporting_component", visual_anchor: visualAnchor }, area, options);
+  const measured = powerPointMeasureOrError(base, { type: "supporting_component", component: visualAnchor }, area, options);
   if (!measured.ok) return measured.result;
   const bounds = measured.result.shape_bounds || {};
   const measuredHeight = Math.ceil((Number(bounds.h || 0) + 0.12) * 20) / 20;
@@ -150,7 +159,7 @@ function measureDataCardsPrimitive(base, visualAnchor, area = {}, options = {}) 
 }
 
 function measureDataCardsFit(base, visualAnchor, area = {}, options = {}) {
-  const block = { type: "supporting_component", visual_anchor: visualAnchor };
+  const block = { type: "supporting_component", component: visualAnchor };
   const candidates = kpiProbeWidths(visualAnchor, area);
   const available = candidates[0] || Math.max(0.2, Number(area.w || 0));
   let lastFailure = null;

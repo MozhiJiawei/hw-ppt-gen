@@ -35,7 +35,7 @@ assert(evidence.measurement?.shape_bounds?.w > 0, "Evidence COM measurement shou
 
 const cards = measurePrimitive({
   type: "supporting_component",
-  visual_anchor: {
+  component: {
     id: "cards",
     kind: "Quantity",
     template: "data_cards",
@@ -55,7 +55,7 @@ assert(cards.minSize.w > 0, "KPI row should report a width floor, not only heigh
 
 const narrowCards = measurePrimitive({
   type: "supporting_component",
-  visual_anchor: {
+  component: {
     id: "narrow_cards",
     kind: "Quantity",
     template: "data_cards",

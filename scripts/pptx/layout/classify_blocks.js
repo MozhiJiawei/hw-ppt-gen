@@ -5,10 +5,11 @@ const {
   safeText,
   taxonomyKey,
 } = require("./content_body_taxonomy");
+const { getBlockVisualSpec } = require("./content_model");
 
 function classifyBlock(block = {}) {
-  const visualAnchor = block.visual_anchor || block.visualAnchor;
-  const type = block.type || block.role || block.kind || "text";
+  const type = block.type || "text";
+  const visualAnchor = getBlockVisualSpec(block) || (["visual_anchor", "supporting_component"].includes(type) ? {} : null);
   const classification = visualAnchor
     ? classifyVisualAnchor(visualAnchor)
     : classifyTextBlock(block);

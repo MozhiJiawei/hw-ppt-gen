@@ -28,8 +28,6 @@ const {
 } = pptHelpers;
 
 const {
-  addEvidenceModule,
-  addSupportingCards,
   addVisualAnchorContentSlide,
   writeVisualAnchorManifest,
 } = visualSlide;
@@ -272,6 +270,26 @@ function exerciseDiagramInterfaces(specs) {
   assert(fs.existsSync(writeVisualAnchorImage(roughSpec, ASSET_DIR, { width: 720 })), "writeVisualAnchorImage should write an SVG image file");
 }
 
+function isSupportingOnlySpec(spec) {
+  return (spec.kind === "Quantity" && ["data_cards", "heatmap"].includes(spec.template))
+    || (spec.kind === "Hierarchy" && spec.template === "capability_stack")
+    || (spec.kind === "Matrix" && ["table", "capability_matrix"].includes(spec.template));
+}
+
+function contentModulesForSpec(spec, realAnchorSpec) {
+  if (!isSupportingOnlySpec(spec)) {
+    return [
+      { role: "visual_anchor", title: spec.title, visual_anchor: spec },
+      { role: "text", title: "导出检查", body: "统一正文页入口通过 contentLayout 渲染主视觉。" },
+    ];
+  }
+  return [
+    { role: "visual_anchor", title: "真实锚点", visual_anchor: realAnchorSpec },
+    { role: "content_panel", title: spec.title, blocks: [{ type: "supporting_component", component: spec }] },
+    { role: "text", title: "导出检查", body: "supporting component 随 contentLayout 一起渲染，但不充当真实锚点。" },
+  ];
+}
+
 function addPrimitiveSlide(pptx) {
   const slide = pptx.addSlide();
   const sample = cloneOptions({ value: "#C00000" });
@@ -295,20 +313,20 @@ function addPrimitiveSlide(pptx) {
   grayCard(slide, { x: 0.7, y: 2.39, w: 3.6, h: 1.3, title: "灰卡", body: ["redTitleCard", "grayCard", "textBox"] });
   textBox(slide, `主题色 ${HW_STYLE.color.red}`, { x: 4.6, y: 2.28, w: 3.2, h: 0.35, fontSize: 14, bold: true, color: HW_STYLE.color.red });
   textBox(slide, "表格能力由 Matrix/table 视觉锚点覆盖，不作为页面 primitive 暴露。", { x: 4.6, y: 2.8, w: 3.6, h: 0.55, fontSize: 12, color: HW_STYLE.color.text });
-  addSupportingCards(slide, [{ title: "辅卡接口", body: ["addSupportingCards 已调用", "不作为主视觉"] }], { x: 8.5, y: 2.05, w: 3.7, h: 1.8 });
+  textBox(slide, "正文侧边解读由 contentLayout 模块覆盖，不再暴露直接辅卡接口。", { x: 8.5, y: 2.05, w: 3.7, h: 0.6, fontSize: 12, color: HW_STYLE.color.text });
   addFooter(slide, { source: "开发测试", page: "03" });
 }
 
 function addDirectHelperSlides(pptx, specs) {
   const slide = pptx.addSlide();
   addPageTitle(slide, "直接渲染接口", {
-    subtitle: "底层 helper 与 addEvidenceModule",
+    subtitle: "底层 renderer 与 Evidence 输出",
     sections: ["接口覆盖"],
     currentSection: "接口覆盖",
   });
-  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页绕过正文页入口，专门验证底层 helper。" }] });
+  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页只验证图形 renderer；正文页路径由 contentLayout 覆盖。" }] });
   renderVisualAnchorPptNative(slide, specs.find((spec) => spec.template === "process"), { x: 0.7, y: 2.05, w: 5.7, h: 3.2 });
-  addEvidenceModule(slide, specs.find((spec) => spec.kind === "Evidence"), { x: 6.75, y: 2.05, w: 5.7, h: 3.2 });
+  renderVisualAnchorPptNative(slide, specs.find((spec) => spec.kind === "Evidence"), { x: 6.75, y: 2.05, w: 5.7, h: 3.2 });
   addFooter(slide, { source: "开发测试", page: "04" });
 }
 
@@ -328,6 +346,7 @@ async function assertNoNegativeExtents(fileName) {
 async function buildDeck() {
   const specs = visualSpecs();
   exerciseDiagramInterfaces(specs);
+  const realAnchorSpec = specs.find((spec) => spec.kind === "Sequence" && spec.template === "process");
 
   const pptx = createHuaweiDeck({ title: "PowerPoint COM interface coverage" });
   const sections = ["接口覆盖", "锚点覆盖", "导出验证"];
@@ -362,7 +381,11 @@ async function buildDeck() {
           { label: "导出目标", text: "该页必须能被 PowerPoint COM 打开并导出。" },
         ],
       },
-      visual_anchor: spec,
+      contentLayout: {
+        type: "biased_column",
+        reference: "06 内容 偏分栏",
+        modules: contentModulesForSpec(spec, realAnchorSpec),
+      },
       source: "开发测试",
       page: String(idx + 5).padStart(2, "0"),
     });
@@ -396,11 +419,11 @@ async function main() {
    const roughEntries = visualManifest.slides.filter((entry) => entry.renderer === "rough_svg");
    assert(roughEntries.length > 0, "interface test should include image-based content slides");
    roughEntries.forEach((entry) => {
-     assert(entry.image_area && entry.anchor_area, "image-based entries should record image_area and anchor_area");
+     assert(entry.image_area && entry.visual_slot, "image-based entries should record image_area and visual_slot");
      assert(entry.image_width > 0 && entry.image_height > 0, "image-based entries should record image dimensions");
      const imageRatio = entry.image_width / entry.image_height;
      const placedRatio = entry.image_area.w / entry.image_area.h;
-     assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_anchor_id} should preserve image aspect ratio`);
+     assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_component_id} should preserve image aspect ratio`);
    });
 
   console.log(`PowerPoint COM interface export test passed: ${OUT}`);

@@ -132,6 +132,6 @@ The next visual QA question is:
 
 > Is the source evidence still intact?
 
-Do not accept crops that cut off chart axes, tick labels, legends, titles, borders, diagram nodes, arrows, or table boundaries. Evidence readability is not just size; it is size plus source integrity.
+Do not accept source evidence that was altered to fit the frame. Evidence readability is not just size; it is size plus source identity.
 
 If not, redesign before accepting hard-QA success.

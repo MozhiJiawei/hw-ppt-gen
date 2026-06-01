@@ -137,6 +137,7 @@ Owned by:
 - `references/delivery_standard.md`
 - `references/page_standards.md`
 - `references/brief_contract.md`
+- `references/skeleton_plan_schema.md`
 - `references/layout_standards.md`
 - `references/content_layout_schema.md`
 - `references/evidence_schema.md`
@@ -148,6 +149,7 @@ Responsibility:
 - define immutable brief fields and how brief evidence is consumed;
 - define page, layout, evidence, and generated-visual schemas;
 - keep runtime-facing rules separate from implementation details and test fixtures.
+- document the skeleton/frame plan separately from creative body-content authoring.
 
 Constraints:
 
@@ -174,6 +176,26 @@ Constraints:
 - output handling is implementation-owned and must not be recorded as plan configuration;
 - plan must record all real visual anchors and supporting components on a slide, not only the first rendered object;
 - plan and manifest must be comparable by `id`, `kind`, and `template`.
+
+### Skeleton Plan
+
+Owned by:
+
+- `references/skeleton_plan_schema.md`
+- `scripts/pptx/hw_ppt_skeleton.js`
+- `scripts/pptx/skeleton/page_skeleton.js`
+
+Responsibility:
+
+- record the mechanical frame/chrome fields needed to render a blank-body Huawei deck skeleton;
+- preserve cover, contents, section tags, title, title note, analysis summary, footer source, and page number;
+- leave creative body content to later body-authoring layers.
+
+Constraints:
+
+- skeleton plan owns only the fields proven by `scripts/smoke/test_ppt_skeleton_rendering.js`;
+- body content, evidence inventory, reference images, visual anchors, supporting components, delivery constraints, and body slot coordinates are outside skeleton plan scope;
+- skeleton rendering must route summary/content pages through the same content-slide entrypoint while suppressing body rendering.
 
 ### Slide Schema
 
@@ -293,6 +315,25 @@ Constraints:
 - dense pages may have multiple manifest entries;
 - manifest must be sufficient for QA to prove the implementation matched the plan.
 
+### Feedback Contract
+
+Owned by:
+
+- `scripts/pptx/feedback/*`
+
+Responsibility:
+
+- define the shared `FeedbackIssue` shape used by compile, layout, render, and QA producers;
+- normalize existing diagnostics and QA issues without moving validation rules into the reporter;
+- provide agent-readable JSON and Markdown reports with target, detail, and repair context.
+
+Constraints:
+
+- feedback is a cross-layer data contract, not a Hard QA subsystem;
+- lower layers may emit or normalize feedback issues, but they must not depend on QA rules;
+- reporters must not become a second rule engine; producers remain responsible for detecting problems;
+- feedback targets should preserve the most specific available location, such as slide, module, block, component id, or schema path.
+
 ### Hard QA
 
 Owned by:
@@ -313,6 +354,7 @@ Constraints:
 - QA must fail implementation drift, missing real anchors, unrendered components, invalid schema, and plan/manifest mismatch;
 - QA must protect "at least one real anchor" without letting supporting components count as anchors or regressing into "exactly one anchor";
 - QA should distinguish accepted architecture exceptions from accidental bypass paths.
+- QA issues and layout diagnostics should be normalizable to the shared `FeedbackIssue` shape for agent repair, without moving QA rules into the reporter.
 
 ### Smoke Tests
 

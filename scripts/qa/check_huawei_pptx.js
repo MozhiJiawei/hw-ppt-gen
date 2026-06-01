@@ -12,6 +12,12 @@ const {
   estimateTextBoxHeight: estimateGeneratedTextBoxHeight,
   estimateWrappedLines: estimateGeneratedWrappedLines,
 } = require("../pptx/hw_pptx_helpers");
+const {
+  attachFeedbackIssue,
+  normalizeQaIssue,
+  repairsForIssueType,
+} = require("../pptx/feedback/feedback_issue");
+const { feedbackToMarkdown } = require("../pptx/feedback/feedback_reporter");
 
 const ALLOWED_FONTS = new Set([
   "Microsoft YaHei",
@@ -110,8 +116,29 @@ function ensureTmpOutput(fileName) {
   return fileName;
 }
 
+function feedbackOutPath(reportOutPath) {
+  if (!reportOutPath) return null;
+  const parsed = path.parse(reportOutPath);
+  return path.join(parsed.dir, `${parsed.name}.feedback.md`);
+}
+
 function issue(slide, type, severity, message, detail = {}) {
-  return { slide, type, severity, message, ...detail };
+  const legacyIssue = { slide, type, severity, message, ...detail };
+  return attachFeedbackIssue(legacyIssue, {
+    code: type,
+    severity,
+    phase: detail.phase || "qa",
+    target: detail.target || {
+      slide,
+      moduleIndex: detail.module_index,
+      moduleTitle: detail.module_title,
+      blockIndex: detail.block_index,
+      componentId: detail.visual_component_id || detail.component_id,
+    },
+    message,
+    details: detail.details || detail,
+    repairs: detail.repairs || repairsForIssueType(type),
+  });
 }
 
 function slideNumber(fileName) {
@@ -2039,6 +2066,7 @@ async function main() {
     generated_at: new Date().toISOString(),
     summary: summarize(filteredIssues, slides.length),
     issues: filteredIssues,
+    feedback_issues: filteredIssues.map(normalizeQaIssue),
   };
 
   const text = JSON.stringify(report, null, 2);
@@ -2046,6 +2074,7 @@ async function main() {
     const outPath = ensureTmpOutput(args.out);
     fs.mkdirSync(path.dirname(outPath), { recursive: true });
     fs.writeFileSync(outPath, text, "utf8");
+    fs.writeFileSync(feedbackOutPath(outPath), feedbackToMarkdown(filteredIssues), "utf8");
   }
 
   console.log(text);

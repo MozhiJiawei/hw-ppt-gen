@@ -2,9 +2,6 @@ const fs = require("fs");
 const path = require("path");
 const {
   HW_STYLE,
-  addAnalysisSummary,
-  addFooter,
-  addPageTitle,
   cloneOptions,
   estimateTextBoxHeight,
   grayCard,
@@ -12,6 +9,7 @@ const {
   safeText,
   textBox,
 } = require("./hw_pptx_helpers");
+const { addHuaweiPptPageSkeleton } = require("./skeleton/page_skeleton");
 const {
   createVisualAnchorImage,
   readImageDimensions,
@@ -829,33 +827,28 @@ function fitAreaContain(area, imageWidth, imageHeight) {
 }
 
 function addVisualAnchorContentSlide(pptx, data = {}) {
+  if (data.skeletonOnly || data.renderMode === "skeleton") {
+    return addHuaweiPptPageSkeleton(pptx, data).slide;
+  }
+
   const contentLayout = normalizeContentLayout(data.contentLayout);
   if (!contentLayout) throw new Error("Content slide requires contentLayout; put visual anchors under contentLayout.modules[].blocks[].visual_anchor.");
 
-  const slide = pptx.addSlide();
   const measurementSession = ensureMeasurementSession(pptx);
-  const titleLayout = addPageTitle(slide, data.title || "页面标题", {
-    kicker: data.kicker || "",
-    subtitle: data.titleNote || data.titleSubtitle || "",
-    sections: data.sections || [],
-    currentSection: data.currentSection || data.section,
-    fixedChrome: true,
-  });
-  const summaryY = HW_STYLE.summary.y;
-  const contentTop = HW_STYLE.summary.contentTop;
-  addAnalysisSummary(slide, data.summary, { y: summaryY });
-
   const visualCaption = normalizeVisualAnchorCaption(data);
   const highlightReason = normalizeHighlightReason(data);
   const scoreBasis = safeText(data.scoreBasis ?? data.score_basis ?? "");
   let anchorResults = [];
   let layoutInfo = null;
   let resolvedLayoutType = null;
-  const result = renderContentLayout(slide, data, contentLayout, visualCaption, contentTop, { measurementSession });
+  const skeleton = addHuaweiPptPageSkeleton(pptx, data, {
+    renderBody: ({ slide, contentTop }) => renderContentLayout(slide, data, contentLayout, visualCaption, contentTop, { measurementSession }),
+  });
+  const slide = skeleton.slide;
+  const result = skeleton.bodyResult;
   anchorResults = result.anchorResults;
   layoutInfo = result.layoutInfo;
   resolvedLayoutType = layoutInfo?.type || null;
-  addFooter(slide, { source: data.source, page: data.page });
 
   anchorResults.forEach((anchorResult) => {
     const visualRole = visualComponentRole(anchorResult.visualAnchor);

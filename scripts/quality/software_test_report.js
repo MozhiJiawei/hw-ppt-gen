@@ -51,6 +51,27 @@ const TEST_CASES = [
     ],
   },
   {
+    id: "ppt-skeleton-rendering",
+    category: "内容页契约",
+    title: "PPT 骨架渲染固定走 addVisualAnchorContentSlide 且正文区域留白。",
+    command: ["node", ["scripts/smoke/test_ppt_skeleton_rendering.js"]],
+    script: "scripts/smoke/test_ppt_skeleton_rendering.js",
+    checks: [
+      "deck 级骨架 helper 渲染每个总结/正文页面时必须调用 addVisualAnchorContentSlide。",
+      "forward-test 真实 brief 可以先转成 skeleton plan，再渲染封面、目录、总结页和正文页骨架。",
+      "plan fixture 可以直接渲染骨架 PPT。",
+      "标题、标题说明、章节 tag、分析总结必须进入 PPT 文本层。",
+      "分析总结以下的正文内容、参考图片说明和 source image 路径必须保持不渲染，留给动态渲染引擎。",
+    ],
+    artifacts: [
+      artifact("Aegaeon forward-test brief", "forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout/candidate/input/ppt_content_brief.md"),
+      artifact("PPT skeleton plan fixture", "scripts/smoke/fixtures/ppt_skeleton_plan.json"),
+      artifact("brief 转换出的 skeleton plan", ".tmp/ppt_skeleton_smoke/brief_skeleton_plan.json"),
+      pptArtifact("brief-backed skeleton PPTX", ".tmp/ppt_skeleton_smoke/brief_skeleton.pptx", ".tmp/software_test_report/pptx/ppt_skeleton_from_brief"),
+      pptArtifact("plan-backed skeleton PPTX", ".tmp/ppt_skeleton_smoke/plan_skeleton.pptx", ".tmp/software_test_report/pptx/ppt_skeleton_from_plan"),
+    ],
+  },
+  {
     id: "diagram-helper-contract",
     category: "视觉模板",
     title: "所有视觉模板遵守 schema、renderer 和文本容量规则。",
@@ -174,6 +195,24 @@ const TEST_CASES = [
       "error 级 layout_manager_fallback 会被识别为 hard diagnostics。",
     ],
     artifacts: [],
+  },
+  {
+    id: "feedback-issue-contract",
+    category: "反馈诊断",
+    title: "布局诊断和 QA 问题可以统一为 FeedbackIssue。",
+    command: ["node", ["scripts/smoke/test_feedback_issue_contract.js"]],
+    script: "scripts/smoke/test_feedback_issue_contract.js",
+    checks: [
+      "layout diagnostic 保持原有字段，同时携带 layout phase 的 FeedbackIssue。",
+      "QA issue 可以规范化为 code、severity、phase、target、details、repairs。",
+      "Markdown/JSON reporter 可以按 slide/module/block 分组输出修复建议。",
+    ],
+    artifacts: [
+      artifact("FeedbackIssue JSON 示例", ".tmp/feedback_issue_contract/feedback_issues.json"),
+      artifact("FeedbackIssue Markdown 报告", ".tmp/feedback_issue_contract/feedback_issues.md"),
+      artifact("真实 QA 失败 JSON 报告", ".tmp/feedback_issue_contract/qa_failure_report.json"),
+      artifact("真实 QA 失败 Feedback Markdown", ".tmp/feedback_issue_contract/qa_failure_report.feedback.md"),
+    ],
   },
   {
     id: "tidar-three-column-layout",

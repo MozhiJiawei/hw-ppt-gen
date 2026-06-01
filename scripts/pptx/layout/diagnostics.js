@@ -1,14 +1,28 @@
+const {
+  createFeedbackIssue,
+  normalizeLayoutDiagnostic,
+} = require("../feedback/feedback_issue");
+
 function diagnostic(code, severity, message, detail = {}) {
-  return {
+  const item = {
     code,
     severity,
+    phase: detail.phase || "layout",
     message,
     ...detail,
+  };
+  return {
+    ...item,
+    feedback: normalizeLayoutDiagnostic(item, detail.context || {}),
   };
 }
 
 function hasHardDiagnostics(diagnostics = []) {
   return diagnostics.some((item) => item && item.severity === "error");
+}
+
+function diagnosticsToFeedbackIssues(diagnostics = [], context = {}) {
+  return diagnostics.map((item) => item?.feedback || normalizeLayoutDiagnostic(item, context)).map(createFeedbackIssue);
 }
 
 function roundRect(area) {
@@ -27,6 +41,7 @@ function round(value) {
 
 module.exports = {
   diagnostic,
+  diagnosticsToFeedbackIssues,
   hasHardDiagnostics,
   round,
   roundRect,

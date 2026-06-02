@@ -274,9 +274,9 @@ function visualSpecPayload(template) {
       highlight: "sp3",
     },
     tree: {
-      nodes: ["root", "layout", "measure", "render", "qa"],
-      edges: [["root", "layout"], ["root", "measure"], ["layout", "render"], ["measure", "qa"]],
-      labels: { root: "主路径", layout: "排版层", measure: "COM测量", render: "渲染", qa: "QA" },
+      nodes: ["root", "layout", "measure", "render", "review"],
+      edges: [["root", "layout"], ["root", "measure"], ["layout", "render"], ["measure", "review"]],
+      labels: { root: "主路径", layout: "排版层", measure: "COM测量", render: "渲染", review: "审阅" },
       highlight: "measure",
     },
     layered_architecture: {
@@ -306,7 +306,7 @@ function visualSpecPayload(template) {
     capability_matrix: gridPayload(),
     hub_spoke_network: {
       hub: { id: "hub", label: "COM broker" },
-      nodes: [{ id: "n1", label: "measure" }, { id: "n2", label: "export" }, { id: "n3", label: "QA" }],
+      nodes: [{ id: "n1", label: "measure" }, { id: "n2", label: "export" }, { id: "n3", label: "review" }],
       edges: [["hub", "n1"], ["hub", "n2"], ["hub", "n3"]],
       highlight: "n1",
     },

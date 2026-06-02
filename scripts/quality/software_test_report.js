@@ -30,28 +30,6 @@ const TEST_CASES = [
     ],
   },
   {
-    id: "visual-anchor-content-contract",
-    category: "内容页契约",
-    title: "内容页统一入口会记录视觉锚点、布局和图注证据。",
-    command: ["node", ["scripts/smoke/test_visual_anchor_content_contract.js"]],
-    script: "scripts/smoke/test_visual_anchor_content_contract.js",
-    checks: [
-      "内容页模块只暴露 addVisualAnchorContentSlide、premeasureVisualAnchorContentSlides、writeVisualAnchorManifest。",
-      "图片型视觉锚点必须在 manifest 中记录 renderer、image format、slot、image area，并保持等比放置。",
-      "图注和来源说明留在 PPT 文本层，不进入 visual_spec。",
-      "瘦高 evidence 自动选择左右排布，Evidence、KPI、正文混排时 KPI 高度不能被压扁。",
-      "direct table block、supporting-only 页面、手工 body layout 都必须失败。",
-    ],
-    artifacts: [
-      artifact("输出证据 manifest", ".tmp/visual_anchor_contract_output_manifest.json"),
-      artifact("图片等比 manifest", ".tmp/visual_anchor_contract_image_placement_manifest.json"),
-      artifact("图注 manifest", ".tmp/visual_anchor_contract_caption_manifest.json"),
-      artifact("自动流向 manifest", ".tmp/visual_anchor_contract_auto_flow_manifest.json"),
-      artifact("KPI 高度 manifest", ".tmp/visual_anchor_contract_data_card_height_manifest.json"),
-      artifact("二/三分栏图注 manifest", ".tmp/visual_anchor_contract_column_caption_manifest.json"),
-    ],
-  },
-  {
     id: "ppt-skeleton-rendering",
     category: "内容页契约",
     title: "PPT 骨架渲染固定走 addVisualAnchorContentSlide 且正文区域留白。",
@@ -201,24 +179,6 @@ const TEST_CASES = [
     artifacts: [],
   },
   {
-    id: "feedback-issue-contract",
-    category: "反馈诊断",
-    title: "布局诊断和 QA 问题可以统一为 FeedbackIssue。",
-    command: ["node", ["scripts/smoke/test_feedback_issue_contract.js"]],
-    script: "scripts/smoke/test_feedback_issue_contract.js",
-    checks: [
-      "layout diagnostic 保持原有字段，同时携带 layout phase 的 FeedbackIssue。",
-      "QA issue 可以规范化为 code、severity、phase、target、details、repairs。",
-      "Markdown/JSON reporter 可以按 slide/module/block 分组输出修复建议。",
-    ],
-    artifacts: [
-      artifact("FeedbackIssue JSON 示例", ".tmp/feedback_issue_contract/feedback_issues.json"),
-      artifact("FeedbackIssue Markdown 报告", ".tmp/feedback_issue_contract/feedback_issues.md"),
-      artifact("真实 QA 失败 JSON 报告", ".tmp/feedback_issue_contract/qa_failure_report.json"),
-      artifact("真实 QA 失败 Feedback Markdown", ".tmp/feedback_issue_contract/qa_failure_report.feedback.md"),
-    ],
-  },
-  {
     id: "body-dsl-registry",
     category: "Body DSL",
     title: "Body DSL 组件注册表定义 AI 可发现组件和约束边界。",
@@ -295,6 +255,32 @@ const TEST_CASES = [
       "Feedback markdown 可以给人类可读的 phase/path/message。",
     ],
     artifacts: [],
+  },
+  {
+    id: "runtime-qa-pipeline",
+    category: "运行态 QA",
+    title: "运行态 QA 按 DSL、测量、排版、最终产物分层输出可追踪诊断。",
+    command: ["node", ["scripts/smoke/qa/run_runtime_qa_smoke.js"]],
+    script: "scripts/smoke/qa/run_runtime_qa_smoke.js",
+    checks: [
+      "DSL parser 产出 selector、source span 和 code frame。",
+      "compile IR 暴露可序列化 render model、visible primitives 和 DSL target。",
+      "DSL input runtime checks 只覆盖 body 缺失、不可编译、真实锚点缺失和证据链缺口。",
+      "measurement/layout runtime checks 使用构造 IR 覆盖每个已确认 QA code。",
+      "render/export fallback 只报告 artifact/slide/deck target，不要求 DSL 映射。",
+      "page runner 保证单页失败不会阻塞其他页的诊断报告。",
+      "retired QA entrypoint 和旧 smoke 名称不会重新进入 scripts。",
+    ],
+    artifacts: [
+      artifact("Runtime QA JSON 诊断报告", ".tmp/runtime_qa_pipeline/runtime_qa_report.json"),
+      artifact("Runtime QA Markdown 诊断报告", ".tmp/runtime_qa_pipeline/runtime_qa_report.md"),
+      artifact("Runtime QA DSL case matrix", ".tmp/runtime_qa_pipeline/dsl_runtime_case_matrix.md"),
+      artifact("Runtime QA DSL IR", ".tmp/runtime_qa_pipeline/page_04.dsl-ir.json"),
+      artifact("Runtime QA compile IR", ".tmp/runtime_qa_pipeline/page_04.compile-ir.json"),
+      artifact("Runtime QA measurement IR", ".tmp/runtime_qa_pipeline/page_04.measurement-ir.json"),
+      artifact("Runtime QA layout IR", ".tmp/runtime_qa_pipeline/page_05.layout-ir.json"),
+      artifact("Runtime QA plan", "docs/plans/2026-06-02-001-refactor-runtime-qa-pipeline-plan.md"),
+    ],
   },
   {
     id: "body-dsl-bad-case-feedback-matrix",
@@ -631,7 +617,7 @@ function renderReport(results) {
 <main>
   <header>
     <h1>hw-ppt-gen 软件测试报告</h1>
-    <p class="muted">只统计仓库自身的软件测试，不统计 Agent 交付 QA。PPTX 交付件均通过 PowerPoint COM 导出为 PNG 后在页面内展示。</p>
+    <p class="muted">只统计仓库自身的软件测试，不统计 Agent 交付审阅。PPTX 交付件均通过 PowerPoint COM 导出为 PNG 后在页面内展示。</p>
     <div class="kpis">
       <span>生成时间：${htmlEscape(generatedAt)}</span>
       <span>测试用例：${results.length}</span>

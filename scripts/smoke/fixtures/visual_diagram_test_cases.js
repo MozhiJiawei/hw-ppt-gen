@@ -291,20 +291,20 @@ function buildTemplateCases() {
   });
 
   cases.push(withMeta("long_text_tree_1", "Hierarchy", "tree", "长文本回归：树图节点需要在合理长度内换行，不与相邻节点重叠。", {
-    nodes: ["scripts", "pptx", "qa", "smoke", "helpers", "export", "checker", "tests"],
+    nodes: ["scripts", "pptx", "review", "smoke", "helpers", "export", "checker", "tests"],
     edges: [
       ["scripts", "pptx"],
-      ["scripts", "qa"],
+      ["scripts", "review"],
       ["scripts", "smoke"],
       ["pptx", "helpers"],
       ["pptx", "export"],
-      ["qa", "checker"],
+      ["review", "checker"],
       ["smoke", "tests"],
     ],
     labels: {
       scripts: "脚本入口统一调度工作区",
       pptx: "生成与导出目录职责边界清晰",
-      qa: "交付前硬规则检查目录",
+      review: "交付前检查目录",
       smoke: "冒烟测试覆盖长文本",
       helpers: "页面框架与图表辅助函数",
       export: "PPTX 图片导出与参考图审阅",
@@ -318,7 +318,7 @@ function buildTemplateCases() {
     steps: [
       { id: "plan", label: "先完成页面级观点规划" },
       { id: "render", label: "SVG 图内文本按宽度换行" },
-      { id: "qa", label: "导出图片逐页视觉检查" },
+      { id: "review", label: "导出图片逐页视觉检查" },
       { id: "ship", label: "沉淀为可复用技能契约" },
     ],
     highlight: "render",
@@ -329,10 +329,10 @@ function buildTemplateCases() {
     nodes: [
       { id: "diagram", label: "hw_diagram_helpers.js" },
       { id: "native", label: "PPT 原生图形模块" },
-      { id: "qa", label: "check_huawei_pptx.js" },
+      { id: "review", label: "导出图片与人工检查" },
       { id: "export", label: "export_pptx_images.js" },
     ],
-    edges: [["hub", "diagram"], ["hub", "native"], ["hub", "qa"], ["hub", "export"], ["diagram", "qa"]],
+    edges: [["hub", "diagram"], ["hub", "native"], ["hub", "review"], ["hub", "export"], ["diagram", "review"]],
     highlight: "diagram",
   }, DEFAULT_LAYOUT));
 

@@ -81,9 +81,9 @@ Collect the candidate's output directory and inspect:
 - generated `.pptx`
 - deck plan JSON
 - visual-anchor manifest JSON
-- hard-QA report
+- exported slide PNG directory and visual-review notes
 - exported slide PNGs
-- visual-QA notes
+- visual-review notes
 - generation script, only as supporting evidence
 
 Use `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout/judge/rubric.md` to judge the output.
@@ -115,7 +115,7 @@ Use this template:
 - Evidence Readability: [0-3]
 - Text Compression: [0-3]
 - Information Density: [0-3]
-- QA Discipline: [0-3]
+- Review Discipline: [0-3]
 
 ## Blocking Findings
 
@@ -134,7 +134,7 @@ Use this template:
 - [PPTX path]
 - [Plan path]
 - [Manifest path]
-- [QA report path]
+- [Visual-review notes path]
 - [Slide PNG directory]
 ```
 

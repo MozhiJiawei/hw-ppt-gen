@@ -56,9 +56,9 @@ Collect the candidate's output directory and inspect:
 - generated `.pptx`;
 - deck plan JSON;
 - visual-anchor manifest JSON;
-- hard-QA report;
+- exported slide PNG directory and visual inspection notes;
 - exported slide PNGs;
-- visual-QA notes;
+- visual-review notes;
 - generation script, only as supporting evidence.
 
 Use `forward-tests/huawei-ppt-gen/tidar-evidence-readability/judge/rubric.md` to judge the output.

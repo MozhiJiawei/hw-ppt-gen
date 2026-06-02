@@ -180,6 +180,8 @@ function summarizeNode(node) {
     role: node.role,
     path: node.source?.path,
     selector: node.source?.selector,
+    sourceSpan: node.source?.sourceSpan,
+    codeFrame: node.source?.codeFrame,
     semanticStack: node.source?.semanticStack,
     id: node.props?.id,
   };
@@ -192,6 +194,8 @@ function dslMeta(node) {
     role: node.role,
     path: node.source?.path,
     selector: node.source?.selector,
+    sourceSpan: node.source?.sourceSpan,
+    codeFrame: node.source?.codeFrame,
     semanticStack: node.source?.semanticStack,
     id: props.id,
     priority: props.priority,

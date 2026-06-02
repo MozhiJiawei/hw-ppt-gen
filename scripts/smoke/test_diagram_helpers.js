@@ -269,12 +269,12 @@ function testReasonableLongTextWrapsInsideSvgViews() {
     kind: "Hierarchy",
     template: "tree",
     visual_spec: {
-      nodes: ["scripts", "pptx", "qa", "smoke", "helpers", "export", "checker", "tests"],
-      edges: [["scripts", "pptx"], ["scripts", "qa"], ["scripts", "smoke"], ["pptx", "helpers"], ["pptx", "export"], ["qa", "checker"], ["smoke", "tests"]],
+      nodes: ["scripts", "pptx", "review", "smoke", "helpers", "export", "checker", "tests"],
+      edges: [["scripts", "pptx"], ["scripts", "review"], ["scripts", "smoke"], ["pptx", "helpers"], ["pptx", "export"], ["review", "checker"], ["smoke", "tests"]],
       labels: {
         scripts: "脚本入口统一调度工作区",
         pptx: "生成与导出目录职责边界清晰",
-        qa: "交付前硬规则检查目录",
+        review: "交付前检查目录",
         smoke: "冒烟测试覆盖长文本",
         helpers: "页面框架与图表辅助函数",
         export: "PPTX 图片导出与参考图审阅",
@@ -284,7 +284,7 @@ function testReasonableLongTextWrapsInsideSvgViews() {
       highlight: "pptx",
     },
   }));
-  assertIncludes(tree, ["生成与导出", "硬规则", "冒烟测试"], "long_text_tree");
+  assertIncludes(tree, ["生成与导出", "检查目录", "冒烟测试"], "long_text_tree");
   assertNoOversizedSvgTextLine(tree, 520, "long_text_tree");
 
   const process = createVisualAnchorSvg(baseSpec({
@@ -310,10 +310,10 @@ function testReasonableLongTextWrapsInsideSvgViews() {
       nodes: [
         { id: "diagram", label: "hw_diagram_helpers.js" },
         { id: "native", label: "PPT 原生图形模块" },
-        { id: "qa", label: "check_huawei_pptx.js" },
+        { id: "review", label: "导出图片与人工检查" },
         { id: "export", label: "export_pptx_images.js" },
       ],
-      edges: [["hub", "diagram"], ["hub", "native"], ["hub", "qa"], ["hub", "export"], ["diagram", "qa"]],
+      edges: [["hub", "diagram"], ["hub", "native"], ["hub", "review"], ["hub", "export"], ["diagram", "review"]],
       highlight: "diagram",
     },
   }));

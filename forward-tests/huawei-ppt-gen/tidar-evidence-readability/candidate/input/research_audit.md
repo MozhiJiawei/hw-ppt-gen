@@ -204,5 +204,5 @@ Claims to soften:
 - Stage 3 chapter 1: user approved Page 4-5 and requested MTP and traditional speculative reference figures downloaded locally.
 - Stage 3 chapter 2: user revised split to Page 6 algorithm/structure and Page 7 benefits, then approved.
 - Stage 3 chapter 3: user revised dimensions to scenario boundary and training cost, requested quantitative GSM8K vs MBPP+ gap, then approved.
-- Final hard-constraint bundle: QA passed and user approved with "ok".
+- Final hard-constraint bundle: review passed and user approved with "ok".
 

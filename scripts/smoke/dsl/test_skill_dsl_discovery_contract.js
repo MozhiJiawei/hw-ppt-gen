@@ -19,7 +19,7 @@ function main() {
   assert(skill.includes("node scripts/pptx/dsl/describe_component.js <ComponentTag>"), "SKILL should expose per-component discovery");
   assert(skill.includes("bodyDsl"), "SKILL should instruct agents to author bodyDsl");
   assert(!skill.includes("_plan.json"), "SKILL must not teach agents to write old plan artifacts for body authoring");
-  assert(!skill.includes("--require-plan"), "SKILL QA command must not require old plan artifacts");
+  assert(!skill.includes("--require-plan"), "SKILL must not require old plan artifacts");
   assert(!skill.includes("visual-anchor `claim`"), "SKILL must not teach visual_anchor authoring vocabulary");
   assert(!skill.includes("Use `Evidence` anchors"), "SKILL must not teach old Evidence anchor authoring");
 

@@ -68,4 +68,4 @@ Module stack layout records:
 - shrink diagnostics;
 - fallback or infeasible diagnostics.
 
-Diagnostics augment QA and manifest checks. They do not replace visual-anchor parity, real-anchor requirements, or PowerPoint render evidence.
+Diagnostics augment manifest and render-evidence checks. They do not replace visual-anchor parity, real-anchor requirements, or PowerPoint render evidence.

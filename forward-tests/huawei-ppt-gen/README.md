@@ -52,4 +52,4 @@ The child-agent prompt should contain only:
 - the required output directory under `.tmp/forward-tests/<case-id>/<run-id>/`;
 - at most one short user-requested reminder sentence for that run.
 
-Do not include strategy explanations, judging criteria, expected fixes, layout advice, evidence-selection policy, QA rubric details, or summaries of previous failures in the child-agent dispatch prompt. Keep those in `fixture-manifest.md`, `judge/rubric.md`, or the main agent's judgment context only.
+Do not include strategy explanations, judging criteria, expected fixes, layout advice, evidence-selection policy, review rubric details, or summaries of previous failures in the child-agent dispatch prompt. Keep those in `fixture-manifest.md`, `judge/rubric.md`, or the main agent's judgment context only.

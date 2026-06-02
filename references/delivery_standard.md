@@ -122,16 +122,16 @@ Use a generated table only when the axes matter:
 - Main page title is 24 pt Huawei red; title note is 18 pt Huawei red.
 - Body text is 12 pt by default; use 14 pt only for larger conclusion boxes.
 
-## QA Mindset
+## Visual Review Mindset
 
-The first visual QA question is not "does the slide contain a visual anchor?" It is:
+The first visual-review question is not "does the slide contain a visual anchor?" It is:
 
 > Can the reader understand the claim by looking at the primary evidence and nearby explanation?
 
-The next visual QA question is:
+The next visual-review question is:
 
 > Is the source evidence still intact?
 
 Do not accept source evidence that was altered to fit the frame. Evidence readability is not just size; it is size plus source identity.
 
-If not, redesign before accepting hard-QA success.
+If not, redesign before accepting the deck.

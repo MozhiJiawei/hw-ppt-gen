@@ -17,7 +17,7 @@ Validate the Skill's layout-realization ability after the upstream human-in-the-
 - TOC / section structure;
 - parser-derived `bodyLayout.type`.
 
-The candidate-facing prompt is intentionally minimal. It should only point the candidate at the brief and output location; all behavior about brief consumption, layout realization, evidence readability, text compression, module density, Huawei visual consistency, QA, and artifact shape must come from the repository Skill and normal runtime references.
+The candidate-facing prompt is intentionally minimal. It should only point the candidate at the brief and output location; all behavior about brief consumption, layout realization, evidence readability, text compression, module density, Huawei visual consistency, review, and artifact shape must come from the repository Skill and normal runtime references.
 
 ## Candidate-Facing Assets
 
@@ -63,7 +63,7 @@ Expected artifacts are judged after the run, but should be required by the Skill
 - deck plan JSON;
 - visual-anchor manifest JSON;
 - exported slide PNGs;
-- hard-QA report;
-- visual-QA notes.
+- exported slide PNG directory and visual-review notes;
+- visual-review notes.
 
 The fixture does not include runtime automation. It only fixes the input, candidate prompt, and judging criteria.

@@ -40,7 +40,7 @@ Use for architecture layers, module boundaries, and cross-layer edges.
     {
       "label": "验证层",
       "items": [
-        "qa"
+        "review"
       ]
     }
   ],
@@ -55,7 +55,7 @@ Use for architecture layers, module boundaries, and cross-layer edges.
     ],
     [
       "engine",
-      "qa"
+      "review"
     ],
     [
       "policy",

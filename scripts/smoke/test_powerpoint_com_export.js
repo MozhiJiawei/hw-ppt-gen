@@ -116,11 +116,11 @@ function visualSpecs() {
     }),
     baseSpec("Quantity", "proportion_chart", {
       total_label: "接口覆盖",
-      segments: [{ label: "页面", value: 30 }, { label: "图形", value: 50 }, { label: "QA", value: 20 }],
+      segments: [{ label: "页面", value: 30 }, { label: "图形", value: 50 }, { label: "审阅", value: 20 }],
       highlight: "图形",
     }),
     baseSpec("Quantity", "heatmap", {
-      rows: ["Prompt", "脚本", "QA"],
+      rows: ["Prompt", "脚本", "审阅"],
       columns: ["计划", "渲染", "导出"],
       values: [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
       highlight: { row: "脚本", column: "导出" },
@@ -162,9 +162,9 @@ function visualSpecs() {
     baseSpec("Loop", "dual_loop", {
       loops: [
         { id: "dev", label: "开发测试", steps: [{ id: "d1", label: "生成" }, { id: "d2", label: "导出" }, { id: "d3", label: "检查" }] },
-        { id: "qa", label: "交付 QA", steps: [{ id: "q1", label: "验证" }, { id: "q2", label: "记录" }, { id: "q3", label: "回归" }] },
+        { id: "review", label: "交付审阅", steps: [{ id: "q1", label: "验证" }, { id: "q2", label: "记录" }, { id: "q3", label: "回归" }] },
       ],
-      highlight: "qa",
+      highlight: "review",
     }),
     baseSpec("Loop", "spiral_iteration_ladder", {
       center: "兼容性提升",
@@ -189,8 +189,8 @@ function visualSpecs() {
         { id: "export", label: "导出层", items: ["PowerPoint COM"] },
       ],
       side_label: "检查",
-      side_modules: ["QA"],
-      edges: [["visual_anchor", "content entry"], ["diagram helper", "PowerPoint COM"], ["QA", "content entry"]],
+      side_modules: ["审阅"],
+      edges: [["visual_anchor", "content entry"], ["diagram helper", "PowerPoint COM"], ["审阅", "content entry"]],
     }),
     baseSpec("Hierarchy", "capability_stack", {
       levels: [
@@ -224,10 +224,10 @@ function visualSpecs() {
       nodes: [
         { id: "page", label: "页面" },
         { id: "diagram", label: "图形" },
-        { id: "qa", label: "QA" },
+        { id: "review", label: "审阅" },
         { id: "com", label: "COM" },
       ],
-      edges: [["contract", "page"], ["contract", "diagram"], ["contract", "qa"], ["diagram", "com"]],
+      edges: [["contract", "page"], ["contract", "diagram"], ["contract", "review"], ["diagram", "com"]],
       highlight: "com",
     }),
     baseSpec("Network", "dependency_graph", {

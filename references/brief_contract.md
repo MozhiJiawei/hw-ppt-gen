@@ -26,7 +26,7 @@ Preserve these fields in the plan and visible deck:
 - content-slide `所属章节` -> `currentSection`;
 - parser-derived `bodyLayout.type` for the Body DSL root layout.
 
-Do not shorten, rewrite, hide, or substitute hard fields to satisfy style, density, or visual-QA feedback. If a hard field creates a visible design issue, keep it, let the layout allocate the needed space, and record an upstream brief issue only when the page still cannot fit.
+Do not shorten, rewrite, hide, or substitute hard fields to satisfy style, density, or visual-review feedback. If a hard field creates a visible design issue, keep it, let the layout allocate the needed space, and record an upstream brief issue only when the page still cannot fit.
 
 ## Layout Family
 

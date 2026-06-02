@@ -57,7 +57,7 @@ For generated drawing, use `<Visual draw="Kind/template" model={...} />`. Choose
 
 1. Read the source material and identify audience, purpose, storyline, and evidence.
    - Visible text created by you must be Chinese.
-   - Keep source images as-is; translate slide titles, subtitles, card titles, body text, captions, footers, contents, and QA notes.
+   - Keep source images as-is; translate slide titles, subtitles, card titles, body text, captions, footers, contents, and review notes.
    - Keep necessary technical acronyms, product names, metric names, and source-specific terms inline when the brief or evidence requires them.
 2. If `ppt_content_brief.md` is present:
    - Read `references/brief_contract.md`.
@@ -67,8 +67,7 @@ For generated drawing, use `<Visual draw="Kind/template" model={...} />`. Choose
    - `.tmp/<deck>/<deck>.pptx`
    - `.tmp/<deck>/generate_<deck>.js`
    - `.tmp/<deck>/<deck>_visual_anchor_manifest.json`
-   - `.tmp/<deck>/<deck>_content_qa.json` or `.md`
-   - `.tmp/<deck>/<deck>.qa.json`
+   - `.tmp/<deck>/<deck>_content_review.json` or `.md`
    - `.tmp/<deck>/images/`
    - `.tmp/<deck>/slides/`
 4. Compose the deck before coding:
@@ -92,33 +91,15 @@ For generated drawing, use `<Visual draw="Kind/template" model={...} />`. Choose
    - Use `scripts/pptx/hw_visual_anchor_slide.js` for every summary/content page so evidence, generated drawings, body components, and manifest entries stay on one path.
    - Use discovered source-evidence Body DSL components for source image evidence; do not bypass the manifest with direct `addImage`.
    - Use generated drawing and supporting components only through discovered Body DSL components and draw detail contracts.
-6. Run content QA against the source material. Save concise notes under `.tmp/<deck>/`.
-7. Run hard QA:
-
-   ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json
-   ```
-
-   If the deck consumed a brief, add:
-
-   ```bash
-   --require-ppt-content-brief <path/to/ppt_content_brief.md>
-   ```
-
-8. Export slide PNGs:
+6. Run content review against the source material. Save concise notes under `.tmp/<deck>/`.
+7. Export slide PNGs:
 
    ```bash
    node scripts/pptx/export_pptx_images.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/slides
    ```
 
    On Windows this defaults to PowerPoint COM when available. LibreOffice is only a fallback; record that residual risk when used.
-9. Re-run hard QA with render evidence:
-
-   ```bash
-   node scripts/qa/check_huawei_pptx.js .tmp/<deck>/<deck>.pptx --out .tmp/<deck>/<deck>.qa.json --require-visual-anchor-manifest .tmp/<deck>/<deck>_visual_anchor_manifest.json --require-render-dir .tmp/<deck>/slides
-   ```
-
-10. Inspect every exported `.tmp/<deck>/slides/slide_XX.png` at original size. Regenerate when content QA, hard QA, or visual inspection finds blocking issues: unreadable evidence, evidence collage, broken image, text overflow, title clipping, footer clipping, module overlap, non-Chinese generated text, sparse cards, or drift from Huawei layout references.
+8. Inspect every exported `.tmp/<deck>/slides/slide_XX.png` at original size. Regenerate when content review or visual inspection finds blocking issues: unreadable evidence, evidence collage, broken image, text overflow, title clipping, footer clipping, module overlap, non-Chinese generated text, sparse cards, or drift from Huawei layout references.
 
 ## Built-In Components
 
@@ -126,7 +107,7 @@ For generated drawing, use `<Visual draw="Kind/template" model={...} />`. Choose
 - `addCoverSlide(pptx, data)`: creates a Huawei red-band cover.
 - `addTocSlide(pptx, data)`: creates a numbered contents page.
 - `addVisualAnchorContentSlide(pptx, data)`: creates summary/content pages with title, section tabs, `分析总结`, required `bodyDsl`, proof components, footer, and manifest entries.
-- `writeVisualAnchorManifest(pptx, fileName)`: writes rendered proof-component evidence for QA.
+- `writeVisualAnchorManifest(pptx, fileName)`: writes rendered proof-component evidence for downstream inspection.
 
 ## Runtime Script Map
 
@@ -140,7 +121,5 @@ Use these repository scripts; do not reimplement their jobs inside a deck script
 - `scripts/pptx/hw_visual_anchor_slide.js`: the only supported summary/content-page entrypoint; routes evidence, generated drawings, Body DSL components, and manifest data through one path.
 - `scripts/pptx/layout/*`: measured body-content taxonomy, PowerPoint-backed primitive measurement, strict module stack layout, and layout diagnostics.
 - `scripts/pptx/export_pptx_images.js`: exports the generated deck to slide PNGs for visual inspection.
-- `scripts/qa/check_huawei_pptx.js`: hard QA for deck structure, layout rules, text fit, manifest alignment, and render evidence.
-
 PowerPoint COM export is part of the delivery quality bar on Windows.
 Use repository scripts such as `scripts/pptx/export_pptx_images.js` and `scripts/pptx/measure_pptx_layout.js` for PowerPoint rendering or measurement. They route COM work through the shared PowerPoint broker so parallel agents reuse one serialized desktop COM instance. Do not call `New-Object -ComObject PowerPoint.Application` directly from deck scripts.

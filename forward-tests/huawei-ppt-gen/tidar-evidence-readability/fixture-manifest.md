@@ -12,7 +12,7 @@ This fixture preserves the issue #19 reproduction input for the TiDAR technical-
 
 Validate whether `hw-ppt-gen` can generate a 9-page Huawei-style PPT from the already-approved TiDAR `ppt_content_brief.md` while keeping source evidence readable after export.
 
-The regression exposed by the issue is not missing files or hard-QA failure. The generated deck passed hard QA, but several evidence images, tables, and generated visuals were compressed into fixed brief columns until the exported PNGs were visually hard to read.
+The regression exposed by the issue is not missing files or export failure. The generated deck exported successfully, but several evidence images, tables, and generated visuals were compressed into fixed brief columns until the exported PNGs were visually hard to read.
 
 ## Candidate-Facing Assets
 
@@ -59,6 +59,6 @@ Expected artifacts:
 - deck plan JSON;
 - visual-anchor manifest JSON;
 - exported slide PNGs;
-- hard-QA report;
-- visual-QA notes;
+- exported slide PNG directory and visual-review notes;
+- visual-review notes;
 - notes on any evidence-first relayout, density reduction, source-image replacement, data/native visual choice, or AI-image decision.

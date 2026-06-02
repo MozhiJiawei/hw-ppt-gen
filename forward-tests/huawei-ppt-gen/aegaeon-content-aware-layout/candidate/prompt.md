@@ -14,4 +14,4 @@ Write all generated artifacts under:
 
 Use a clear run id, for example `candidate-YYYYMMDD-HHMMSS`.
 
-When finished, report the output directory, PPTX path, exported slide PNG directory, hard-QA status, visual-QA status, and caveats.
+When finished, report the output directory, PPTX path, exported slide PNG directory, visual-review status, and caveats.

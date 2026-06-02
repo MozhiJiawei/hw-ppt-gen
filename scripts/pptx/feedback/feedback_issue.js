@@ -1,7 +1,8 @@
 "use strict";
 
 const VALID_SEVERITIES = new Set(["error", "warning", "info"]);
-const VALID_PHASES = new Set(["compile", "layout", "render", "qa"]);
+const VALID_PHASES = new Set(["dsl_input", "compile", "measure", "layout", "render", "render_export"]);
+const VALID_LOCATION_QUALITIES = new Set(["dsl_mapped", "page_only", "artifact_only"]);
 
 function createFeedbackIssue(input = {}) {
   const code = safeText(input.code || input.type || "feedback_issue");
@@ -10,11 +11,15 @@ function createFeedbackIssue(input = {}) {
   const target = normalizeTarget(input.target, input);
   const details = normalizeDetails(input.details, input);
   const repairs = normalizeRepairs(input.repairs);
+  const locationQuality = VALID_LOCATION_QUALITIES.has(input.location_quality || input.locationQuality)
+    ? (input.location_quality || input.locationQuality)
+    : inferLocationQuality(target, input);
 
   return {
     code,
     severity,
     phase,
+    location_quality: locationQuality,
     target,
     message: safeText(input.message || code),
     details,
@@ -53,114 +58,27 @@ function normalizeLayoutDiagnostic(diagnostic = {}, context = {}) {
   });
 }
 
-function normalizeQaIssue(issue = {}) {
-  return createFeedbackIssue({
-    code: issue.type || issue.code,
-    severity: issue.severity,
-    phase: issue.phase || "qa",
-    target: issue.target || {
-      slide: issue.slide,
-      moduleIndex: issue.module_index,
-      moduleTitle: issue.module_title,
-      blockIndex: issue.block_index,
-      componentId: issue.visual_component_id || issue.component_id,
-    },
-    message: issue.message,
-    details: issue.details || stripFeedbackKeys(issue),
-    repairs: issue.repairs || repairsForIssueType(issue.type || issue.code),
-  });
-}
-
-function attachFeedbackIssue(legacyIssue = {}, feedbackIssue) {
-  const input = feedbackIssue || {
-    ...legacyIssue,
-    phase: legacyIssue.phase || "qa",
-  };
-  const feedback = createFeedbackIssue(input);
-  return {
-    ...legacyIssue,
-    phase: legacyIssue.phase || feedback.phase,
-    target: legacyIssue.target || feedback.target,
-    details: legacyIssue.details || feedback.details,
-    repairs: legacyIssue.repairs || feedback.repairs,
-    feedback,
-  };
-}
-
-function repairsForIssueType(type) {
-  const key = safeText(type);
-  const repairs = {
-    text_overflow_estimate: [
-      "Shorten the text, split it across blocks, or enlarge the measured text box.",
-      "Prefer structured bullets or a compact table instead of prose-heavy paragraphs.",
-    ],
-    body_layout_text_too_long: [
-      "Compress the block into short claim lines.",
-      "Move dense comparisons into Matrix/table or KPI readout components.",
-    ],
-    body_layout_table_frame_too_short: [
-      "Increase the table block height.",
-      "Reduce rows or cell text, or split the table into another structured block.",
-    ],
-    body_layout_evidence_too_small: [
-      "Give the evidence visual more height or move supporting text out of the module.",
-      "Choose a layout with a larger visual slot for the source aspect ratio.",
-    ],
-    content_visual_anchor_missing: [
-      "Add at least one real visual_anchor for the content slide.",
-      "Use supporting components only as secondary readouts, not as the proof anchor.",
-    ],
-    body_layout_infeasible: [
-      "Reduce body density, split the module, or move detail to another slide.",
-      "Check measured min/preferred sizes before choosing the layout.",
-    ],
-    analysis_summary_missing: [
-      "Render the slide through the fixed Huawei content shell so the 分析总结 band is present.",
-      "Populate the slide summary with meaning-specific labels and concise text before rendering.",
-    ],
-    section_indicator_missing: [
-      "Provide sections and currentSection so the fixed top-right section indicator can render.",
-      "Route the page through the Huawei content-slide helper instead of hand-drawing the chrome.",
-    ],
-    line_spacing: [
-      "Use the standard 1.5x text line spacing for generated text boxes.",
-      "Prefer the repository text helpers instead of custom text box options.",
-    ],
-    line_width: [
-      "Use the standard 0.5pt line width, 6350 EMU, for Huawei chrome and component outlines.",
-      "Check custom component line options before rendering.",
-    ],
-    content_visual_anchor_plan_missing: [
-      "Add the missing visual anchor or supporting component to the deck plan.",
-      "Ensure planned visual ids, kind, and template match the rendered manifest.",
-    ],
-    content_visual_anchor_plan_mismatch: [
-      "Align the plan visual anchor id, kind, and template with the manifest entry.",
-      "Do not silently substitute another visual template during rendering.",
-    ],
-    content_visual_anchor_manifest_mismatch: [
-      "Render the visual through the fixed template implementation selected by kind/template.",
-      "Regenerate the manifest after correcting renderer output.",
-    ],
-    body_layout_schema_invalid: [
-      "Use an official Body DSL layout family and matching Module count.",
-      "Keep layout tags as placement structure, not visual semantics.",
-    ],
-  };
-  return repairs[key] || [];
-}
-
 function normalizeTarget(target = {}, fallback = {}) {
   const normalized = stripUndefined({
     slide: target.slide ?? fallback.slide,
+    pageIndex: target.pageIndex ?? target.page_index ?? fallback.pageIndex ?? fallback.page_index,
+    pageId: target.pageId ?? target.page_id ?? fallback.pageId ?? fallback.page_id,
+    artifact: target.artifact ?? fallback.artifact,
+    schemaPath: target.schemaPath ?? target.schema_path ?? fallback.schemaPath ?? fallback.schema_path,
+    nodeId: target.nodeId ?? target.node_id ?? fallback.nodeId ?? fallback.node_id,
     moduleIndex: target.moduleIndex ?? target.module_index ?? fallback.moduleIndex ?? fallback.module_index,
     moduleTitle: target.moduleTitle ?? target.module_title ?? fallback.moduleTitle ?? fallback.module_title,
     blockIndex: target.blockIndex ?? target.block_index ?? fallback.blockIndex ?? fallback.block_index,
     componentId: target.componentId ?? target.component_id ?? target.visual_component_id ?? fallback.componentId ?? fallback.component_id ?? fallback.visual_component_id,
     path: target.path ?? fallback.path,
     selector: target.selector ?? fallback.selector,
+    sourceSpan: target.sourceSpan ?? target.source_span ?? fallback.sourceSpan ?? fallback.source_span,
+    codeFrame: target.codeFrame ?? target.code_frame ?? fallback.codeFrame ?? fallback.code_frame,
     semanticStack: normalizeSemanticStack(target.semanticStack ?? target.semantic_stack ?? fallback.semanticStack ?? fallback.semantic_stack),
     prop: target.prop ?? fallback.prop,
+    kind: target.kind ?? fallback.kind,
+    template: target.template ?? fallback.template,
+    visual_role: target.visual_role ?? target.visualRole ?? fallback.visual_role ?? fallback.visualRole,
   });
   return normalized;
 }
@@ -176,6 +94,8 @@ function normalizeSemanticStack(stack) {
         title: safeText(frame.title),
         path: safeText(frame.path),
         selector: safeText(frame.selector),
+        sourceSpan: frame.sourceSpan ?? frame.source_span,
+        codeFrame: safeText(frame.codeFrame ?? frame.code_frame),
       });
     })
     .filter((frame) => frame && frame.tag);
@@ -195,9 +115,14 @@ function normalizeRepairs(repairs) {
 }
 
 function inferPhase(input = {}) {
-  if (input.type || input.slide !== undefined) return "qa";
   if (input.diagnostic || input.layout_type || input.layoutType) return "layout";
-  return "qa";
+  return "compile";
+}
+
+function inferLocationQuality(target = {}, input = {}) {
+  if (input.artifact || target.artifact) return "artifact_only";
+  if (target.selector || target.path || target.semanticStack) return "dsl_mapped";
+  return "page_only";
 }
 
 function stripFeedbackKeys(input = {}) {
@@ -207,6 +132,10 @@ function stripFeedbackKeys(input = {}) {
     "severity",
     "phase",
     "target",
+    "sourceSpan",
+    "source_span",
+    "codeFrame",
+    "code_frame",
     "message",
     "details",
     "repairs",
@@ -228,9 +157,6 @@ function safeText(value) {
 }
 
 module.exports = {
-  attachFeedbackIssue,
   createFeedbackIssue,
   normalizeLayoutDiagnostic,
-  normalizeQaIssue,
-  repairsForIssueType,
 };

@@ -1,12 +1,11 @@
 "use strict";
 
-const { createFeedbackIssue, normalizeQaIssue } = require("./feedback_issue");
+const { createFeedbackIssue } = require("./feedback_issue");
 
 function normalizeFeedbackIssues(items = []) {
   return items.map((item) => {
     if (item?.feedback) return createFeedbackIssue(item.feedback);
-    if (item?.phase) return createFeedbackIssue(item);
-    return normalizeQaIssue(item);
+    return createFeedbackIssue(item);
   });
 }
 
@@ -34,6 +33,7 @@ function feedbackToMarkdown(items = []) {
         lines.push(`  Repairs: ${issue.repairs.join(" / ")}`);
       }
       lines.push(`  Phase: ${issue.phase}`);
+      lines.push(`  Location: ${issue.location_quality}`);
       const targetDetails = targetDetailLines(issue.target);
       for (const line of targetDetails) lines.push(`  ${line}`);
       const stackLines = semanticStackLines(issue.target?.semanticStack);
@@ -53,6 +53,9 @@ function feedbackToMarkdown(items = []) {
 function targetLabel(target = {}) {
   const parts = [];
   if (target.slide !== undefined && target.slide !== null) parts.push(`slide ${target.slide}`);
+  if (target.pageIndex !== undefined && target.pageIndex !== null) parts.push(`page ${Number(target.pageIndex) + 1}`);
+  if (target.pageId) parts.push(String(target.pageId));
+  if (target.artifact) parts.push(String(target.artifact));
   if (target.moduleIndex !== undefined) parts.push(`module ${target.moduleIndex}`);
   if (target.blockIndex !== undefined) parts.push(`block ${target.blockIndex}`);
   if (target.componentId) parts.push(String(target.componentId));
@@ -64,10 +67,19 @@ function targetLabel(target = {}) {
 function targetDetailLines(target = {}) {
   const lines = [];
   if (target.selector) lines.push(`Selector: ${target.selector}`);
+  if (target.schemaPath) lines.push(`Schema: ${target.schemaPath}`);
+  if (target.nodeId) lines.push(`Node: ${target.nodeId}`);
+  if (target.sourceSpan) lines.push(`Source: line ${target.sourceSpan.line}, column ${target.sourceSpan.column}`);
+  if (target.codeFrame) lines.push(`Code: ${target.codeFrame}`);
+  if (target.pageIndex !== undefined && target.pageIndex !== null) lines.push(`Page: ${Number(target.pageIndex) + 1}`);
+  if (target.pageId) lines.push(`Page ID: ${target.pageId}`);
+  if (target.artifact) lines.push(`Artifact: ${target.artifact}`);
   if (target.path) lines.push(`Path: ${target.path}`);
   if (target.prop) lines.push(`Prop: ${target.prop}`);
   if (target.moduleTitle) lines.push(`Module: ${target.moduleTitle}`);
   if (target.componentId) lines.push(`Component: ${target.componentId}`);
+  if (target.kind || target.template) lines.push(`Visual: ${[target.kind, target.template].filter(Boolean).join("/")}`);
+  if (target.visual_role) lines.push(`Visual Role: ${target.visual_role}`);
   return lines;
 }
 
@@ -77,7 +89,9 @@ function semanticStackLines(stack = []) {
   for (const frame of stack) {
     const label = stackFrameLabel(frame);
     const location = frame.selector || frame.path;
-    lines.push(`  at ${label}${location ? ` (${location})` : ""}`);
+    const source = frame.sourceSpan ? ` line ${frame.sourceSpan.line}, column ${frame.sourceSpan.column}` : "";
+    lines.push(`  at ${label}${location ? ` (${location})` : ""}${source}`);
+    if (frame.codeFrame) lines.push(`    code: ${frame.codeFrame}`);
   }
   return lines;
 }

@@ -29,6 +29,8 @@ function normalizeNode(node, context) {
     ...context,
     selector: meta.selector || node.source?.selector || (context.parent ? context.selector : `${context.selector} > ${tag || "Unknown"}`),
     path: node.source?.path || context.path,
+    sourceSpan: meta.sourceSpan || node.source?.sourceSpan,
+    codeFrame: meta.codeFrame || node.source?.codeFrame,
   };
   const props = node.props || node.attrs ? normalizeProps(node.props || node.attrs, false) : normalizeProps(node, true);
   const children = Array.isArray(node.children) ? node.children : [];
@@ -47,7 +49,7 @@ function normalizeNode(node, context) {
       if (childTag && !contract.childTags.includes(childTag)) {
         context.issues.push(issue(
           "dsl_child_component_invalid",
-          childContext({ ...nodeContext, semanticStack }, childTag, idx),
+          childContext({ ...nodeContext, semanticStack }, child, childTag, idx),
           `${tag} cannot contain ${childTag}; allowed children: ${contract.childTags.join(", ")}.`,
           { tag, childTag }
         ));
@@ -60,13 +62,15 @@ function normalizeNode(node, context) {
     role: contract?.role || "unknown",
     props,
     contract,
-    source: { path: nodeContext.path, selector: nodeContext.selector, semanticStack },
+    source: { path: nodeContext.path, selector: nodeContext.selector, semanticStack, sourceSpan: nodeContext.sourceSpan, codeFrame: nodeContext.codeFrame },
     children: [],
   };
   normalized.children = children
     .map((child, idx) => normalizeNode(child, {
       path: `${context.path}.children[${idx}]`,
       selector: childSelector(nodeContext.selector, safeText(child?.tag || child?.type || child?.component) || "Unknown", idx),
+      sourceSpan: child?.props?.__dsl?.sourceSpan || child?.source?.sourceSpan,
+      codeFrame: child?.props?.__dsl?.codeFrame || child?.source?.codeFrame,
       semanticStack,
       parent: normalized,
       issues: context.issues,
@@ -85,11 +89,15 @@ function normalizeProps(input = {}, stripNodeKeys = false) {
   return out;
 }
 
-function childContext(context, tag, idx) {
+function childContext(context, child, tag, idx) {
+  const meta = child?.props?.__dsl || child?.__dsl || {};
+  const source = child?.source || {};
   return {
     ...context,
     path: `${context.path}.children[${idx}]`,
     selector: childSelector(context.selector, tag, idx),
+    sourceSpan: meta.sourceSpan || source.sourceSpan,
+    codeFrame: meta.codeFrame || source.codeFrame,
   };
 }
 
@@ -98,18 +106,29 @@ function childSelector(parentSelector, tag, idx) {
 }
 
 function issue(code, context, message, details = {}) {
+  const structuredDetails = detailsForCompilerIssue(message, details);
   return createFeedbackIssue({
     code,
     severity: "error",
     phase: "compile",
-    target: { path: context.path, selector: context.selector, semanticStack: context.semanticStack },
+    target: { path: context.path, selector: context.selector, semanticStack: context.semanticStack, sourceSpan: context.sourceSpan, codeFrame: context.codeFrame },
     message,
-    details: { path: context.path, selector: context.selector, ...details },
+    details: { path: context.path, selector: context.selector, ...details, ...structuredDetails },
     repairs: [
       "Use discovered JSX-like DSL tags such as <TwoColumn>, <Module>, or another tag from list_components.",
       "Remove manual style/coordinate props and express only constrained layout intent.",
     ],
   });
+}
+
+function detailsForCompilerIssue(message, details = {}) {
+  const requiredProp = /^([A-Za-z][A-Za-z0-9_]*) requires props\.([A-Za-z][A-Za-z0-9_]*)\.$/.exec(message || "");
+  if (!requiredProp) return {};
+  const componentTag = details.tag || requiredProp[1];
+  return {
+    componentTag,
+    missingProps: [requiredProp[2]],
+  };
 }
 
 function semanticStackFrame(tag, props = {}, context = {}) {
@@ -119,6 +138,7 @@ function semanticStackFrame(tag, props = {}, context = {}) {
     title: props.title || props.label,
     path: context.path,
     selector: context.selector,
+    sourceSpan: context.sourceSpan,
   };
 }
 

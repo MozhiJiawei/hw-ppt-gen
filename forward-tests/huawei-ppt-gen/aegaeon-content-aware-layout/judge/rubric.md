@@ -1,6 +1,6 @@
 # Judge Rubric: Aegaeon Content-Aware Layout Forward Test
 
-Use this rubric after the candidate agent generates a deck. The judge may inspect the candidate's PPTX, plan, manifest, QA reports, exported PNGs, and generation script.
+Use this rubric after the candidate agent generates a deck. The judge may inspect the candidate's PPTX, plan, manifest, visual-review notes, exported PNGs, and generation script.
 
 Do not judge by whether the candidate reproduced a hidden answer exactly. Judge whether the output demonstrates the intended Skill capability under the upstream-brief division of labor.
 
@@ -29,7 +29,7 @@ Score each category from 0 to 3.
 Checks:
 
 - Uses `ppt_content_brief.md` through the Skill's brief-consumption flow.
-- Preserves fixed brief fields exactly enough for QA: titles, title notes, analysis-summary labels/text, TOC, page order, current section, and bodyLayout type.
+- Preserves fixed brief fields exactly: titles, title notes, analysis-summary labels/text, TOC, page order, current section, and bodyLayout type.
 - Uses `正文内容`, `参考图片`, and `备注` as layout material rather than as a second story line.
 
 ### 2. Huawei Visual Language
@@ -76,13 +76,13 @@ Checks:
 - Empty space is filled, when appropriate, with source-grounded structure such as compact comparison tables, KPI rows, dense notes, or readout blocks.
 - Added density does not become clutter or duplicate the same claim.
 
-### 7. QA Discipline
+### 7. Review Discipline
 
 Checks:
 
-- Hard QA was run with required plan, visual-anchor manifest, and render evidence.
+- Exported slide PNGs and visual-review notes were produced.
 - Exported slide PNGs were inspected.
-- Visual-QA notes identify actual issues rather than only claiming success.
+- Visual-review notes identify actual issues rather than only claiming success.
 - Remaining caveats are concrete and bounded.
 
 ## Recommended Verdict Labels
@@ -109,7 +109,7 @@ Checks:
 - Evidence Readability: [0-3]
 - Text Compression: [0-3]
 - Information Density: [0-3]
-- QA Discipline: [0-3]
+- Review Discipline: [0-3]
 
 ## Blocking Findings
 
@@ -128,6 +128,6 @@ Checks:
 - [PPTX path]
 - [Plan path]
 - [Manifest path]
-- [QA report path]
+- [Visual-review notes path]
 - [Slide PNG directory]
 ```

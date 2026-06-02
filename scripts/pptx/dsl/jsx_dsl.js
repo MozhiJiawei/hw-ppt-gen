@@ -58,13 +58,15 @@ function parseJsxLikeMarkup(markup, scope = {}) {
     if (open < 0) break;
     if (input.startsWith("<!--", open)) {
       const closeComment = input.indexOf("-->", open + 4);
-      if (closeComment < 0) throw new Error("Unclosed JSX comment in Body DSL markup.");
+      if (closeComment < 0) throw sourceError(input, open, "Unclosed JSX comment in Body DSL markup.");
       pos = closeComment + 3;
       continue;
     }
     const close = findTagClose(input, open + 1);
-    if (close < 0) throw new Error("Unclosed JSX tag in Body DSL markup.");
-    const rawTag = input.slice(open + 1, close).trim();
+    if (close < 0) throw sourceError(input, open, "Unclosed JSX tag in Body DSL markup.");
+    const rawTagSource = input.slice(open + 1, close);
+    const rawTagOffset = open + 1 + Math.max(0, rawTagSource.search(/\S/));
+    const rawTag = rawTagSource.trim();
     pos = close + 1;
     if (!rawTag || rawTag.startsWith("!")) continue;
 
@@ -72,9 +74,10 @@ function parseJsxLikeMarkup(markup, scope = {}) {
       const closeTag = rawTag.slice(1).trim();
       const frame = stack.pop();
       if (!frame || frame.authorTag !== closeTag) {
-        throw new Error(`Mismatched Body DSL closing tag </${closeTag}>.`);
+        throw sourceError(input, open, `Mismatched Body DSL closing tag </${closeTag}>.`);
       }
-      appendNode(frame.node);
+      setSourceEnd(frame.node, sourceSpanFor(input, frame.start, close + 1));
+      appendNode(frame.node, open);
       continue;
     }
 
@@ -83,54 +86,101 @@ function parseJsxLikeMarkup(markup, scope = {}) {
     const firstSpace = body.search(/\s/);
     const authorTag = firstSpace < 0 ? body : body.slice(0, firstSpace);
     const attrText = firstSpace < 0 ? "" : body.slice(firstSpace + 1);
-    const props = parseProps(attrText, scope);
-    const node = createNode(authorTag, props, []);
-    const frame = { authorTag, node };
+    const props = parseProps(attrText, scope, input, rawTagOffset + firstSpace + 1);
+    const node = createNode(authorTag, props, [], sourceSpanFor(input, open, close + 1));
+    const frame = { authorTag, node, start: open };
 
     if (selfClosing) {
-      appendNode(node);
+      appendNode(node, open);
     } else {
       stack.push(frame);
     }
   }
 
   if (stack.length) {
-    throw new Error(`Unclosed Body DSL tag <${stack[stack.length - 1].authorTag}>.`);
+    const frame = stack[stack.length - 1];
+    throw sourceError(input, frame.start, `Unclosed Body DSL tag <${frame.authorTag}>.`);
   }
   return root;
 
-  function appendNode(node) {
+  function appendNode(node, start) {
     const parent = stack[stack.length - 1]?.node;
     if (parent) {
       parent.children.push(node);
     } else if (!root) {
       root = node;
     } else {
-      throw new Error("Body DSL markup must have a single root element.");
+      throw sourceError(input, start, "Body DSL markup must have a single root element.");
     }
   }
 }
 
-function createNode(authorTag, props, children) {
-  if (!authorTag) throw new Error("Body DSL element is missing a tag name.");
-  if (authorTag === "Slide") return h("Slide", withSource(authorTag, props, authorTag), children);
-  if (LAYOUT_TAGS[authorTag]) {
-    return h("Columns", withSource(authorTag, { ...props, type: LAYOUT_TAGS[authorTag] }, authorTag), children);
-  }
-  return h(authorTag, withSource(authorTag, props, authorTag), children);
+function sourceError(input, start, message) {
+  const span = sourceSpanFor(input, Math.max(0, start), Math.max(0, start) + 1);
+  const error = new Error(message);
+  error.target = {
+    sourceSpan: publicSourceSpan(span),
+    codeFrame: span.codeFrame,
+  };
+  return error;
 }
 
-function withSource(authorTag, props, selectorTag) {
+function createNode(authorTag, props, children, sourceSpan) {
+  if (!authorTag) throw new Error("Body DSL element is missing a tag name.");
+  if (authorTag === "Slide") return h("Slide", withSource(authorTag, props, authorTag, sourceSpan), children);
+  if (LAYOUT_TAGS[authorTag]) {
+    return h("Columns", withSource(authorTag, { ...props, type: LAYOUT_TAGS[authorTag] }, authorTag, sourceSpan), children);
+  }
+  return h(authorTag, withSource(authorTag, props, authorTag, sourceSpan), children);
+}
+
+function withSource(authorTag, props, selectorTag, sourceSpan) {
   return {
     ...props,
     __dsl: {
       authorTag,
       selectorTag: selectorTag || authorTag,
+      sourceSpan: publicSourceSpan(sourceSpan),
+      codeFrame: sourceSpan?.codeFrame,
     },
   };
 }
 
-function parseProps(attrText, scope) {
+function setSourceEnd(node, sourceSpan) {
+  if (!node?.props?.__dsl || !sourceSpan) return;
+  node.props.__dsl = {
+    ...node.props.__dsl,
+    sourceSpan: publicSourceSpan(sourceSpan),
+    codeFrame: sourceSpan.codeFrame,
+  };
+}
+
+function sourceSpanFor(input, start, end) {
+  const before = input.slice(0, start);
+  const lines = before.split(/\r?\n/);
+  const line = lines.length;
+  const column = lines[lines.length - 1].length + 1;
+  const lineText = input.split(/\r?\n/)[line - 1] || "";
+  return {
+    start,
+    end,
+    line,
+    column,
+    codeFrame: lineText.trim(),
+  };
+}
+
+function publicSourceSpan(sourceSpan = {}) {
+  if (!sourceSpan) return undefined;
+  return {
+    start: sourceSpan.start,
+    end: sourceSpan.end,
+    line: sourceSpan.line,
+    column: sourceSpan.column,
+  };
+}
+
+function parseProps(attrText, scope, sourceInput = null, sourceOffset = 0) {
   const props = {};
   let pos = 0;
   const text = String(attrText || "");
@@ -140,7 +190,7 @@ function parseProps(attrText, scope) {
     if (pos >= text.length) break;
 
     const nameMatch = /^[A-Za-z_][\w:-]*/.exec(text.slice(pos));
-    if (!nameMatch) throw new Error(`Invalid Body DSL prop near: ${text.slice(pos, pos + 24)}`);
+    if (!nameMatch) throw propError(pos, `Invalid Body DSL prop near: ${text.slice(pos, pos + 24)}`);
     const name = nameMatch[0];
     pos += name.length;
     while (/\s/.test(text[pos] || "")) pos += 1;
@@ -155,7 +205,7 @@ function parseProps(attrText, scope) {
     const quote = text[pos];
     if (quote === "\"" || quote === "'") {
       const end = text.indexOf(quote, pos + 1);
-      if (end < 0) throw new Error(`Unclosed string prop ${name}.`);
+      if (end < 0) throw propError(pos, `Unclosed string prop ${name}.`);
       props[name] = text.slice(pos + 1, end);
       pos = end + 1;
       continue;
@@ -163,18 +213,27 @@ function parseProps(attrText, scope) {
 
     if (text[pos] === "{") {
       const end = findExpressionClose(text, pos);
-      if (end < 0) throw new Error(`Unclosed expression prop ${name}.`);
-      props[name] = resolveExpression(text.slice(pos + 1, end), scope);
+      if (end < 0) throw propError(pos, `Unclosed expression prop ${name}.`);
+      try {
+        props[name] = resolveExpression(text.slice(pos + 1, end), scope);
+      } catch (error) {
+        throw propError(pos, error.message);
+      }
       pos = end + 1;
       continue;
     }
 
     const bare = /^[^\s>]+/.exec(text.slice(pos));
-    if (!bare) throw new Error(`Missing value for prop ${name}.`);
+    if (!bare) throw propError(pos, `Missing value for prop ${name}.`);
     props[name] = bare[0];
     pos += bare[0].length;
   }
   return props;
+
+  function propError(offset, message) {
+    if (sourceInput) return sourceError(sourceInput, sourceOffset + offset, message);
+    return new Error(message);
+  }
 }
 
 function resolveExpression(expression, scope) {

@@ -6,7 +6,7 @@ The Body DSL is a tree-shaped authoring surface for agents. It sits below the fi
 
 ```text
 skeleton/frame data -> fixed frame/chrome
-Body DSL -> registry parse/check/resolve -> DSL-native measure/render -> manifest/QA
+Body DSL -> registry parse/check/resolve -> DSL-native measure/render -> manifest/review
 ```
 
 New creative body authoring uses `bodyDsl`.

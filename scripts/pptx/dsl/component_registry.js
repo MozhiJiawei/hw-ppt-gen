@@ -52,6 +52,7 @@ const COMMON_LAYOUT_INTENT = Object.freeze({
 
 const COMPONENTS = Object.freeze([
   layoutComponent("Columns", {
+    aiVisible: false,
     description: "Body root that chooses the current Huawei body layout family.",
     requiredProps: ["type"],
     propEnums: { type: ["two_column", "biased_column", "three_column", "four_column"] },
@@ -374,11 +375,11 @@ function defaultVisualSpecFor(row) {
       layers: [
         { label: "接入层", items: ["input"] },
         { label: "处理层", items: ["engine"] },
-        { label: "验证层", items: ["qa"] },
+        { label: "验证层", items: ["review"] },
       ],
       side_label: "治理",
       side_modules: ["policy"],
-      edges: [["input", "engine"], ["engine", "qa"], ["policy", "engine"]],
+      edges: [["input", "engine"], ["engine", "review"], ["policy", "engine"]],
     };
   }
   if (row.kind === "Hierarchy") {

@@ -11,7 +11,7 @@ The repository turns structured content plans into Huawei-style PPTX decks with 
 Two invariants define the system:
 
 1. Layout, visual rendering, and text outline are independent architecture elements.
-2. Runtime instructions, generation scripts, and QA must stay consistent so agent output is predictable.
+2. Runtime instructions, generation scripts, and verification feedback must stay consistent so agent output is predictable.
 
 ## Logical Architecture Elements
 
@@ -67,8 +67,8 @@ This view lists the architectural elements only. It intentionally does not draw 
 | L6 Verification / 验证层                                                           |
 |                                                                                  |
 |        +--------------------------+        +-------------------------------+      |
-|        | Hard QA                  |        | Development smoke tests       |      |
-|        | check_huawei_pptx.js     |        | scripts/smoke/*.js           |      |
+|        | Runtime feedback         |        | Development smoke tests       |      |
+|        | compile/layout/render    |        | scripts/smoke/*.js           |      |
 |        +--------------------------+        +-------------------------------+      |
 +----------------------------------------------------------------------------------+
 ```
@@ -82,7 +82,7 @@ The system is intentionally layered:
 - L5 stores generated artifacts and render evidence.
 - L6 verifies that the artifacts match the plan and contracts.
 
-Dependencies flow downward during generation and back into L6 during verification. Lower layers must not invent semantics that belong to upper layers. Upper layers must not bypass lower-layer evidence and QA.
+Dependencies flow downward during generation and back into L6 during verification. Lower layers must not invent semantics that belong to upper layers. Upper layers must not bypass lower-layer evidence and render inspection.
 
 ## Runtime Flow View
 
@@ -97,7 +97,7 @@ flowchart LR
   compose["addVisualAnchorContentSlide"]
   render["visual output"]
   artifacts["PPTX + manifest + PNG"]
-  qa["hard QA + smoke"]
+  verify["compile/layout/render feedback + smoke"]
 
   skill --> refs
   refs --> plan
@@ -107,8 +107,8 @@ flowchart LR
   compose --> render
   compose --> artifacts
   render --> artifacts
-  artifacts --> qa
-  plan --> qa
+  artifacts --> verify
+  plan --> verify
 ```
 
 ## Architecture Elements
@@ -121,14 +121,14 @@ Owned by:
 
 Responsibility:
 
-- tell a deck-generation agent how to research, plan, generate, QA, export, and inspect a deck;
+- tell a deck-generation agent how to research, plan, generate, export, review, and inspect a deck;
 - define the runtime sequence an agent follows;
 - avoid development-only explanations.
 
 Constraints:
 
 - `SKILL.md` should not be the primary home for architecture rationale.
-- If runtime behavior changes, update `SKILL.md` only after the reference contract, implementation, QA, and smoke coverage are aligned.
+- If runtime behavior changes, update `SKILL.md` only after the reference contract, implementation, feedback producers, and smoke coverage are aligned.
 
 ### Reference Contracts
 
@@ -157,7 +157,7 @@ Constraints:
 - reference docs must describe schema and quality standards, not implementation shortcuts;
 - evidence visuals and generated visuals are separate contracts;
 - visual templates are semantic categories, not renderer-specific categories;
-- new schema fields require matching implementation and QA support;
+- new schema fields require matching implementation and feedback/smoke support;
 - smoke fixtures such as `scripts/smoke/fixtures/visual_diagram_test_cases.js` are development assets, not runtime references.
 
 ### Deck Plan
@@ -263,7 +263,7 @@ Owned by:
 
 Responsibility:
 
-- define the shared kind/template, supporting-component, renderer-path, measurement-support, resize-policy, and Body DSL layout family facts used by renderer, planner, QA, and smoke tests;
+- define the shared kind/template, supporting-component, renderer-path, measurement-support, resize-policy, and Body DSL layout family facts used by renderer, planner, feedback producers, and smoke tests;
 - create Huawei content pages;
 - apply fixed Body DSL layout families such as `two_column`, `biased_column`, `three_column`, and `four_column`;
 - classify body-content blocks into Huawei layout primitives;
@@ -276,7 +276,7 @@ Responsibility:
 
 Constraints:
 
-- contract modules are the code-level source of truth; renderer, QA, and tests should import them instead of copying official template/layout lists;
+- contract modules are the code-level source of truth; renderer, feedback producers, and tests should import them instead of copying official template/layout lists;
 - Body DSL layout is a container, not a visual-template layer;
 - allowed blocks are layout/text blocks, `visual_anchor` blocks, and `supporting_component` blocks;
 - do not add layout-specific visual roles such as `image_text`, `metric_row`, `mini_card_grid`, or `sectioned_card_grid`;
@@ -322,7 +322,7 @@ Responsibility:
 Constraints:
 
 - text that explains the visual belongs here, not inside `visual_spec`;
-- visual captions and source notes must remain visible to QA;
+- visual captions and source notes must remain visible to review/export inspection;
 - text layer may surround and explain visuals but must not become an untracked visual renderer.
 
 ### Manifest
@@ -341,7 +341,7 @@ Constraints:
 
 - every正文内容页 must have at least one manifest-backed rendered real visual anchor; supporting components alone are insufficient;
 - dense pages may have multiple manifest entries;
-- manifest must be sufficient for QA to prove the implementation matched the plan.
+- manifest must be sufficient for review tooling to prove the implementation matched the plan.
 
 ### Feedback Contract
 
@@ -351,38 +351,16 @@ Owned by:
 
 Responsibility:
 
-- define the shared `FeedbackIssue` shape used by compile, layout, render, and QA producers;
-- normalize existing diagnostics and QA issues without moving validation rules into the reporter;
+- define the shared `FeedbackIssue` shape used by compile, layout, and render producers;
+- normalize existing diagnostics without moving validation rules into the reporter;
 - provide agent-readable JSON and Markdown reports with target, detail, and repair context.
 
 Constraints:
 
-- feedback is a cross-layer data contract, not a Hard QA subsystem;
-- lower layers may emit or normalize feedback issues, but they must not depend on QA rules;
+- feedback is a cross-layer data contract, not a separate verification subsystem;
+- lower layers may emit or normalize feedback issues, but they must not depend on retired rule sets;
 - reporters must not become a second rule engine; producers remain responsible for detecting problems;
 - feedback targets should preserve the most specific available location, such as slide, module, block, component id, or schema path.
-
-### Hard QA
-
-Owned by:
-
-- `scripts/qa/check_huawei_pptx.js`
-
-Responsibility:
-
-- check PPTX style and structure;
-- compare plan and manifest;
-- validate visual-anchor/supporting-component schema and implementation contract;
-- check exported render evidence when available.
-
-Constraints:
-
-- QA is part of the architecture;
-- multi-anchor slides must validate every planned anchor;
-- QA must fail implementation drift, missing real anchors, unrendered components, invalid schema, and plan/manifest mismatch;
-- QA must protect "at least one real anchor" without letting supporting components count as anchors or regressing into "exactly one anchor";
-- QA should distinguish accepted architecture exceptions from accidental bypass paths.
-- QA issues and layout diagnostics should be normalizable to the shared `FeedbackIssue` shape for agent repair, without moving QA rules into the reporter.
 
 ### Smoke Tests
 
@@ -396,7 +374,7 @@ Responsibility:
 - preserve architecture contracts during development;
 - generate regression decks for visual-anchor templates;
 - exercise PowerPoint COM export;
-- verify helper export surfaces and QA rule coverage.
+- verify helper export surfaces and compile/layout/render contracts.
 
 Constraints:
 
@@ -414,7 +392,7 @@ flowchart LR
   TextOutline["text outline\nsummary + captions + notes"]
   RenderedPage["PPT content page"]
   ManifestEntry["manifest entries"]
-  QACompare["QA comparison"]
+  VerifyCompare["verification comparison"]
 
   Layout --> RenderedPage
   VisualSpec --> RenderedPage
@@ -424,8 +402,8 @@ flowchart LR
   SupportSpec --> ManifestEntry
   RenderedPage --> ManifestEntry
   Layout --> ManifestEntry
-  ManifestEntry --> QACompare
-  TextOutline --> QACompare
+  ManifestEntry --> VerifyCompare
+  TextOutline --> VerifyCompare
 ```
 
 The three inputs are independent:
@@ -476,7 +454,7 @@ Architecture rule:
 - the native table implementation is an internal rendering detail of that supporting-component template;
 - page schemas must not expose table drawing as a standalone layout helper.
 
-This prevents native table drawing from becoming a bypass around plan, manifest, and QA.
+This prevents native table drawing from becoming a bypass around plan, manifest, and verification feedback.
 
 ## Image Boundary
 
@@ -496,17 +474,17 @@ The repository has three surfaces that must remain consistent:
 
 1. runtime instructions in `SKILL.md`;
 2. implementation in `scripts/pptx/*`;
-3. enforcement in `scripts/qa/*` and `scripts/smoke/*`.
+3. enforcement in compile/layout/render producers and `scripts/smoke/*`.
 
 When changing behavior:
 
 - update references so the schema is explicit;
 - update generation helpers so the schema renders;
-- update QA so bad output fails;
+- update compile/layout/render feedback producers so bad output fails early where possible;
 - update smoke tests so the contract stays protected;
 - update `SKILL.md` only when the runtime workflow changes.
 
-Do not merge changes where only the script works but the skill still asks for old behavior, or where the skill asks for behavior QA cannot verify.
+Do not merge changes where only the script works but the skill still asks for old behavior, or where runtime instructions and smoke coverage disagree.
 
 ## Recent Architecture Drift Patterns
 
@@ -516,7 +494,7 @@ These are concrete drift patterns this repository should avoid:
 - structured readout becomes fake anchor: `data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, or generated `heatmap` is used to satisfy visual-anchor requirements;
 - visual-anchor bypass: part of the visual is drawn through untracked helper calls;
 - silent fallback: one template implementation quietly substitutes another to pass PowerPoint export;
-- first-anchor-only QA: multi-anchor pages validate only the first manifest entry;
+- first-anchor-only checks: multi-anchor pages validate only the first manifest entry;
 - unbounded helper exposure: low-level drawing helper becomes a schema-level escape hatch;
 - runtime docs carry development principles while `AGENTS.md` and `docs/` stay silent.
 
@@ -538,8 +516,8 @@ Before merging architecture-sensitive changes, verify:
 - visual output handling remains implementation-owned;
 - fixed template implementations do not silently substitute for each other;
 - plan and manifest cover every visual anchor and supporting component;
-- QA checks the behavior being introduced;
+- compile/layout/render feedback checks the behavior being introduced where possible;
 - smoke tests cover affected visual-anchor templates when relevant;
 - PowerPoint COM export remains part of the quality bar;
-- PowerPoint COM calls go through the repository broker (`scripts/pptx/powerpoint_com_broker.js` / `.ps1`) so measurement, export, QA probes, and parallel forward-test agents reuse one serialized desktop COM instance instead of creating, quitting, or racing PowerPoint directly;
-- `SKILL.md`, references, scripts, QA, and smoke tests agree.
+- PowerPoint COM calls go through the repository broker (`scripts/pptx/powerpoint_com_broker.js` / `.ps1`) so measurement, export, and parallel forward-test agents reuse one serialized desktop COM instance instead of creating, quitting, or racing PowerPoint directly;
+- `SKILL.md`, references, scripts, and smoke tests agree.

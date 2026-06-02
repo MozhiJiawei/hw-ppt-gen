@@ -78,14 +78,14 @@ assert.equal(targetedLayoutFeedback.phase, "layout");
 
 const qaFeedback = normalizeQaIssue({
   slide: 5,
-  type: "content_layout_text_too_long",
+  type: "body_layout_text_too_long",
   severity: "error",
   message: "Text block is too prose-heavy.",
   module_index: 1,
   block_index: 3,
   text_length: 220,
 });
-assert.equal(qaFeedback.code, "content_layout_text_too_long");
+assert.equal(qaFeedback.code, "body_layout_text_too_long");
 assert.equal(qaFeedback.phase, "qa");
 assert.equal(qaFeedback.target.slide, 5);
 assert.equal(qaFeedback.target.moduleIndex, 1);
@@ -94,7 +94,7 @@ assert(qaFeedback.repairs.some((item) => /Compress/.test(item)));
 
 const attachedQaFeedback = attachFeedbackIssue({
   slide: 6,
-  type: "content_layout_text_too_long",
+  type: "body_layout_text_too_long",
   severity: "error",
   message: "Text block is too prose-heavy.",
   layout_type: "three_column",
@@ -106,17 +106,25 @@ const explicitIssue = createFeedbackIssue({
   code: "compile_unknown_component",
   severity: "warning",
   phase: "compile",
-  target: { path: "slides[0].body[1]" },
+  target: {
+    path: "slides[0].body[1]",
+    semanticStack: [
+      { tag: "Columns", selector: "Slide > TwoColumn:nth-child(1)" },
+      { tag: "Module", title: "证据模块", selector: "Slide > TwoColumn:nth-child(1) > Module:nth-child(1)" },
+      { tag: "EvidenceFigure", id: "fig1", selector: "Slide > TwoColumn:nth-child(1) > Module:nth-child(1) > EvidenceFigure:nth-child(1)" },
+    ],
+  },
   message: "Unknown component.",
   repairs: ["Register the component or replace it with an official primitive."],
 });
 assert.equal(explicitIssue.phase, "compile");
 assert.equal(explicitIssue.target.path, "slides[0].body[1]");
+assert.equal(explicitIssue.target.semanticStack[2].id, "fig1");
 
 const normalized = normalizeFeedbackIssues([layoutDiagnostic, qaFeedback]);
 assert.equal(normalized.length, 2);
 assert.equal(normalized[0].code, "layout_stack_infeasible");
-assert.equal(normalized[1].code, "content_layout_text_too_long");
+assert.equal(normalized[1].code, "body_layout_text_too_long");
 
 const json = feedbackToJson([layoutDiagnostic, qaFeedback]);
 assert(JSON.parse(json).every((item) => item.code && item.phase && item.target));
@@ -124,10 +132,14 @@ assert(JSON.parse(json).every((item) => item.code && item.phase && item.target))
 const markdown = feedbackToMarkdown([layoutDiagnostic, qaFeedback]);
 assert(markdown.includes("slide 4 / module 2 / block 1"));
 assert(markdown.includes("layout_stack_infeasible"));
-assert(markdown.includes("content_layout_text_too_long"));
+assert(markdown.includes("body_layout_text_too_long"));
 assert(markdown.includes("Phase: layout"));
 assert(markdown.includes("Module: 市场型浪费"));
 assert(markdown.includes("Layout Type: three_column"));
+
+const stackMarkdown = feedbackToMarkdown([explicitIssue]);
+assert(stackMarkdown.includes("Semantic Stack:"));
+assert(stackMarkdown.includes("at EvidenceFigure#fig1"));
 
 const contextFeedback = diagnosticsToFeedbackIssues([
   { code: "layout_row_forced_scale", severity: "error", message: "Too narrow." },

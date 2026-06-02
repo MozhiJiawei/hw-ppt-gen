@@ -1,4 +1,4 @@
-const CONTENT_LAYOUT_TYPES = Object.freeze({
+const BODY_LAYOUT_TYPES = Object.freeze({
   two_column: Object.freeze({
     reference: "05 内容 二分栏",
     moduleCount: 2,
@@ -22,12 +22,12 @@ const CONTENT_LAYOUT_TYPES = Object.freeze({
   }),
 });
 
-function getContentLayoutType(type) {
-  return CONTENT_LAYOUT_TYPES[safeText(type)] || null;
+function getBodyLayoutType(type) {
+  return BODY_LAYOUT_TYPES[safeText(type)] || null;
 }
 
-function contentLayoutTypeRows() {
-  return Object.entries(CONTENT_LAYOUT_TYPES).map(([type, contract]) => ({ type, ...contract }));
+function bodyLayoutTypeRows() {
+  return Object.entries(BODY_LAYOUT_TYPES).map(([type, contract]) => ({ type, ...contract }));
 }
 
 function safeText(value) {
@@ -36,7 +36,7 @@ function safeText(value) {
 }
 
 module.exports = {
-  CONTENT_LAYOUT_TYPES,
-  contentLayoutTypeRows,
-  getContentLayoutType,
+  BODY_LAYOUT_TYPES,
+  bodyLayoutTypeRows,
+  getBodyLayoutType,
 };

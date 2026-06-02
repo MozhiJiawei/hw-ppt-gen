@@ -1,6 +1,6 @@
 # Evidence Schema
 
-Use this reference before placing any source figure, chart, screenshot, or table.
+Use this reference before placing any source image evidence.
 
 ## Contract
 
@@ -24,8 +24,8 @@ Supported templates:
 
 - `source_figure`
 - `source_chart`
-- `source_table`
-- `source_screenshot`
+
+Tables, screenshots, UI captures, and paper figures are still image inputs. Use `source_figure` unless the image is specifically a chart and the chart distinction matters.
 
 Required fields:
 

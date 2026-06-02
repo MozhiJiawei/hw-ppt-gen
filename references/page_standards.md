@@ -22,12 +22,12 @@ The summary page is the deck's evidence overview, not a KPI-only dashboard.
 Required:
 
 - preserves the brief's title, title note, and `分析总结`;
-- uses the parser-derived `contentLayout.type`;
+- uses the parser-derived `bodyLayout.type`;
 - presents the key evidence objects named by the summary brief when available;
 - keeps each evidence object readable;
 - uses KPI/cards/tables only as supporting components that explain the evidence.
 
-For summary and content pages, the page chrome is fixed: title, title note, section tabs, `分析总结`, summary body, footer, and page number are rendered by the shared Huawei shell helpers from the parsed brief. Content layout starts below the `分析总结` band and must not move or redraw those shell elements. Do not add manual text boxes in the title-summary gap to patch density or repeat summary content.
+For summary and content pages, the page chrome is fixed: title, title note, section tabs, `分析总结`, summary body, footer, and page number are rendered by the shared Huawei shell helpers from the parsed brief. Body DSL layout starts below the `分析总结` band and must not move or redraw those shell elements. Do not add manual text boxes in the title-summary gap to patch density or repeat summary content.
 
 Reject:
 
@@ -67,7 +67,7 @@ When a page cites several figures, choose the one that carries the page claim as
 
 ## Dense Evidence Page
 
-Multiple evidence objects on one page are allowed only when each remains readable at final size and the layout still follows a fixed Huawei content layout.
+Multiple evidence objects on one page are allowed only when each remains readable at final size and the layout still follows a fixed Huawei Body DSL layout family.
 
 If several figures cannot all remain readable:
 

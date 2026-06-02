@@ -1,6 +1,6 @@
 # Layout Standards
 
-Use this reference before choosing or coding Huawei content layouts.
+Use this reference before choosing or coding Huawei body layouts.
 
 The bundled reference images live in `assets/slides_ref/`:
 

@@ -1,8 +1,8 @@
 const { HW_STYLE } = require("../hw_pptx_helpers");
 const { collectPremeasurePrimitiveItems, measurePrimitive, premeasurePrimitives } = require("./measure_primitives");
-const { normalizeModuleBlocks } = require("./content_model");
+const { modulePrimitives } = require("./content_model");
 
-function fixedContentLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop) {
+function fixedBodyLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop) {
   const bottomPadding = layout.schema.special === "large_visual_with_side_cards" ? 0.35 : 0.17;
   return {
     x: HW_STYLE.slide.marginX,
@@ -12,7 +12,7 @@ function fixedContentLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop
   };
 }
 
-function contentLayoutAreas(layout, layoutBounds, options = {}) {
+function bodyLayoutAreas(layout, layoutBounds, options = {}) {
   const gap = 0.18;
   if (layout.schema.special === "large_visual_with_side_cards") {
     premeasureModuleWidthDemands([layout.modules[0]], layout.type, layoutBounds.w * 0.59, layoutBounds.h, options);
@@ -72,7 +72,7 @@ function collectBaseWidthMeasurementItems(layout, layoutBounds, options = {}) {
       w: Math.max(0.4, layoutBounds.w * 0.59),
       h: Math.max(0.6, layoutBounds.h),
     });
-    return collectPremeasurePrimitiveItems(normalizeModuleBlocks(layout.modules[0], {}), bodyArea, { ...options, layoutType: layout.type });
+    return collectPremeasurePrimitiveItems(modulePrimitives(layout.modules[0], {}), bodyArea, { ...options, layoutType: layout.type });
   }
   if (layout.schema.grid) return [];
   const columnCount = layout.schema.columns.length;
@@ -85,7 +85,7 @@ function collectBaseWidthMeasurementItems(layout, layoutBounds, options = {}) {
     h: Math.max(0.6, layoutBounds.h),
   });
   return collectPremeasurePrimitiveItems(
-    layout.modules.flatMap((module) => normalizeModuleBlocks(module, {})),
+    layout.modules.flatMap((module) => modulePrimitives(module, {})),
     bodyArea,
     { ...options, layoutType: layout.type }
   );
@@ -111,13 +111,13 @@ function premeasureModuleWidthDemands(modules = [], layoutType, probeModuleW, mo
     w: Math.max(0.4, probeModuleW),
     h: Math.max(0.6, moduleH),
   });
-  const blocks = modules.flatMap((module) => normalizeModuleBlocks(module, {}));
+  const blocks = modules.flatMap((module) => modulePrimitives(module, {}));
   premeasurePrimitives(blocks, bodyArea, { ...options, layoutType });
 }
 
 function measureModuleWidthDemand(module, layoutType, probeModuleW, moduleH, options = {}) {
   const framePaddingW = 0.26;
-  const blocks = normalizeModuleBlocks(module, {});
+  const blocks = modulePrimitives(module, {});
   const bodyArea = moduleBodyArea({ x: 0, y: 0, w: Math.max(0.4, probeModuleW), h: Math.max(0.6, moduleH) });
   const measureOptions = { ...options, layoutType };
   premeasurePrimitives(blocks, bodyArea, measureOptions);
@@ -176,8 +176,8 @@ function moduleBodyArea(area) {
 module.exports = {
   allocateMeasuredWidths,
   collectBaseWidthMeasurementItems,
-  contentLayoutAreas,
-  fixedContentLayoutArea,
+  bodyLayoutAreas,
+  fixedBodyLayoutArea,
   measureModuleWidthDemand,
   moduleBodyArea,
   premeasureModuleWidthDemands,

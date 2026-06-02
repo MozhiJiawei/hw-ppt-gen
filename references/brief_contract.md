@@ -24,19 +24,19 @@ Preserve these fields in the plan and visible deck:
 - `分析总结` -> `summary.body` label/text;
 - TOC `小标题` and descriptions;
 - content-slide `所属章节` -> `currentSection`;
-- parser-derived `contentLayout.type`.
+- parser-derived `bodyLayout.type` for the Body DSL root layout.
 
 Do not shorten, rewrite, hide, or substitute hard fields to satisfy style, density, or visual-QA feedback. If a hard field creates a visible design issue, keep it, let the layout allocate the needed space, and record an upstream brief issue only when the page still cannot fit.
 
 ## Layout Family
 
-The parser derives lower content layout from `分析总结` count:
+The parser derives the Body DSL layout family from `分析总结` count:
 
 - 1 point -> `biased_column`;
 - 2 points -> `two_column`;
 - 3 points -> `three_column`.
 
-Use this `contentLayout.type` as mandatory for brief-backed summary and content pages.
+Use this `bodyLayout.type` as mandatory for brief-backed summary and content pages.
 
 ## Source Material Fields
 
@@ -56,6 +56,6 @@ When a brief captions a source figure with what it proves, preserve that evidenc
 ## Forbidden Patterns
 
 - Do not copy local absolute paths into visible slide text.
-- Do not accept `contentLayout`, `template`, `visual_anchor.kind`, font, color, or column-count instructions inside the brief.
+- Do not accept `template`, `visual_anchor.kind`, font, color, or column-count instructions inside the brief.
 - Do not use `参考图片` as direct `addImage` bypass; source figures enter through `Evidence`.
 - Do not make a KPI/generated visual replace a cited source figure that carries the claim.

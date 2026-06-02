@@ -7,6 +7,7 @@ const pptHelpers = require("../pptx/hw_pptx_helpers");
 const visualSlide = require("../pptx/hw_visual_anchor_slide");
 const diagram = require("../pptx/hw_diagram_helpers");
 const { requestPowerPointBroker } = require("../pptx/powerpoint_com_broker");
+const { parseSlideBodyDsl } = require("../pptx/dsl/jsx_dsl");
 
 const {
   HW_STYLE,
@@ -276,18 +277,40 @@ function isSupportingOnlySpec(spec) {
     || (spec.kind === "Matrix" && ["table", "capability_matrix"].includes(spec.template));
 }
 
-function contentModulesForSpec(spec, realAnchorSpec) {
+function contentBodyDslForSpec(spec, realAnchorSpec) {
   if (!isSupportingOnlySpec(spec)) {
-    return [
-      { role: "visual_anchor", title: spec.title, visual_anchor: spec },
-      { role: "text", title: "导出检查", body: "统一正文页入口通过 contentLayout 渲染主视觉。" },
-    ];
+    const visualNode = spec.kind === "Evidence"
+      ? `<EvidenceFigure id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} fit="contain" />`
+      : `<Visual id={spec.id} title={spec.title} claim={spec.claim} draw={draw} model={spec.visual_spec} />`;
+    return parseSlideBodyDsl(`<Slide>
+  <BiasedColumn>
+    <Module title={spec.title}>
+      ${visualNode}
+    </Module>
+    <Module title="导出检查">
+      <InsightText body="统一正文页入口通过 Body DSL 渲染主视觉。" />
+    </Module>
+  </BiasedColumn>
+</Slide>`, { spec, draw: `${spec.kind}/${spec.template}` }).bodyDsl;
   }
-  return [
-    { role: "visual_anchor", title: "真实锚点", visual_anchor: realAnchorSpec },
-    { role: "content_panel", title: spec.title, blocks: [{ type: "supporting_component", component: spec }] },
-    { role: "text", title: "导出检查", body: "supporting component 随 contentLayout 一起渲染，但不充当真实锚点。" },
-  ];
+  return parseSlideBodyDsl(`<Slide>
+  <ThreeColumn>
+    <Module title="真实锚点">
+      <Visual id={realAnchorSpec.id} title={realAnchorSpec.title} claim={realAnchorSpec.claim} draw={realDraw} model={realAnchorSpec.visual_spec} />
+    </Module>
+    <Module title={spec.title}>
+      <Visual id={spec.id} title={spec.title} claim={spec.claim} draw={draw} model={spec.visual_spec} />
+    </Module>
+    <Module title="导出检查">
+      <InsightText body="supporting component 随 Body DSL 一起渲染，但不充当真实锚点。" />
+    </Module>
+  </ThreeColumn>
+</Slide>`, {
+    spec,
+    draw: `${spec.kind}/${spec.template}`,
+    realAnchorSpec,
+    realDraw: `${realAnchorSpec.kind}/${realAnchorSpec.template}`,
+  }).bodyDsl;
 }
 
 function addPrimitiveSlide(pptx) {
@@ -313,7 +336,7 @@ function addPrimitiveSlide(pptx) {
   grayCard(slide, { x: 0.7, y: 2.39, w: 3.6, h: 1.3, title: "灰卡", body: ["redTitleCard", "grayCard", "textBox"] });
   textBox(slide, `主题色 ${HW_STYLE.color.red}`, { x: 4.6, y: 2.28, w: 3.2, h: 0.35, fontSize: 14, bold: true, color: HW_STYLE.color.red });
   textBox(slide, "表格能力由 Matrix/table 视觉锚点覆盖，不作为页面 primitive 暴露。", { x: 4.6, y: 2.8, w: 3.6, h: 0.55, fontSize: 12, color: HW_STYLE.color.text });
-  textBox(slide, "正文侧边解读由 contentLayout 模块覆盖，不再暴露直接辅卡接口。", { x: 8.5, y: 2.05, w: 3.7, h: 0.6, fontSize: 12, color: HW_STYLE.color.text });
+  textBox(slide, "正文侧边解读由 Body DSL 模块覆盖，不再暴露直接辅卡接口。", { x: 8.5, y: 2.05, w: 3.7, h: 0.6, fontSize: 12, color: HW_STYLE.color.text });
   addFooter(slide, { source: "开发测试", page: "03" });
 }
 
@@ -324,7 +347,7 @@ function addDirectHelperSlides(pptx, specs) {
     sections: ["接口覆盖"],
     currentSection: "接口覆盖",
   });
-  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页只验证图形 renderer；正文页路径由 contentLayout 覆盖。" }] });
+  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页只验证图形 renderer；正文页路径由 Body DSL 覆盖。" }] });
   renderVisualAnchorPptNative(slide, specs.find((spec) => spec.template === "process"), { x: 0.7, y: 2.05, w: 5.7, h: 3.2 });
   renderVisualAnchorPptNative(slide, specs.find((spec) => spec.kind === "Evidence"), { x: 6.75, y: 2.05, w: 5.7, h: 3.2 });
   addFooter(slide, { source: "开发测试", page: "04" });
@@ -381,11 +404,7 @@ async function buildDeck() {
           { label: "导出目标", text: "该页必须能被 PowerPoint COM 打开并导出。" },
         ],
       },
-      contentLayout: {
-        type: "biased_column",
-        reference: "06 内容 偏分栏",
-        modules: contentModulesForSpec(spec, realAnchorSpec),
-      },
+      bodyDsl: contentBodyDslForSpec(spec, realAnchorSpec),
       source: "开发测试",
       page: String(idx + 5).padStart(2, "0"),
     });

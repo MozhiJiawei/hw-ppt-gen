@@ -36,6 +36,8 @@ function feedbackToMarkdown(items = []) {
       lines.push(`  Phase: ${issue.phase}`);
       const targetDetails = targetDetailLines(issue.target);
       for (const line of targetDetails) lines.push(`  ${line}`);
+      const stackLines = semanticStackLines(issue.target?.semanticStack);
+      for (const line of stackLines) lines.push(`  ${line}`);
       const detailLines = summarizeDetails(issue.details);
       for (const line of detailLines) lines.push(`  ${line}`);
       const box = issue.details?.box || issue.details?.layout_budget || issue.details?.diagnostic?.box;
@@ -55,31 +57,62 @@ function targetLabel(target = {}) {
   if (target.blockIndex !== undefined) parts.push(`block ${target.blockIndex}`);
   if (target.componentId) parts.push(String(target.componentId));
   if (!parts.length && target.path) parts.push(String(target.path));
+  if (!parts.length && target.selector) parts.push(String(target.selector));
   return parts.length ? parts.join(" / ") : "deck";
 }
 
 function targetDetailLines(target = {}) {
   const lines = [];
+  if (target.selector) lines.push(`Selector: ${target.selector}`);
   if (target.path) lines.push(`Path: ${target.path}`);
+  if (target.prop) lines.push(`Prop: ${target.prop}`);
   if (target.moduleTitle) lines.push(`Module: ${target.moduleTitle}`);
   if (target.componentId) lines.push(`Component: ${target.componentId}`);
   return lines;
 }
 
+function semanticStackLines(stack = []) {
+  if (!Array.isArray(stack) || !stack.length) return [];
+  const lines = ["Semantic Stack:"];
+  for (const frame of stack) {
+    const label = stackFrameLabel(frame);
+    const location = frame.selector || frame.path;
+    lines.push(`  at ${label}${location ? ` (${location})` : ""}`);
+  }
+  return lines;
+}
+
+function stackFrameLabel(frame = {}) {
+  const id = frame.id ? `#${frame.id}` : "";
+  const title = frame.title ? ` "${frame.title}"` : "";
+  return `${frame.tag || "Unknown"}${id}${title}`;
+}
+
 function summarizeDetails(details = {}) {
   if (!details || typeof details !== "object" || Array.isArray(details)) return [];
   const lines = [];
+  if (Array.isArray(details.found_components)) {
+    lines.push("Found Components:");
+    for (const component of details.found_components) {
+      const label = component.component_id ? `${component.tag || component.role}#${component.component_id}` : (component.tag || component.role || "component");
+      const role = component.role ? ` role=${component.role}` : "";
+      const location = component.selector ? ` (${component.selector})` : "";
+      lines.push(`  found ${label}${role}${location}`);
+    }
+  }
   for (const key of [
     "expected",
     "actual",
     "expected_output",
     "actual_output",
-    "expected_content_layout_type",
-    "actual_content_layout_type",
+    "expected_body_layout_type",
+    "actual_body_layout_type",
     "layout_type",
     "value",
     "visual_component_id",
     "taxonomy_key",
+    "expected_module_count",
+    "actual_module_count",
   ]) {
     if (details[key] !== undefined && details[key] !== "") lines.push(`${labelFor(key)}: ${formatDetail(details[key])}`);
   }

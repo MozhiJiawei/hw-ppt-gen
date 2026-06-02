@@ -3346,8 +3346,8 @@ function validateVisualAnchorSpec(spec) {
     if (!spec.source || typeof spec.source !== "object") errors.push("Evidence requires a source object.");
     if (spec.source && !safeText(spec.source.path) && !safeText(spec.source.id)) errors.push("Evidence source requires path or id.");
     if (spec.source && !safeText(spec.source.caption)) errors.push("Evidence source requires caption; do not rely on renderer fallback text.");
-    if (!["source_figure", "source_table", "source_screenshot", "source_chart"].includes(spec.template)) {
-      errors.push("Evidence template must be source_figure, source_table, source_screenshot, or source_chart.");
+    if (!["source_figure", "source_chart"].includes(spec.template)) {
+      errors.push("Evidence template must be source_figure or source_chart. Tables and screenshots are image inputs; use source_figure unless the source is specifically a chart.");
     }
     if (errors.length) throw new Error(`Invalid visual anchor spec "${spec.id || "(unknown)"}":\n- ${errors.join("\n- ")}`);
     return true;

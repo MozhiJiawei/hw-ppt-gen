@@ -34,7 +34,7 @@ The repository already has a useful skeleton smoke path in `scripts/smoke/test_p
 
 The repository also has strong measurement and QA checks, but their feedback is split across low-level layout diagnostics and QA issue objects. Those are good enforcement tools, but they are not yet a DevTools-like feedback surface for AI repair.
 
-This step keeps the old body `contentLayout` path intact and introduces a single issue format that later DSL compilation, layout, render, and QA producers can all use.
+This step predates the final cleanup and introduced a single issue format that later DSL compilation, layout, render, and QA producers can all use.
 
 ---
 
@@ -45,7 +45,7 @@ This step keeps the old body `contentLayout` path intact and introduces a single
 - R3. Keep body content, reference images, visual anchors, supporting components, delivery constraints, and body slot coordinates out of skeleton plan ownership.
 - R4. Unify layout diagnostics and QA issues into a compatible FeedbackIssue shape without removing existing QA rules.
 - R5. Provide JSON and Markdown reporting that groups feedback by slide/module/block and gives agents actionable repair context.
-- R6. Keep `npm run smoke` and forward tests passing with the current old body path.
+- R6. Keep `npm run smoke` and forward tests passing while later Body DSL work replaces the old body path.
 
 ---
 
@@ -53,7 +53,7 @@ This step keeps the old body `contentLayout` path intact and introduces a single
 
 - Do not introduce Body DSL in this step.
 - Do not change the current content renderer or visual-anchor renderer behavior.
-- Do not remove `contentLayout` authoring yet.
+- Do not remove `bodyDsl` authoring yet.
 - Do not rewrite hard QA rules; wrap or normalize their output.
 - Do not put body slot geometry into the skeleton plan. The frame renderer computes it.
 

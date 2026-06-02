@@ -37,7 +37,7 @@ const FAMILIES = Object.freeze({
 });
 
 const OFFICIAL_TEMPLATES_BY_KIND = Object.freeze({
-  Evidence: Object.freeze(["source_figure", "source_table", "source_screenshot", "source_chart"]),
+  Evidence: Object.freeze(["source_figure", "source_chart"]),
   Quantity: Object.freeze(["data_cards", "bar_chart", "line_chart", "proportion_chart", "heatmap"]),
   Sequence: Object.freeze(["process", "timeline", "swimlane"]),
   Loop: Object.freeze(["closed_loop", "dual_loop", "spiral_iteration_ladder"]),
@@ -54,8 +54,6 @@ const TEMPLATE_LAYOUTS = Object.freeze(Object.fromEntries(
 
 const TEMPLATE_RENDERERS = Object.freeze({
   source_figure: RENDER_PATH.EVIDENCE,
-  source_table: RENDER_PATH.EVIDENCE,
-  source_screenshot: RENDER_PATH.EVIDENCE,
   source_chart: RENDER_PATH.EVIDENCE,
 
   data_cards: RENDER_PATH.PPT_NATIVE,
@@ -94,8 +92,6 @@ const SUPPORTING_COMPONENT_KEYS = Object.freeze(new Set([
 const TEMPLATE_CLASSIFICATION = Object.freeze({
   "Evidence/source_figure": { family: FAMILIES.Evidence, type: "SourceFigure", resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT },
   "Evidence/source_chart": { family: FAMILIES.Evidence, type: "SourceChart", resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT },
-  "Evidence/source_table": { family: FAMILIES.Evidence, type: "SourceTableImage", resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT },
-  "Evidence/source_screenshot": { family: FAMILIES.Evidence, type: "SourceScreenshot", resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT },
   "Quantity/data_cards": { family: FAMILIES.QuantitativeReadout, type: "KpiCardRow", resizePolicy: RESIZE_POLICY.FIXED },
   "Quantity/bar_chart": { family: FAMILIES.QuantitativeReadout, type: "MiniBarChart", resizePolicy: RESIZE_POLICY.FLEXIBLE },
   "Quantity/line_chart": { family: FAMILIES.QuantitativeReadout, type: "MiniLineChart", resizePolicy: RESIZE_POLICY.FLEXIBLE },

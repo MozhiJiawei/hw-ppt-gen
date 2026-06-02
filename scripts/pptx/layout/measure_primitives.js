@@ -13,13 +13,14 @@ function measurePrimitive(block = {}, area = {}, options = {}) {
     preferredSize: { w: Number(area.w || 0), h: 0.3 },
     maxUsefulSize: { w: Number(area.w || 0), h: Number(area.h || 0) },
     resizePolicy: classification.resizePolicy,
-    priority: primitivePriority(classification),
-    diagnostics: [...classification.diagnostics],
+    priority: primitivePriority(classification, block),
+    diagnostics: withDslContext([...classification.diagnostics], block),
+    dsl: block.dsl || null,
   };
 
   if (classification.measureSupport === MEASURE_SUPPORT.UNSUPPORTED) return base;
   if (!visualAnchor) return measureTextPrimitive(base, block, area, options);
-  if (classification.family === "Evidence") return measureEvidencePrimitive(base, visualAnchor, area, options);
+  if (classification.family === "Evidence") return measureEvidencePrimitive(base, block, visualAnchor, area, options);
   if (classification.type === "KpiCardRow") return measureDataCardsPrimitive(base, visualAnchor, area, options);
   if (classification.type === "NativeTable") return measureTablePrimitive(base, visualAnchor, area, options);
   return measureVisualPrimitive(base, measurableVisualBlock(block, visualAnchor), area, options);
@@ -83,7 +84,7 @@ function measureTextPrimitive(base, block, area, options = {}) {
   };
 }
 
-function measureEvidencePrimitive(base, visualAnchor, area, options) {
+function measureEvidencePrimitive(base, block, visualAnchor, area, options) {
   const measured = powerPointMeasureOrError(base, { type: "visual_anchor", visual_anchor: visualAnchor }, area, options);
   if (!measured.ok) return measured.result;
   const bounds = measured.result.shape_bounds || {};
@@ -91,8 +92,9 @@ function measureEvidencePrimitive(base, visualAnchor, area, options) {
   const measuredWidth = Math.ceil((Number(bounds.w || Number(area.w || 0)) + 0.12) * 20) / 20;
   const availableWidth = Number(area.w || measuredWidth || 0);
   const availableHeight = Number(area.h || measuredHeight || 0);
-  const minWidth = Math.max(1.0, Math.min(availableWidth || measuredWidth, measuredWidth * 0.5));
-  const minHeight = Math.max(0.72, Math.min(availableHeight || measuredHeight, measuredHeight * 0.5));
+  const readable = evidenceReadableFloor(block, visualAnchor, area);
+  const minWidth = Math.max(readable.minWidth, Math.min(availableWidth || measuredWidth, measuredWidth * 0.5));
+  const minHeight = Math.max(readable.minHeight, Math.min(availableHeight || measuredHeight, measuredHeight * 0.5));
   const preferredWidth = Math.max(minWidth, Math.min(availableWidth || measuredWidth, measuredWidth));
   const preferredHeight = Math.max(minHeight, Math.min(availableHeight || measuredHeight, measuredHeight));
   return {
@@ -105,7 +107,10 @@ function measureEvidencePrimitive(base, visualAnchor, area, options) {
     },
     resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT,
     measurement: measured.result,
-    diagnostics: base.diagnostics,
+    diagnostics: [
+      ...base.diagnostics,
+      ...readable.diagnostics,
+    ],
   };
 }
 
@@ -143,6 +148,7 @@ function measureDataCardsPrimitive(base, visualAnchor, area = {}, options = {}) 
         available_width: round(availableWidth),
         measured_width: round(measuredWidth),
         probed_width: round(fit.width),
+        target: dslTarget({ dsl: base.dsl }, visualAnchor),
       }
     ));
   }
@@ -193,6 +199,7 @@ function measureDataCardsFit(base, visualAnchor, area = {}, options = {}) {
             available_width: round(available),
             max_probe_width: 6,
             error: String(lastFailure?.error || "").slice(0, 300),
+            target: dslTarget({ dsl: base.dsl }, visualAnchor),
           }
         ),
       ],
@@ -218,6 +225,7 @@ function powerPointMeasureOrError(base, block, area, options = {}) {
           {
             taxonomy_key: base.primitive.taxonomy_key,
             error: String(message).slice(0, 500),
+            target: dslTarget({ dsl: base.dsl }, getBlockVisualSpec(block) || {}),
           }
         ),
       ],
@@ -272,13 +280,71 @@ function visualHeightPolicy(classification = {}, block = {}) {
   return { min: 0.8, preferred: 1.15, max: 2.0 };
 }
 
-function primitivePriority(classification = {}) {
+function primitivePriority(classification = {}, block = {}) {
+  const dslPriority = block.dsl?.priority;
+  if (dslPriority === "primary") return 120;
+  if (dslPriority === "secondary") return 70;
+  if (dslPriority === "supporting") return 35;
   if (classification.family === "Evidence") return 100;
   if (classification.family === "RelationshipDiagram") return 90;
   if (classification.family === "QuantitativeReadout") return 70;
   if (classification.family === "MatrixTable") return 65;
   if (classification.family === "StructuredText") return 45;
   return 20;
+}
+
+function evidenceReadableFloor(block = {}, visualAnchor = {}, area = {}) {
+  if (!block.dsl) return { minWidth: 1.0, minHeight: 0.72, diagnostics: [] };
+  const priority = block.dsl?.priority || "primary";
+  const primary = priority === "primary";
+  const availableWidth = Number(area.w || 0);
+  const availableHeight = Number(area.h || 0);
+  const minWidth = primary ? 2.2 : 1.45;
+  const minHeight = primary ? 1.8 : 1.1;
+  const minArea = primary ? 4.0 : 1.6;
+  const diagnostics = [];
+  if (availableWidth && availableWidth * Math.max(availableHeight, minHeight) < minArea) {
+    diagnostics.push(diagnostic(
+      "layout_evidence_readable_area_floor",
+      "error",
+      "Evidence component cannot preserve a readable source area in the current DSL layout.",
+      {
+        target: dslTarget(block, visualAnchor),
+        available_width: round(availableWidth),
+        available_height: round(availableHeight),
+        minimum_readable_area: round(minArea),
+        minimum_readable_height: round(minHeight),
+        repairs: [
+          "Move neighboring InsightText or supporting components out of this Module.",
+          "Use a layout with a larger visual slot, such as biased_column for primary evidence.",
+          "Split dense evidence onto its own content slide.",
+        ],
+      }
+    ));
+  }
+  return { minWidth, minHeight, diagnostics };
+}
+
+function withDslContext(diagnostics = [], block = {}) {
+  if (!block?.dsl) return diagnostics;
+  return diagnostics.map((item) => ({
+    ...item,
+    target: {
+      ...(item.target || {}),
+      path: item.target?.path || block.dsl.path,
+      selector: item.target?.selector || block.dsl.selector,
+      componentId: item.target?.componentId || block.dsl.id,
+    },
+  }));
+}
+
+function dslTarget(block = {}, visualAnchor = {}) {
+  return {
+    path: block.dsl?.path,
+    selector: block.dsl?.selector,
+    componentId: block.dsl?.id || visualAnchor.id,
+    semanticStack: block.dsl?.semanticStack,
+  };
 }
 
 function kpiProbeWidths(visualAnchor, area = {}) {

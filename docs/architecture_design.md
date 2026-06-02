@@ -41,7 +41,7 @@ This view lists the architectural elements only. It intentionally does not draw 
 |                                                                                  |
 |  +--------------------------+  +--------------------------+  +------------------+ |
 |  | addVisualAnchorContent   |  | hw_visual_anchor_slide   |  | PPT text layer   | |
-|  | unified content API      |  | content layout composer  |  | editable notes   | |
+|  | unified content API      |  | Body DSL layout engine    |  | editable notes   | |
 |  +--------------------------+  +--------------------------+  +------------------+ |
 +----------------------------------------------------------------------------------+
 
@@ -138,8 +138,8 @@ Owned by:
 - `references/page_standards.md`
 - `references/brief_contract.md`
 - `references/skeleton_plan_schema.md`
+- `references/slide_dsl_authoring_schema.md`
 - `references/layout_standards.md`
-- `references/content_layout_schema.md`
 - `references/evidence_schema.md`
 - `references/generated_visual_schema.md`
 
@@ -150,6 +150,7 @@ Responsibility:
 - define page, layout, evidence, and generated-visual schemas;
 - keep runtime-facing rules separate from implementation details and test fixtures.
 - document the skeleton/frame plan separately from creative body-content authoring.
+- document Body DSL as the AI-facing creative body authoring surface and native component model.
 
 Constraints:
 
@@ -202,8 +203,8 @@ Constraints:
 Owned by:
 
 - deck-specific generation scripts;
-- content layout data passed to `addVisualAnchorContentSlide`;
-- `references/content_layout_schema.md`
+- `bodyDsl` compiled through `scripts/pptx/dsl/*`;
+- fixed body layout data resolved from Body DSL before rendering;
 
 Responsibility:
 
@@ -211,33 +212,60 @@ Responsibility:
 
 The slide schema has three independent substructures:
 
-1. `contentLayout`: page shape and module/block placement.
+1. `bodyDsl`: web-like body tree, layout family, modules, components, and editable text.
 2. `visual_anchor`: evidence or diagram/chart that acts as the page/module's visual proof.
 3. `supporting_component`: structured readout/compression such as KPI cards, tables, capability matrices/stacks, or heatmaps.
 4. text fields: summary, captions, legends, source notes, interpretation, and conclusions.
 
 Constraints:
 
-- layout chooses where content goes;
+- the DSL root layout chooses where content goes;
 - visual anchors choose what evidence or diagram relationship anchors the module;
 - supporting components structure secondary readouts but do not satisfy visual-anchor requirements;
 - text fields explain the slide and remain editable PPT text;
 - do not put captions, source notes, reading guidance, or conclusions under `visual_anchor.visual_spec`.
 
-### Content Layout Composer
+### Body DSL
+
+Owned by:
+
+- `references/slide_dsl_authoring_schema.md`
+- `references/generated_dsl_component_catalog.md`
+- `scripts/pptx/dsl/*`
+
+Responsibility:
+
+- expose a web-like tree authoring surface for the creative body region;
+- register discoverable components with AI visibility, maturity, layout-intent constraints, budget hints, alternatives, and repair hints;
+- validate component props before rendering;
+- resolve DSL nodes against registry contracts before measurement and rendering.
+
+Constraints:
+
+- Body DSL owns only the body region below the fixed skeleton/frame chrome;
+- `bodyDsl` is the only accepted creative body input to `addVisualAnchorContentSlide`;
+- component discovery must hide internal atoms from the default AI index;
+- layout intent is limited to registered props such as `align`, `valign`, `fit`, `density`, `priority`, `maxLines`, and `maxItems`;
+- Body DSL must reject arbitrary style objects, page coordinates, raw width/height percentages, z-index, and manual margins/padding;
+- source evidence must enter through Evidence components and preserve aspect ratio;
+- supporting components remain secondary readouts and must not satisfy the real visual-anchor requirement;
+- `Visual(draw, model)` is an official escape hatch for existing registered draw functions, not arbitrary dynamic code in this step;
+- the resolved DSL tree is an internal parser/typechecker result, not a separate plan layer.
+
+### Body DSL Layout Engine
 
 Owned by:
 
 - `scripts/pptx/contracts/visual_templates.js`
-- `scripts/pptx/contracts/content_layout_types.js`
+- `scripts/pptx/contracts/body_layout_types.js`
 - `scripts/pptx/hw_visual_anchor_slide.js`
 - `scripts/pptx/layout/*`
 
 Responsibility:
 
-- define the shared kind/template, supporting-component, renderer-path, measurement-support, resize-policy, and `contentLayout.type` facts used by renderer, planner, QA, and smoke tests;
+- define the shared kind/template, supporting-component, renderer-path, measurement-support, resize-policy, and Body DSL layout family facts used by renderer, planner, QA, and smoke tests;
 - create Huawei content pages;
-- apply fixed content layouts such as `two_column`, `biased_column`, `three_column`, and `four_column`;
+- apply fixed Body DSL layout families such as `two_column`, `biased_column`, `three_column`, and `four_column`;
 - classify body-content blocks into Huawei layout primitives;
 - measure primitive minimum, preferred, and maximum useful sizes before rendering;
 - allocate module-internal boxes and record diagnostics;
@@ -249,13 +277,13 @@ Responsibility:
 Constraints:
 
 - contract modules are the code-level source of truth; renderer, QA, and tests should import them instead of copying official template/layout lists;
-- `contentLayout` is a layout container, not a visual-template layer;
+- Body DSL layout is a container, not a visual-template layer;
 - allowed blocks are layout/text blocks, `visual_anchor` blocks, and `supporting_component` blocks;
 - do not add layout-specific visual roles such as `image_text`, `metric_row`, `mini_card_grid`, or `sectioned_card_grid`;
 - if a module needs multiple visuals, supporting readouts, and text fragments, represent them as multiple `visual_anchor`, `supporting_component`, and `text` blocks;
 - source images must enter through `Evidence`, not a direct image block.
 - primitive diagnostics may explain a layout decision, but they must not become a second rendering path.
-- `legacy_fallback` and `unsupported` are hard failures in strict content layout; they are not accepted render-success states.
+- `legacy_fallback` and `unsupported` are hard failures in strict Body DSL layout; they are not accepted render-success states.
 
 ### Visual Output
 
@@ -380,7 +408,7 @@ Constraints:
 
 ```mermaid
 flowchart LR
-  Layout["contentLayout\npage shape + modules + blocks"]
+  Layout["bodyDsl layout\npage shape + modules + components"]
   VisualSpec["visual_anchor\nevidence + diagram/chart"]
   SupportSpec["supporting_component\ncards + tables + grids"]
   TextOutline["text outline\nsummary + captions + notes"]
@@ -402,7 +430,7 @@ flowchart LR
 
 The three inputs are independent:
 
-- `contentLayout` must not carry visual semantics.
+- Body DSL layout tags must not carry visual semantics.
 - `visual_anchor` must not carry page explanation prose.
 - `supporting_component` must not be used as proof that the page has a visual anchor.
 - text outline must not bypass visual-anchor evidence.
@@ -458,7 +486,7 @@ Architecture rule:
 
 - source figures, screenshots, and charts must be `Evidence` anchors;
 - generated diagram output may be inserted as an image only as the final artifact of a visual anchor;
-- direct image roles such as `image_text` are not allowed in content layout.
+- direct image roles such as `image_text` are not allowed in Body DSL layout.
 
 This prevents image placement from bypassing semantic anchors and source tracking.
 
@@ -484,7 +512,7 @@ Do not merge changes where only the script works but the skill still asks for ol
 
 These are concrete drift patterns this repository should avoid:
 
-- layout shortcut becomes visual semantics: `image_text`, `metric_row`, or mini-grid roles in `contentLayout`;
+- layout shortcut becomes visual semantics: `image_text`, `metric_row`, or mini-grid roles in Body DSL layout;
 - structured readout becomes fake anchor: `data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, or generated `heatmap` is used to satisfy visual-anchor requirements;
 - visual-anchor bypass: part of the visual is drawn through untracked helper calls;
 - silent fallback: one template implementation quietly substitutes another to pass PowerPoint export;

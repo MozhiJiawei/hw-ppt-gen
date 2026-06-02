@@ -8,7 +8,7 @@ Do not judge by whether the candidate reproduced a hidden answer exactly. Judge 
 
 The run fails immediately if any of these are true:
 
-- The deck does not preserve brief-fixed fields: page count, titles, title notes, analysis-summary points, TOC order, content-slide section assignments, or parser-derived `contentLayout.type`.
+- The deck does not preserve brief-fixed fields: page count, titles, title notes, analysis-summary points, TOC order, content-slide section assignments, or parser-derived `bodyLayout.type`.
 - A content slide lacks a visual anchor where the brief requires source figure/chart/table evidence.
 - A primary source figure is visibly too small to act as evidence.
 - Visible generated text is mostly copied long-form prose from the brief instead of compressed page text.
@@ -29,7 +29,7 @@ Score each category from 0 to 3.
 Checks:
 
 - Uses `ppt_content_brief.md` through the Skill's brief-consumption flow.
-- Preserves fixed brief fields exactly enough for QA: titles, title notes, analysis-summary labels/text, TOC, page order, current section, and contentLayout type.
+- Preserves fixed brief fields exactly enough for QA: titles, title notes, analysis-summary labels/text, TOC, page order, current section, and bodyLayout type.
 - Uses `正文内容`, `参考图片`, and `备注` as layout material rather than as a second story line.
 
 ### 2. Huawei Visual Language

@@ -29,21 +29,23 @@ const {
   countModuleVisualAnchors,
   getBlockVisualSpec,
   isTextBlock,
-  normalizeContentLayout,
-  normalizeModuleBlocks,
-  normalizeModuleBody,
+  modulePrimitives,
+  normalizeTextPrimitiveBody,
   visualComponentRole,
 } = require("./layout/content_model");
 const {
   collectBaseWidthMeasurementItems,
-  contentLayoutAreas,
-  fixedContentLayoutArea,
+  bodyLayoutAreas,
+  fixedBodyLayoutArea,
   moduleBodyArea,
-} = require("./layout/content_layout_planner");
+} = require("./layout/body_layout_planner");
 const {
   createPowerPointMeasurementSession,
   premeasureBlocksWithPowerPoint,
 } = require("./layout/powerpoint_measurement_provider");
+const {
+  compileBodyDslToRenderModel,
+} = require("./dsl/compile_slide_dsl");
 
 function ensureManifest(pptx) {
   if (!Array.isArray(pptx._hwVisualAnchorManifest)) pptx._hwVisualAnchorManifest = [];
@@ -174,33 +176,27 @@ function premeasureVisualAnchorContentSlides(pptx, slides = [], options = {}) {
   const measureOptions = { ...options, measurementSession };
   const normalized = slides
     .map((data) => {
-      const contentLayout = normalizeContentLayout(data.contentLayout);
-      if (!contentLayout) return null;
+      const bodyLayout = resolveBodyRenderModel(data);
+      if (!bodyLayout) return null;
       return {
-        contentLayout,
-        layoutBounds: fixedContentLayoutArea(contentLayout, HW_STYLE.summary.contentTop),
+        bodyLayout,
+        layoutBounds: fixedBodyLayoutArea(bodyLayout, HW_STYLE.summary.contentTop),
       };
     })
     .filter(Boolean);
 
   premeasureBlocksWithPowerPoint(
-    normalized.flatMap(({ contentLayout, layoutBounds }) => collectBaseWidthMeasurementItems(contentLayout, layoutBounds, measureOptions)),
+    normalized.flatMap(({ bodyLayout, layoutBounds }) => collectBaseWidthMeasurementItems(bodyLayout, layoutBounds, measureOptions)),
     measureOptions
   );
 
   const finalItems = [];
-  normalized.forEach(({ contentLayout, layoutBounds }) => {
-    const areas = contentLayoutAreas(contentLayout, layoutBounds, measureOptions);
-    finalItems.push(...collectFinalStackMeasurementItems(contentLayout.modules, areas, measureOptions));
+  normalized.forEach(({ bodyLayout, layoutBounds }) => {
+    const areas = bodyLayoutAreas(bodyLayout, layoutBounds, measureOptions);
+    finalItems.push(...collectFinalStackMeasurementItems(bodyLayout.modules, areas, measureOptions));
   });
   premeasureBlocksWithPowerPoint(finalItems, measureOptions);
   return measurementSession.stats;
-}
-
-function normalizePlainCaption(module) {
-  const caption = module.visual_anchor_caption || module.caption || {};
-  if (typeof caption === "string") return safeText(caption);
-  return safeText(caption.text || caption.title || "");
 }
 
 function addContentModuleFrame(slide, module, area, options = {}) {
@@ -287,11 +283,6 @@ function richTextBoxOptions(options) {
     breakLine: false,
     lineSpacingMultiple: 1.5,
   };
-}
-
-function addTextModule(slide, module, area) {
-  const bodyArea = addContentModuleFrame(slide, module, area);
-  addModuleBodyText(slide, normalizeModuleBody(module), bodyArea, module);
 }
 
 function normalizeEmphasisTerms(module = {}) {
@@ -432,13 +423,10 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
   if (type === "visual_anchor" || type === "supporting_component") {
     return renderVisualAnchorBlock(slide, block, module, data, area, fallbackCaption, options);
   }
-  if (type === "image") {
-    throw new Error("contentLayout image blocks were removed; use visual_anchor kind=Evidence/template=source_figure with text annotations.");
+  if (!isTextBlock(block)) {
+    throw new Error(`Unsupported Body DSL primitive type: ${type}.`);
   }
-  if (type === "table") {
-    throw new Error("contentLayout table blocks were removed; use type=supporting_component with component kind=Matrix/template=table.");
-  }
-  addModuleBodyText(slide, normalizeModuleBody(block), area, {
+  addModuleBodyText(slide, normalizeTextPrimitiveBody(block), area, {
     ...module,
     ...block,
     fontSize: block.fontSize || module.fontSize,
@@ -452,18 +440,19 @@ function renderModuleBlock(slide, block, module, data, area, fallbackCaption = n
 
 function addContentPanelModule(slide, module, data, area, visualCaption, options = {}) {
   const bodyArea = addContentModuleFrame(slide, module, area, options);
-  const blocks = normalizeModuleBlocks(module, data);
+  const blocks = modulePrimitives(module, data);
   const resolvedFlow = resolveBlockFlow(bodyArea, blocks);
   const measuredLayout = resolveMeasuredBlockLayout(bodyArea, blocks, resolvedFlow, options);
   const blockAreas = measuredLayout.areas;
   if (measuredLayout.usedFallback || !["ok", "empty"].includes(measuredLayout.status)) {
     const diagnosticSummary = (measuredLayout.diagnostics || []).map((item) => {
       const claimants = Array.isArray(item.claimants)
-        ? ` claimants=${item.claimants.map((claim) => `${claim.taxonomy_key || claim.index}:minH=${claim.min_h || ""}:minW=${claim.min_w || ""}`).join("|")}`
+        ? ` claimants=${item.claimants.map((claim) => `${claim.target?.selector || claim.taxonomy_key || claim.index}:minH=${claim.min_h || ""}:minW=${claim.min_w || ""}`).join("|")}`
         : "";
-      return `${item.code}${item.available_height ? ` availableH=${item.available_height}` : ""}${item.minimum_required_height ? ` minH=${item.minimum_required_height}` : ""}${item.available_width ? ` availableW=${item.available_width}` : ""}${item.measured_width ? ` measuredW=${item.measured_width}` : ""}${claimants}`;
+      const target = item.target?.selector ? ` target=${item.target.selector}` : "";
+      return `${item.code}${target}${item.available_height ? ` availableH=${item.available_height}` : ""}${item.minimum_required_height ? ` minH=${item.minimum_required_height}` : ""}${item.available_width ? ` availableW=${item.available_width}` : ""}${item.measured_width ? ` measuredW=${item.measured_width}` : ""}${claimants}`;
     }).join(", ");
-    throw new Error(`Measured content layout is infeasible for module "${safeText(module.title || module.label || "模块")}": ${diagnosticSummary}`);
+    throw new Error(`Measured Body DSL layout is infeasible for module "${safeText(module.title || module.label || "模块")}": ${diagnosticSummary}`);
   }
   const anchorResults = [];
   const visibleAreas = [];
@@ -520,6 +509,7 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}, measur
     descriptor.template = visualAnchor.template;
     descriptor.visual_role = visualComponentRole(visualAnchor);
   }
+  if (block?.sourceComponent) descriptor.source_component = cloneOptions(block.sourceComponent);
   if (measuredDescriptor) {
     descriptor.taxonomy = measuredDescriptor.taxonomy;
     descriptor.measure = measuredDescriptor.measure;
@@ -532,7 +522,7 @@ function describeBlockLayout(block, blockArea, visibleArea, options = {}, measur
     }
   }
   if (isTextBlock(block)) {
-    const body = normalizeModuleBody(block);
+    const body = normalizeTextPrimitiveBody(block);
     const lines = body.split(/\r?\n/).map((line) => safeText(line)).filter(Boolean);
     descriptor.text_length = safeText(body).length;
     descriptor.line_count = lines.length;
@@ -646,7 +636,7 @@ function addVisualAnchorModule(slide, module, data, area, visualCaption) {
 }
 
 function addBiasedVisualOnlyModule(slide, module, data, area, options = {}) {
-  const blocks = normalizeModuleBlocks(module, data);
+  const blocks = modulePrimitives(module, data);
   const flow = resolveBlockFlow(area, blocks);
   const biasedOptions = { ...options, layoutType: "biased_column" };
   const measuredLayout = resolveMeasuredBlockLayout(area, blocks, flow, biasedOptions);
@@ -696,9 +686,9 @@ function addBiasedVisualOnlyModule(slide, module, data, area, options = {}) {
   };
 }
 
-function renderBiasedContentLayout(slide, data, layout, contentTop, options = {}) {
-  const layoutBounds = fixedContentLayoutArea(layout, contentTop);
-  const areas = contentLayoutAreas(layout, layoutBounds, options);
+function renderBiasedBodyLayout(slide, data, layout, contentTop, options = {}) {
+  const layoutBounds = fixedBodyLayoutArea(layout, contentTop);
+  const areas = bodyLayoutAreas(layout, layoutBounds, options);
   const moduleOptions = { ...options, layoutType: layout.type };
   const sideModuleOptions = { ...moduleOptions, compactFrame: true };
   const visualResult = addBiasedVisualOnlyModule(slide, layout.modules[0], data, areas[0], moduleOptions);
@@ -736,12 +726,12 @@ function renderBiasedContentLayout(slide, data, layout, contentTop, options = {}
   };
 }
 
-function renderContentLayout(slide, data, layout, visualCaption, contentTop, options = {}) {
+function renderBodyLayout(slide, data, layout, visualCaption, contentTop, options = {}) {
   if (layout.schema.special === "large_visual_with_side_cards") {
-    return renderBiasedContentLayout(slide, data, layout, contentTop, options);
+    return renderBiasedBodyLayout(slide, data, layout, contentTop, options);
   }
-  const layoutBounds = fixedContentLayoutArea(layout, contentTop);
-  const areas = contentLayoutAreas(layout, layoutBounds, options);
+  const layoutBounds = fixedBodyLayoutArea(layout, contentTop);
+  const areas = bodyLayoutAreas(layout, layoutBounds, options);
   const anchorResults = [];
   const moduleLayouts = [];
   const moduleOptions = {
@@ -792,7 +782,7 @@ function collectFinalStackMeasurementItems(modules = [], areas = [], options = {
   const itemsByFlow = new Map();
   modules.forEach((module, idx) => {
     const bodyArea = moduleBodyArea(areas[idx]);
-    const blocks = normalizeModuleBlocks(module, {});
+    const blocks = modulePrimitives(module, {});
     const flow = resolveBlockFlow(bodyArea, blocks);
     const key = `${flow}|${roundMeasurementArea(bodyArea).w}|${roundMeasurementArea(bodyArea).h}`;
     const entry = itemsByFlow.get(key) || { area: bodyArea, blocks: [] };
@@ -831,8 +821,8 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
     return addHuaweiPptPageSkeleton(pptx, data).slide;
   }
 
-  const contentLayout = normalizeContentLayout(data.contentLayout);
-  if (!contentLayout) throw new Error("Content slide requires contentLayout; put visual anchors under contentLayout.modules[].blocks[].visual_anchor.");
+  const bodyLayout = resolveBodyRenderModel(data);
+  if (!bodyLayout) throw new Error("Content slide requires bodyDsl; put visual anchors in registered Body DSL components.");
 
   const measurementSession = ensureMeasurementSession(pptx);
   const visualCaption = normalizeVisualAnchorCaption(data);
@@ -842,7 +832,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
   let layoutInfo = null;
   let resolvedLayoutType = null;
   const skeleton = addHuaweiPptPageSkeleton(pptx, data, {
-    renderBody: ({ slide, contentTop }) => renderContentLayout(slide, data, contentLayout, visualCaption, contentTop, { measurementSession }),
+    renderBody: ({ slide, contentTop }) => renderBodyLayout(slide, data, bodyLayout, visualCaption, contentTop, { measurementSession }),
   });
   const slide = skeleton.slide;
   const result = skeleton.bodyResult;
@@ -873,7 +863,7 @@ function addVisualAnchorContentSlide(pptx, data = {}) {
       resolved_layout_type: resolvedLayoutType || undefined,
       highlight_reason: highlightReason || undefined,
       score_basis: scoreBasis || undefined,
-      content_layout_schema: layoutInfo || undefined,
+      body_layout_schema: layoutInfo || undefined,
     });
   });
   return slide;
@@ -892,6 +882,11 @@ function writeVisualAnchorManifest(pptx, fileName) {
   fs.mkdirSync(path.dirname(fileName), { recursive: true });
   fs.writeFileSync(fileName, JSON.stringify(manifest, null, 2), "utf8");
   return manifest;
+}
+
+function resolveBodyRenderModel(data = {}) {
+  if (data.bodyDsl) return compileBodyDslToRenderModel(data.bodyDsl, { path: "bodyDsl" });
+  return null;
 }
 
 module.exports = {

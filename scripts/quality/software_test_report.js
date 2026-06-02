@@ -7,6 +7,7 @@ const { spawnSync } = require("child_process");
 const ROOT = path.resolve(__dirname, "..", "..");
 const OUT_DIR = path.join(ROOT, ".tmp", "software_test_report");
 const LOG_DIR = path.join(OUT_DIR, "logs");
+const PPTX_PAGE_DIR = path.join(OUT_DIR, "pptx_pages");
 const HTML_OUT = path.join(OUT_DIR, "index.html");
 
 const TEST_CASES = [
@@ -90,21 +91,24 @@ const TEST_CASES = [
   },
   {
     id: "diagram-component-smoke",
-    category: "视觉模板",
-    title: "所有绘图组件都能生成可人工审阅的 review deck。",
-    command: ["node", ["scripts/smoke/verify_diagram_components.js"]],
-    script: "scripts/smoke/verify_diagram_components.js",
+    category: "Body DSL",
+    title: "所有 draw 能力都能通过 Body DSL 编译、测量并生成 review deck。",
+    command: ["node", ["scripts/smoke/dsl/test_dsl_draw_matrix.js"]],
+    script: "scripts/smoke/dsl/test_dsl_draw_matrix.js",
     checks: [
-      "从 visual_diagram_test_cases.js 读取所有绘图组件样例。",
-      "每个 kind/template 都生成一个 review PPTX，覆盖大图、中图、小图尺寸。",
-      "rough_svg 组件同时落出 SVG/PNG 资产，ppt_native 组件直接进入 PPT review slide。",
-      "超过文本容量的用例不静默通过，而是生成 rejection review slide。",
-      "所有 review PPTX 都作为软件测试交付件进入报告，并通过 PowerPoint COM 导出成图片。",
+      "从 visual_diagram_test_cases.js 读取所有官方 draw fixture，并用 <Visual draw=\"kind/template\" model={...} /> 编译。",
+      "224 个 source case × 3 档版面预算都进入 DSL 编译和 renderer preflight，并生成全量人工审阅 PPTX。",
+      "编译报告记录 JSX-like Body DSL markup、render model 和反馈问题。",
+      "测量报告只对每个 draw×tier 的哨兵页做一次整 deck COM 读回，避免批量逐项 COM。",
+      "全量 review PPTX 和哨兵测量 review PPTX 都作为软件测试交付件进入报告，并通过 PowerPoint COM 导出成图片。",
     ],
     artifacts: [
-      artifact("绘图组件 smoke manifest", ".tmp/diagram_component_smoke/manifest.json"),
+      artifact("DSL draw 编译报告", ".tmp/dsl_draw_matrix/dsl_draw_compile_report.json"),
+      pptArtifact("DSL draw 全量人工审阅 PPTX", ".tmp/dsl_draw_matrix/dsl_draw_matrix_full_review.pptx", ".tmp/software_test_report/pptx/dsl_draw_matrix_full_review"),
+      artifact("DSL draw 测量报告", ".tmp/dsl_draw_matrix/dsl_draw_measurement_report.json"),
+      artifact("DSL draw manifest", ".tmp/dsl_draw_matrix/dsl_draw_matrix_manifest.json"),
+      pptArtifact("DSL draw 哨兵测量 review PPTX", ".tmp/dsl_draw_matrix/dsl_draw_matrix.pptx", ".tmp/software_test_report/pptx/dsl_draw_matrix"),
     ],
-    collectArtifacts: collectDiagramComponentArtifacts,
   },
   {
     id: "layout-taxonomy",
@@ -215,6 +219,125 @@ const TEST_CASES = [
     ],
   },
   {
+    id: "body-dsl-registry",
+    category: "Body DSL",
+    title: "Body DSL 组件注册表定义 AI 可发现组件和约束边界。",
+    command: ["node", ["scripts/smoke/dsl/test_component_registry.js"]],
+    script: "scripts/smoke/dsl/test_component_registry.js",
+    checks: [
+      "EvidenceFigure 可发现为真实锚点、measured、preserve-aspect，且 fit=stretch 被拒绝。",
+      "KPI cards、Table、CapabilityStack 是 supporting component，不计入真实锚点。",
+      "internal 组件 registry-valid 但不进入 AI-visible index。",
+      "AI-visible 组件必须带 use/avoid、预算和修复提示、示例。",
+    ],
+    artifacts: [],
+  },
+  {
+    id: "body-dsl-discovery",
+    category: "Body DSL",
+    title: "Body DSL discovery helper 可以生成组件索引、详情和 catalog。",
+    command: ["node", ["scripts/smoke/dsl/test_component_discovery_catalog.js"]],
+    script: "scripts/smoke/dsl/test_component_discovery_catalog.js",
+    checks: [
+      "组件 index 只列 AI-visible 组件。",
+      "组件 detail 包含 schema、示例、预算提示、替代和修复建议。",
+      "Visual escape hatch detail 暴露官方 draw ids。",
+      "internal 组件无法通过 AI detail 查询。",
+    ],
+    artifacts: [
+      artifact("Body DSL authoring schema", "references/slide_dsl_authoring_schema.md"),
+    ],
+  },
+  {
+    id: "body-dsl-generated-catalog",
+    category: "Body DSL",
+    title: "Body DSL 组件 catalog 从 registry 生成并保持同步。",
+    command: ["node", ["scripts/smoke/dsl/test_generated_component_catalog.js"]],
+    script: "scripts/smoke/dsl/test_generated_component_catalog.js",
+    checks: [
+      "generated_dsl_component_catalog.md 由 registry 生成。",
+      "catalog 包含 EvidenceFigure 和 Visual escape hatch。",
+      "catalog 列出官方 Visual draw ids。",
+      "catalog 不泄露 internal 组件。",
+    ],
+    artifacts: [
+      artifact("生成的 Body DSL 组件目录", "references/generated_dsl_component_catalog.md"),
+    ],
+  },
+  {
+    id: "body-dsl-skill-discovery",
+    category: "Body DSL",
+    title: "SKILL 只暴露稳定 discovery 入口，不手写组件清单。",
+    command: ["node", ["scripts/smoke/dsl/test_skill_dsl_discovery_contract.js"]],
+    script: "scripts/smoke/dsl/test_skill_dsl_discovery_contract.js",
+    checks: [
+      "SKILL 指向 slide_dsl_authoring_schema 和 generated component catalog。",
+      "SKILL 要求运行 list_components 和 describe_component 获取组件合同。",
+      "SKILL 默认要求写 bodyDsl，并且不存在旧正文 JSON 入口。",
+      "AI-visible 组件 tag 不在 SKILL 中手工列举，新增组件只需更新 registry 和生成目录。",
+    ],
+    artifacts: [
+      artifact("Runtime skill instructions", "SKILL.md"),
+      artifact("Body DSL authoring schema", "references/slide_dsl_authoring_schema.md"),
+      artifact("生成的 Body DSL 组件目录", "references/generated_dsl_component_catalog.md"),
+    ],
+  },
+  {
+    id: "body-dsl-feedback",
+    category: "Body DSL",
+    title: "Body DSL 解析和约束错误会生成 FeedbackIssue。",
+    command: ["node", ["scripts/smoke/dsl/test_dsl_feedback_contract.js"]],
+    script: "scripts/smoke/dsl/test_dsl_feedback_contract.js",
+    checks: [
+      "未知组件 tag 会产生 source-mapped compile FeedbackIssue。",
+      "supporting-only 页面在 DSL tree 校验阶段失败，并提示 supporting component 不能满足真实锚点。",
+      "style 等非注册布局属性会在测量前被拒绝。",
+      "Feedback markdown 可以给人类可读的 phase/path/message。",
+    ],
+    artifacts: [],
+  },
+  {
+    id: "body-dsl-bad-case-feedback-matrix",
+    category: "Body DSL",
+    title: "典型错误 DSL 会产生可追踪、可修复的编译器式反馈。",
+    command: ["node", ["scripts/smoke/dsl/test_dsl_bad_case_feedback_matrix.js"]],
+    script: "scripts/smoke/dsl/test_dsl_bad_case_feedback_matrix.js",
+    checks: [
+      "至少 50 个错误 DSL case 覆盖未知组件、非法 style/坐标、必填字段缺失、枚举错误、数量限制、树结构错误、supporting-only 和 bad draw。",
+      "每个失败 case 都必须生成 code、message、phase、selector/path、Semantic Stack 和 repair hints。",
+      "supporting-only 错误必须列出 found components，说明 Table/KpiCards/InsightText 不能满足真实视觉锚点要求。",
+      "错误报告同时输出 JSON 和 Markdown，供 agent 和人工审阅使用。",
+    ],
+    artifacts: [
+      artifact("错误 DSL case 汇总", ".tmp/dsl_bad_case_feedback_matrix/summary.json"),
+      artifact("supporting-only 示例反馈", ".tmp/dsl_bad_case_feedback_matrix/supporting-only-table.md"),
+      artifact("Visual evidence draw 示例反馈", ".tmp/dsl_bad_case_feedback_matrix/visual-evidence-draw.md"),
+      artifact("三列模块数错误示例反馈", ".tmp/dsl_bad_case_feedback_matrix/three-column-two-modules.md"),
+    ],
+  },
+  {
+    id: "body-dsl-component-matrix",
+    category: "Body DSL",
+    title: "每个 AI-visible DSL 原子组件都有 Agent 暴露面、fixture、编译、渲染和测量证据。",
+    command: ["node", ["scripts/smoke/dsl/test_dsl_component_matrix.js"]],
+    script: "scripts/smoke/dsl/test_dsl_component_matrix.js",
+    checks: [
+      "AI-visible component registry 与 fixture 矩阵一一对应。",
+      "每个组件的 describe output 包含说明、use/avoid、预算提示、修复提示和示例。",
+      "每个 fixture 都能通过 Body DSL compile/typecheck。",
+      "每个可渲染原子组件都进入 review PPT、manifest 和 source-mapped block measurement。",
+      "测量报告包含 min_size、preferred_size、max_useful_size、final_size、taxonomy 和 renderer 路径证据。",
+    ],
+    artifacts: [
+      artifact("DSL component matrix fixtures", "scripts/smoke/dsl/fixtures/dsl_component_matrix_fixtures.js"),
+      artifact("Agent exposure report", ".tmp/dsl_component_matrix/dsl_component_agent_exposure.json"),
+      artifact("Compile report", ".tmp/dsl_component_matrix/dsl_component_compile_report.json"),
+      artifact("Measurement report", ".tmp/dsl_component_matrix/dsl_component_measurement_report.json"),
+      artifact("Render manifest", ".tmp/dsl_component_matrix/dsl_component_matrix_manifest.json"),
+      pptArtifact("DSL component matrix PPTX", ".tmp/dsl_component_matrix/dsl_component_matrix.pptx", ".tmp/software_test_report/pptx/dsl_component_matrix"),
+    ],
+  },
+  {
     id: "tidar-three-column-layout",
     category: "布局测量",
     title: "TiDAR 三分栏真实 fixture 可以容纳 evidence、KPI 和 bullets。",
@@ -275,21 +398,6 @@ function artifact(label, relativePath) {
 
 function pptArtifact(label, relativePath, exportDir) {
   return { type: "pptx", label, relativePath, exportDir };
-}
-
-function collectDiagramComponentArtifacts() {
-  const manifestPath = abs(".tmp/diagram_component_smoke/manifest.json");
-  if (!fs.existsSync(manifestPath)) return [];
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-  return (manifest.review_decks || []).map((deck) => {
-    const kind = String(deck.kind || "unknown").toLowerCase();
-    const template = String(deck.template || "unknown").toLowerCase();
-    return pptArtifact(
-      `${deck.kind}/${deck.template} review PPTX`,
-      deck.pptx,
-      `.tmp/software_test_report/pptx/diagram_component_smoke/${kind}/${template}`
-    );
-  });
 }
 
 function ensureDir(dir) {
@@ -421,11 +529,17 @@ function renderArtifact(item) {
     if (item.exportLog) html += `<p><a href="${htmlEscape(linkHref(item.exportLog))}">查看 COM 导出日志</a></p>`;
     if (item.renderManifest) html += `<p><a href="${htmlEscape(linkHref(item.renderManifest))}">查看 render_manifest.json</a></p>`;
     if (item.images && item.images.length) {
-      html += `<div class="slide-grid">`;
-      item.images.forEach((imagePath, index) => {
-        html += `<figure><img src="${htmlEscape(linkHref(imagePath))}" alt="${htmlEscape(item.label)} 第 ${index + 1} 页"><figcaption>第 ${index + 1} 页</figcaption></figure>`;
-      });
-      html += `</div>`;
+      if (item.galleryIndex) {
+        html += `<p><a href="${htmlEscape(linkHref(item.galleryIndex))}">打开 ${item.images.length} 页逐页大图审阅</a></p>`;
+      }
+      const previewPages = item.slidePages?.slice(0, Math.min(4, item.slidePages.length)) || [];
+      if (previewPages.length) {
+        html += `<div class="slide-grid compact">`;
+        previewPages.forEach((page) => {
+          html += `<figure><a href="${htmlEscape(linkHref(page.page))}"><img src="${htmlEscape(linkHref(page.image))}" alt="${htmlEscape(item.label)} 第 ${page.number} 页"></a><figcaption>第 ${page.number} 页</figcaption></figure>`;
+        });
+        html += `</div>`;
+      }
     }
   }
   html += `</div>`;
@@ -503,6 +617,7 @@ function renderReport(results) {
     details { margin-top: 10px; }
     summary { cursor: pointer; font-weight: 700; }
     .slide-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 12px; }
+    .slide-grid.compact { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
     figure { margin: 0; border: 1px solid var(--line); border-radius: 8px; background: #f8fafc; overflow: hidden; }
     img { display: block; width: 100%; height: auto; }
     figcaption { padding: 6px 9px; color: var(--muted); font-size: 12px; border-top: 1px solid var(--line); }
@@ -580,9 +695,132 @@ function renderReport(results) {
 </html>`;
 }
 
+function writePptxGalleryPages(results) {
+  for (const testCase of results) {
+    for (const artifactItem of testCase.artifacts) {
+      if (artifactItem.type !== "pptx" || !Array.isArray(artifactItem.images) || artifactItem.images.length === 0) continue;
+      const slug = safeSlug(`${testCase.id}-${artifactItem.label}`);
+      const galleryDir = path.join(PPTX_PAGE_DIR, slug);
+      ensureDir(galleryDir);
+      const slidePages = artifactItem.images.map((imagePath, index) => {
+        const pagePath = path.join(galleryDir, `slide_${String(index + 1).padStart(3, "0")}.html`);
+        return {
+          number: index + 1,
+          image: imagePath,
+          page: rel(pagePath),
+          pagePath,
+        };
+      });
+      slidePages.forEach((page, index) => {
+        fs.writeFileSync(page.pagePath, renderSlidePage({
+          artifactItem,
+          page,
+          previous: slidePages[index - 1],
+          next: slidePages[index + 1],
+          galleryIndexPath: path.join(galleryDir, "index.html"),
+          total: slidePages.length,
+        }), "utf8");
+      });
+      const galleryIndexPath = path.join(galleryDir, "index.html");
+      fs.writeFileSync(galleryIndexPath, renderPptxGalleryPage({
+        testCase,
+        artifactItem,
+        slidePages,
+      }), "utf8");
+      artifactItem.galleryIndex = rel(galleryIndexPath);
+      artifactItem.slidePages = slidePages.map((page) => ({
+        number: page.number,
+        image: page.image,
+        page: page.page,
+      }));
+    }
+  }
+}
+
+function renderPptxGalleryPage({ testCase, artifactItem, slidePages }) {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>${htmlEscape(artifactItem.label)} 逐页审阅</title>
+  ${galleryStyle()}
+</head>
+<body>
+  <main>
+    <header>
+      <p><a href="${htmlEscape(path.relative(path.dirname(path.join(PPTX_PAGE_DIR, safeSlug(`${testCase.id}-${artifactItem.label}`), "index.html")), HTML_OUT).replace(/\\/g, "/"))}">返回软件测试报告</a></p>
+      <h1>${htmlEscape(artifactItem.label)}</h1>
+      <p class="muted">${htmlEscape(testCase.title)} · ${slidePages.length} 页 · ${htmlEscape(artifactItem.relativePath)}</p>
+    </header>
+    <section class="thumb-grid">
+      ${slidePages.map((page) => `<a class="thumb" href="${htmlEscape(path.basename(page.page))}">
+        <img src="${htmlEscape(relativeFrom(path.join(PPTX_PAGE_DIR, safeSlug(`${testCase.id}-${artifactItem.label}`), "index.html"), page.image))}" alt="第 ${page.number} 页">
+        <span>第 ${page.number} 页</span>
+      </a>`).join("")}
+    </section>
+  </main>
+</body>
+</html>`;
+}
+
+function renderSlidePage({ artifactItem, page, previous, next, galleryIndexPath, total }) {
+  const pagePath = page.pagePath;
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>${htmlEscape(artifactItem.label)} 第 ${page.number} 页</title>
+  ${galleryStyle()}
+</head>
+<body class="slide-page">
+  <nav>
+    <a href="${htmlEscape(path.relative(path.dirname(pagePath), galleryIndexPath).replace(/\\/g, "/"))}">全部页面</a>
+    ${previous ? `<a href="${htmlEscape(path.basename(previous.page))}">上一页</a>` : `<span>上一页</span>`}
+    <strong>第 ${page.number} / ${total} 页</strong>
+    ${next ? `<a href="${htmlEscape(path.basename(next.page))}">下一页</a>` : `<span>下一页</span>`}
+  </nav>
+  <main>
+    <img class="slide-full" src="${htmlEscape(relativeFrom(pagePath, page.image))}" alt="${htmlEscape(artifactItem.label)} 第 ${page.number} 页">
+  </main>
+</body>
+</html>`;
+}
+
+function galleryStyle() {
+  return `<style>
+    body { margin: 0; background: #f4f6f8; color: #17212b; font-family: "Microsoft YaHei", Arial, sans-serif; }
+    main { max-width: 1800px; margin: 0 auto; padding: 22px; }
+    header { margin-bottom: 18px; }
+    h1 { margin: 0 0 8px; color: #c00000; font-size: 28px; }
+    a { color: #8b1e13; text-decoration: none; border-bottom: 1px dashed currentColor; }
+    .muted { color: #66717e; }
+    .thumb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+    .thumb { display: block; background: #fff; border: 1px solid #d9e0e8; border-radius: 8px; overflow: hidden; }
+    .thumb img { display: block; width: 100%; height: auto; }
+    .thumb span { display: block; padding: 8px 10px; color: #66717e; font-size: 13px; }
+    nav { position: sticky; top: 0; z-index: 2; display: flex; gap: 16px; align-items: center; padding: 12px 18px; background: rgba(255,255,255,.96); border-bottom: 1px solid #d9e0e8; }
+    nav span { color: #9aa3ad; }
+    .slide-page main { max-width: none; padding: 18px; }
+    .slide-full { display: block; width: min(100%, 1800px); margin: 0 auto; background: #fff; border: 1px solid #d9e0e8; box-shadow: 0 12px 36px rgba(23,33,43,.16); }
+  </style>`;
+}
+
+function relativeFrom(fromFile, targetRelativePath) {
+  return path.relative(path.dirname(fromFile), abs(targetRelativePath)).replace(/\\/g, "/");
+}
+
+function safeSlug(value) {
+  return String(value || "pptx")
+    .toLowerCase()
+    .replace(/[^a-z0-9\u4e00-\u9fa5]+/gi, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "pptx";
+}
+
 function main() {
   ensureDir(OUT_DIR);
   ensureDir(LOG_DIR);
+  ensureDir(PPTX_PAGE_DIR);
   const results = [];
 
   for (const testCase of TEST_CASES) {
@@ -598,6 +836,8 @@ function main() {
       artifacts: enhanceArtifacts(testCase.artifacts),
     });
   }
+
+  writePptxGalleryPages(results);
 
   const payload = {
     generated_at: new Date().toISOString(),

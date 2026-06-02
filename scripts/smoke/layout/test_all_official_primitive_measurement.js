@@ -10,8 +10,6 @@ const OUT = path.join(ROOT, ".tmp", "layout_all_official_primitive_measurement.j
 
 const OFFICIAL = [
   "Evidence/source_figure",
-  "Evidence/source_table",
-  "Evidence/source_screenshot",
   "Evidence/source_chart",
   "Quantity/data_cards",
   "Quantity/bar_chart",

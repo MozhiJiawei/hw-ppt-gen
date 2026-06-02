@@ -8,7 +8,7 @@ const fixture = createTidarPrimitiveFixture(ROOT);
 fixture.area.w = 3.95;
 
 for (const [idx, module] of fixture.modules.entries()) {
-  const result = layoutModuleStack(fixture.area, module.blocks, "top_bottom", { layoutType: "three_column" });
+  const result = layoutModuleStack(fixture.area, module.componentPrimitives, "top_bottom", { layoutType: "three_column" });
   assert.equal(result.status, "ok", `${module.title} should fit measured three-column stack`);
   assert.equal(result.usedFallback, false, `${module.title} should not need legacy fallback`);
   assert.equal(result.areas.length, 3, `${module.title} should allocate evidence, KPI, and bullets`);
@@ -24,13 +24,13 @@ for (const [idx, module] of fixture.modules.entries()) {
 
 const overloaded = {
   ...fixture.modules[0],
-  blocks: [
-    ...fixture.modules[0].blocks,
-    fixture.modules[0].blocks[1],
+  componentPrimitives: [
+    ...fixture.modules[0].componentPrimitives,
+    fixture.modules[0].componentPrimitives[1],
     { type: "text", body: ["额外长结论：这里模拟继续塞内容导致预算不可行。", "额外边界：排版器应该报告预算问题。"] },
   ],
 };
-const tight = layoutModuleStack({ ...fixture.area, h: 2.0 }, overloaded.blocks, "top_bottom", { layoutType: "three_column" });
+const tight = layoutModuleStack({ ...fixture.area, h: 2.0 }, overloaded.componentPrimitives, "top_bottom", { layoutType: "three_column" });
 assert.equal(tight.status, "infeasible");
 assert(tight.diagnostics.some((item) => item.code === "layout_stack_infeasible"));
 

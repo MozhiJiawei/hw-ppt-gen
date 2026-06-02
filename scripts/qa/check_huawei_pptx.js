@@ -3,7 +3,7 @@ const path = require("path");
 const JSZip = require("jszip");
 const { parsePptContentBrief } = require("../pptx/parse_ppt_content_brief");
 const { resolveVisualAnchorRenderPath, validateVisualAnchorSpec } = require("../pptx/hw_diagram_helpers");
-const { CONTENT_LAYOUT_TYPES } = require("../pptx/contracts/content_layout_types");
+const { BODY_LAYOUT_TYPES } = require("../pptx/contracts/body_layout_types");
 const {
   isStructuredSupportingComponentSpec: isStructuredSupportingComponentByContract,
 } = require("../pptx/contracts/visual_templates");
@@ -52,7 +52,7 @@ const ALLOWED_COLORS = new Set([
 const STANDARD_LINE_WIDTH = 6350;
 const ALLOWED_FONT_SIZES = new Set([8, 10, 12, 14, 18, 24]);
 const CONTENT_CARD_FILLS = new Set(["F2F2F2", "F7F7F7", "FFF1EF", "FCE4E0"]);
-const CONTENT_LAYOUT_SCHEMA_RULES = CONTENT_LAYOUT_TYPES;
+const BODY_LAYOUT_SCHEMA_RULES = BODY_LAYOUT_TYPES;
 const LANGUAGE_ALLOWLIST = new Set([
   "ai",
   "api",
@@ -968,7 +968,7 @@ function checkVisualAnchorManifest(fileName, slideEntries, planFileName = null) 
       }));
     }
 
-    issues.push(...checkContentLayoutSchema(slide, pageEntries));
+    issues.push(...checkBodyLayoutSchema(slide, pageEntries));
     for (const entry of pageEntries) {
     if (entry.rendered !== true) {
       issues.push(issue(slide, "content_visual_anchor_unrendered", "error", "Content slide visual anchor exists in the manifest but is not marked rendered."));
@@ -1062,21 +1062,21 @@ function checkVisualAnchorImagePresenceAndScale(slide, entry) {
   return issues;
 }
 
-function checkContentLayoutSchema(slide, entries) {
-  const schemas = entries.map((entry) => entry.content_layout_schema).filter(Boolean);
+function checkBodyLayoutSchema(slide, entries) {
+  const schemas = entries.map((entry) => entry.body_layout_schema).filter(Boolean);
   if (!schemas.length) return [];
   const issues = [];
   const schemaText = JSON.stringify(schemas);
   const first = schemas[0];
-  const rule = CONTENT_LAYOUT_SCHEMA_RULES[first.type];
+  const rule = BODY_LAYOUT_SCHEMA_RULES[first.type];
   if (!rule) {
-    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema type is not supported.", {
+    issues.push(issue(slide, "body_layout_schema_invalid", "error", "Body DSL layout schema type is not supported.", {
       type: first.type || "",
     }));
     return issues;
   }
   if (schemas.some((schema) => JSON.stringify(schema) !== JSON.stringify(first))) {
-    issues.push(issue(slide, "content_layout_schema_invalid", "error", "All visual manifest entries for a slide must record the same content layout schema.", {
+    issues.push(issue(slide, "body_layout_schema_invalid", "error", "All visual manifest entries for a slide must record the same Body DSL layout schema.", {
       schemas,
     }));
   }
@@ -1084,14 +1084,14 @@ function checkContentLayoutSchema(slide, entries) {
   const minModules = rule.minModuleCount || rule.moduleCount;
   const maxModules = rule.maxModuleCount || rule.moduleCount;
   if (actualModules < minModules || actualModules > maxModules) {
-    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema module count does not match the fixed reference layout.", {
+    issues.push(issue(slide, "body_layout_schema_invalid", "error", "Body DSL layout module count does not match the fixed reference layout.", {
       type: first.type,
       expected_modules: minModules === maxModules ? minModules : `${minModules}-${maxModules}`,
       actual_modules: first.modules_count,
     }));
   }
   if (!safeText(first.reference).includes(rule.reference)) {
-    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema must cite the matching bundled reference image.", {
+    issues.push(issue(slide, "body_layout_schema_invalid", "error", "Body DSL layout schema must cite the matching bundled reference image.", {
       type: first.type,
       expected_reference: rule.reference,
       actual_reference: first.reference || "",
@@ -1101,7 +1101,7 @@ function checkContentLayoutSchema(slide, entries) {
     ? Number(first.strict_visual_anchor_blocks_count)
     : Number(first.visual_anchor_modules_count);
   if (strictAnchorCount < 1) {
-    issues.push(issue(slide, "content_layout_schema_anchor_missing", "error", "Content layout schema must include at least one real visual-anchor block; structured components are supporting components, not anchors.", {
+    issues.push(issue(slide, "body_layout_schema_anchor_missing", "error", "Body DSL layout schema must include at least one real visual-anchor component; structured components are supporting components, not anchors.", {
       type: first.type,
       visual_anchor_modules_count: first.visual_anchor_modules_count,
       strict_visual_anchor_blocks_count: first.strict_visual_anchor_blocks_count,
@@ -1109,15 +1109,15 @@ function checkContentLayoutSchema(slide, entries) {
     }));
   }
   if (!/(05 内容 二分栏|06 内容 偏分栏|07 内容 三分栏|08 内容 四分栏)/.test(schemaText)) {
-    issues.push(issue(slide, "content_layout_schema_invalid", "error", "Content layout schema must be grounded in one of the 05-08 content reference images."));
+    issues.push(issue(slide, "body_layout_schema_invalid", "error", "Body DSL layout schema must be grounded in one of the 05-08 content reference images."));
   }
-  issues.push(...checkContentLayoutModuleAlignment(slide, first));
-  issues.push(...checkContentLayoutDiagnostics(slide, first));
-  issues.push(...checkContentLayoutBlockFrames(slide, first));
+  issues.push(...checkBodyLayoutModuleAlignment(slide, first));
+  issues.push(...checkBodyLayoutDiagnostics(slide, first));
+  issues.push(...checkBodyLayoutBlockFrames(slide, first));
   return issues;
 }
 
-function checkContentLayoutDiagnostics(slide, schema = {}) {
+function checkBodyLayoutDiagnostics(slide, schema = {}) {
   const modules = Array.isArray(schema.module_layouts) ? schema.module_layouts : [];
   const issues = [];
   for (const [moduleIdx, module] of modules.entries()) {
@@ -1125,7 +1125,7 @@ function checkContentLayoutDiagnostics(slide, schema = {}) {
     const moduleDiagnostics = Array.isArray(module.layout_diagnostics) ? module.layout_diagnostics : [];
     for (const diag of moduleDiagnostics) {
       if (diag.severity !== "error") continue;
-      issues.push(issue(slide, "content_layout_diagnostic", "error", diag.message || "Layout diagnostic reported by primitive layout manager.", {
+      issues.push(issue(slide, "body_layout_diagnostic", "error", diag.message || "Layout diagnostic reported by primitive layout manager.", {
         layout_type: schema.type,
         module_index: moduleIdx + 1,
         module_title: title,
@@ -1134,7 +1134,7 @@ function checkContentLayoutDiagnostics(slide, schema = {}) {
       }));
     }
     if (module.layout_status === "infeasible") {
-      issues.push(issue(slide, "content_layout_infeasible", "error", "Measured module layout is infeasible; reduce content density or move detail to another slide.", {
+      issues.push(issue(slide, "body_layout_infeasible", "error", "Measured module layout is infeasible; reduce content density or move detail to another slide.", {
         layout_type: schema.type,
         module_index: moduleIdx + 1,
         module_title: title,
@@ -1147,7 +1147,7 @@ function checkContentLayoutDiagnostics(slide, schema = {}) {
       const diagnostics = Array.isArray(block.layout_diagnostics) ? block.layout_diagnostics : [];
       for (const diag of diagnostics) {
         if (diag.severity !== "error") continue;
-        issues.push(issue(slide, "content_layout_primitive_diagnostic", "error", diag.message || "Primitive measurement reported a hard diagnostic.", {
+        issues.push(issue(slide, "body_layout_primitive_diagnostic", "error", diag.message || "Primitive measurement reported a hard diagnostic.", {
           layout_type: schema.type,
           module_index: moduleIdx + 1,
           module_title: title,
@@ -1159,7 +1159,7 @@ function checkContentLayoutDiagnostics(slide, schema = {}) {
       const floor = Number(block.measure?.min_size?.h);
       const finalH = Number(block.final_size?.h || block.area?.h);
       if (block.taxonomy?.family === "Evidence" && Number.isFinite(floor) && Number.isFinite(finalH) && finalH + 0.001 < floor) {
-        issues.push(issue(slide, "content_layout_evidence_below_floor", "error", "Evidence final box is below its measured readable floor.", {
+        issues.push(issue(slide, "body_layout_evidence_below_floor", "error", "Evidence final box is below its measured readable floor.", {
           layout_type: schema.type,
           module_index: moduleIdx + 1,
           module_title: title,
@@ -1215,7 +1215,7 @@ function estimatePageTitleLines(text, widthInches, titleFontSize = 24) {
   return Math.max(1, Math.ceil((mainWidth + subtitleWidth) / Math.max(widthInches, 0.1)));
 }
 
-function checkContentLayoutModuleAlignment(slide, schema = {}) {
+function checkBodyLayoutModuleAlignment(slide, schema = {}) {
   if (!["two_column", "three_column"].includes(schema.type)) return [];
   const modules = Array.isArray(schema.module_layouts) ? schema.module_layouts : [];
   if (modules.length < 2) return [];
@@ -1232,7 +1232,7 @@ function checkContentLayoutModuleAlignment(slide, schema = {}) {
   const bottomDelta = Math.max(...bottoms) - Math.min(...bottoms);
   const issues = [];
   if (topDelta > topTolerance || bottomDelta > bottomTolerance) {
-    issues.push(issue(slide, "content_layout_module_alignment", "error", "Column module contents are not vertically aligned; make two/three-column modules start and end at consistent heights by adding grounded content, adjusting visual block height/scale, or choosing a denser layout.", {
+    issues.push(issue(slide, "body_layout_module_alignment", "error", "Column module contents are not vertically aligned; make two/three-column modules start and end at consistent heights by adding grounded content, adjusting visual block height/scale, or choosing a denser layout.", {
       layout_type: schema.type,
       top_delta: Math.round(topDelta * 1000) / 1000,
       bottom_delta: Math.round(bottomDelta * 1000) / 1000,
@@ -1250,7 +1250,7 @@ function checkContentLayoutModuleAlignment(slide, schema = {}) {
   return issues;
 }
 
-function checkContentLayoutBlockFrames(slide, schema = {}) {
+function checkBodyLayoutBlockFrames(slide, schema = {}) {
   if (!["two_column", "three_column"].includes(schema.type)) return [];
   const modules = Array.isArray(schema.module_layouts) ? schema.module_layouts : [];
   const issues = [];
@@ -1260,7 +1260,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     const occupied = module.occupied_area;
     const blocks = Array.isArray(module.block_areas) ? module.block_areas : [];
     if (!moduleHasVisualAnchorBlock(module)) {
-      issues.push(issue(slide, "content_layout_module_anchor_missing", "error", "Each two/three/four-column content module must include at least one real visual-anchor block; text and supporting components may explain evidence but cannot be a standalone column.", {
+      issues.push(issue(slide, "body_layout_module_anchor_missing", "error", "Each two/three/four-column content module must include at least one real visual-anchor block; text and supporting components may explain evidence but cannot be a standalone column.", {
         layout_type: schema.type,
         module_index: idx + 1,
         module_title: title,
@@ -1268,7 +1268,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       }));
     }
     if (!blocks.length) {
-      issues.push(issue(slide, "content_layout_module_inner_alignment", "error", "Column module records no measurable content blocks; route text through measured blocks or add a visual anchor instead of treating an empty module as filled.", {
+      issues.push(issue(slide, "body_layout_module_inner_alignment", "error", "Column module records no measurable content blocks; route text through measured blocks or add a visual anchor instead of treating an empty module as filled.", {
         layout_type: schema.type,
         module_index: idx + 1,
         module_title: title,
@@ -1279,7 +1279,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       const topGap = Number(occupied.y) - Number(layoutBounds.y);
       const bottomGap = (Number(layoutBounds.y) + Number(layoutBounds.h)) - (Number(occupied.y) + Number(occupied.h));
       if (topGap > 0.08 || bottomGap > 0.42) {
-        issues.push(issue(slide, "content_layout_module_inner_alignment", "error", "Column module content does not fill the module from top toward the bottom; add grounded bullets, enlarge a visual anchor, or choose a denser split instead of leaving a floating block.", {
+        issues.push(issue(slide, "body_layout_module_inner_alignment", "error", "Column module content does not fill the module from top toward the bottom; add grounded bullets, enlarge a visual anchor, or choose a denser split instead of leaving a floating block.", {
           layout_type: schema.type,
           module_index: idx + 1,
           module_title: title,
@@ -1294,7 +1294,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     const gaps = Array.isArray(module.block_gaps) ? module.block_gaps.map(Number).filter(Number.isFinite) : [];
     const largeGap = gaps.find((gap) => gap > 0.28);
     if (largeGap !== undefined) {
-      issues.push(issue(slide, "content_layout_block_gap", "error", "Blocks inside a column module are too far apart; keep image/text evidence compact or move to a different layout.", {
+      issues.push(issue(slide, "body_layout_block_gap", "error", "Blocks inside a column module are too far apart; keep image/text evidence compact or move to a different layout.", {
         layout_type: schema.type,
         module_index: idx + 1,
         module_title: title,
@@ -1309,7 +1309,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
     const maxModuleTextLines = schema.type === "three_column" ? 4 : 6;
     const maxModuleTextLength = schema.type === "three_column" ? 150 : 210;
     if (totalTextLines > maxModuleTextLines || totalTextLength > maxModuleTextLength) {
-      issues.push(issue(slide, "content_layout_module_text_wall", "error", "Column module accumulates too much visible prose; replace excess lines with a source-grounded Matrix/table, KPI/readout cards, or a compact conclusion note.", {
+      issues.push(issue(slide, "body_layout_module_text_wall", "error", "Column module accumulates too much visible prose; replace excess lines with a source-grounded Matrix/table, KPI/readout cards, or a compact conclusion note.", {
         layout_type: schema.type,
         module_index: idx + 1,
         module_title: title,
@@ -1328,7 +1328,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
         const lineCount = textBlockLineCount(block);
         const maxLineLength = Number(block.max_line_length || 0);
         if (textLength > 170 || maxLineLength > 56 || lineCount > 6) {
-          issues.push(issue(slide, "content_layout_text_too_long", "error", "Text block is too prose-heavy for Huawei dense layout; compress into short claim lines, red-highlighted keywords, KPI/readout cards, or Matrix/table fragments.", {
+          issues.push(issue(slide, "body_layout_text_too_long", "error", "Text block is too prose-heavy for Huawei dense layout; compress into short claim lines, red-highlighted keywords, KPI/readout cards, or Matrix/table fragments.", {
             layout_type: schema.type,
             module_index: idx + 1,
             module_title: title,
@@ -1342,7 +1342,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
           }));
         }
         if (textLength >= 80 && Number(block.emphasis_count || 0) < 1) {
-          issues.push(issue(slide, "content_layout_text_missing_emphasis", "warning", "Dense text blocks should mark 1-3 decisive terms with red bold emphasis so the reader can scan the claim.", {
+          issues.push(issue(slide, "body_layout_text_missing_emphasis", "warning", "Dense text blocks should mark 1-3 decisive terms with red bold emphasis so the reader can scan the claim.", {
             layout_type: schema.type,
             module_index: idx + 1,
             module_title: title,
@@ -1358,7 +1358,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
         const sourceHeight = Number(block.source_height || 0);
         const sourceRatio = sourceWidth > 0 && sourceHeight > 0 ? sourceWidth / sourceHeight : 0;
         if (schema.type === "three_column" && sourceRatio > 0 && sourceRatio < 3 && Number(block.visible_area.h) < 1.1) {
-          issues.push(issue(slide, "content_layout_evidence_too_small", "error", "Evidence figure is too small for a three-column Huawei summary; enlarge the source figure or move supporting text into a table/readout.", {
+          issues.push(issue(slide, "body_layout_evidence_too_small", "error", "Evidence figure is too small for a three-column Huawei summary; enlarge the source figure or move supporting text into a table/readout.", {
             layout_type: schema.type,
             module_index: idx + 1,
             module_title: title,
@@ -1369,7 +1369,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
           }));
         }
         if (verticalSlack > 0.32 && Number(area.h) / Math.max(Number(block.visible_area.h), 0.1) > 1.18) {
-          issues.push(issue(slide, "content_layout_visual_frame_gap", "error", "Visual block frame is much taller than the visible rendered visual; size the visual block from source aspect ratio instead of hiding empty space inside the frame.", {
+          issues.push(issue(slide, "body_layout_visual_frame_gap", "error", "Visual block frame is much taller than the visible rendered visual; size the visual block from source aspect ratio instead of hiding empty space inside the frame.", {
             layout_type: schema.type,
             module_index: idx + 1,
             module_title: title,
@@ -1382,7 +1382,7 @@ function checkContentLayoutBlockFrames(slide, schema = {}) {
       }
       if (Number(block.table_rows || 0) > 0) {
         if (Number(area.h) / Number(block.table_rows || 1) < 0.24) {
-          issues.push(issue(slide, "content_layout_table_frame_too_short", "error", "Matrix/table block frame is too short for its rows; enlarge the table block, reduce rows/cell text, or move detail to another structured block.", {
+          issues.push(issue(slide, "body_layout_table_frame_too_short", "error", "Matrix/table block frame is too short for its rows; enlarge the table block, reduce rows/cell text, or move detail to another structured block.", {
             layout_type: schema.type,
             module_index: idx + 1,
             module_title: title,
@@ -1431,8 +1431,8 @@ function checkVisualAnchorLayout(slide, entry) {
   const spec = manifestEntrySpec(entry);
   const template = safeText(spec.template);
   const isEvidenceFigure = spec.kind === "Evidence" && /source_(figure|chart)/.test(template);
-  const hasContentLayout = Boolean(entry.content_layout_schema);
-  if (isEvidenceFigure && !hasContentLayout) {
+  const hasBodyLayout = Boolean(entry.body_layout_schema);
+  if (isEvidenceFigure && !hasBodyLayout) {
     return [issue(slide, "content_visual_anchor_layout_unintegrated", "error", "Evidence source figures/charts must use one of the four fixed 图文并茂 layouts with adjacent interpretation, not a picture-only composition.", {
       visual_component_id: entry.visual_component_id || spec.id || "",
       template,
@@ -1479,7 +1479,6 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
       issues.push(issue(page, "content_visual_anchor_plan_missing", "error", "Content slide plan must declare visual_anchors[].kind and visual_anchors[].template."));
       continue;
     }
-    issues.push(...checkPlannedModuleEvidenceBinding(page, plannedSlide));
     const actualEntries = manifestByPage.get(page) || [];
     const actualAnchorEntries = actualEntries.filter((entry) => entry.visual_role === "visual_anchor");
     const actualSupportingEntries = actualEntries.filter((entry) => entry.visual_role === "supporting_component");
@@ -1582,44 +1581,6 @@ function checkVisualAnchorPlanAlignment(fileName, manifestEntries, contentSlides
   return issues;
 }
 
-function checkPlannedModuleEvidenceBinding(page, plannedSlide = {}) {
-  const modules = Array.isArray(plannedSlide?.contentLayout?.modules) ? plannedSlide.contentLayout.modules : [];
-  const issues = [];
-  modules.forEach((module, moduleIdx) => {
-    const blocks = Array.isArray(module.blocks) ? module.blocks : [];
-    const moduleTextParts = [module.title || ""];
-    blocks
-      .filter((block) => block && block.type !== "visual_anchor")
-      .forEach((block) => collectTextValues(block, moduleTextParts));
-    const moduleText = moduleTextParts.join(" ");
-    const anchorBlocks = blocks.filter((block) => block?.type === "visual_anchor" && isStrictVisualAnchorSpec(block.visual_anchor || block));
-    anchorBlocks.forEach((block, anchorIdx) => {
-      const spec = block.visual_anchor || block;
-      const anchorText = collectTextValues({
-        title: spec.title,
-        claim: spec.claim,
-        caption: spec.source?.caption,
-        highlight_reason: spec.highlight_reason,
-      }).join(" ");
-      const overlap = semanticOverlap(moduleText, anchorText);
-      if (overlap.length < 2) {
-        issues.push(issue(page, "content_layout_evidence_claim_mismatch", "error", "A module visual anchor does not semantically bind to its module title and nearby text; choose evidence that proves the local claim instead of borrowing an unrelated figure.", {
-          module_index: moduleIdx + 1,
-          module_title: module.title || "",
-          visual_anchor_index: anchorIdx + 1,
-          visual_component_id: spec.id || "",
-          visual_anchor_title: spec.title || "",
-          visual_anchor_claim: spec.claim || "",
-          source_caption: spec.source?.caption || "",
-          shared_terms: overlap,
-          min_shared_terms: 2,
-        }));
-      }
-    });
-  });
-  return issues;
-}
-
 function checkVisualAnchorManifestContract(slide, entry) {
   const issues = [];
   const spec = manifestEntrySpec(entry);
@@ -1643,7 +1604,7 @@ function checkVisualAnchorManifestContract(slide, entry) {
 function checkVisualAnchorTableCapacity(slide, entry) {
   const spec = manifestEntrySpec(entry);
   if (spec.kind !== "Matrix" || spec.template !== "table") return [];
-  const layout = entry.content_layout_schema || {};
+  const layout = entry.body_layout_schema || {};
   if (layout.type !== "four_column") return [];
   const rows = Array.isArray(spec.visual_spec?.rows) ? spec.visual_spec.rows : [];
   const rowCount = rows.length;
@@ -1729,8 +1690,8 @@ function slideVisibleTextMap(slideEntries) {
   }));
 }
 
-function plannedContentLayoutType(slide) {
-  return safeText(slide?.contentLayout?.type);
+function plannedBodyLayoutType(slide) {
+  return safeText(slide?.bodyLayout?.type || slide?.bodyDsl?.props?.type);
 }
 
 function checkPptContentBriefPlanAlignment(briefFileName, planFileName) {
@@ -1812,13 +1773,13 @@ function checkPptContentBriefPlanAlignment(briefFileName, planFileName) {
       }));
     }
 
-    const actualLayoutType = plannedContentLayoutType(planned);
-    const expectedLayoutType = safeText(expected.contentLayout?.type);
+    const actualLayoutType = plannedBodyLayoutType(planned);
+    const expectedLayoutType = safeText(expected.bodyLayout?.type);
     if (actualLayoutType !== expectedLayoutType) {
-      issues.push(issue(page, "ppt_content_brief_layout_mismatch", "error", "Deck plan contentLayout.type must match the parser-derived PPT Content Brief layout recommendation.", {
+      issues.push(issue(page, "ppt_content_brief_layout_mismatch", "error", "Deck plan bodyLayout.type must match the parser-derived PPT Content Brief Body DSL layout recommendation.", {
         viewpoint_count: expected.viewpointCount,
-        expected_content_layout_type: expectedLayoutType,
-        actual_content_layout_type: actualLayoutType,
+        expected_body_layout_type: expectedLayoutType,
+        actual_body_layout_type: actualLayoutType,
       }));
     }
   }

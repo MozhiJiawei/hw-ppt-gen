@@ -15,7 +15,7 @@ Validate the Skill's layout-realization ability after the upstream human-in-the-
 - page titles and title notes;
 - analysis-summary viewpoints;
 - TOC / section structure;
-- parser-derived `contentLayout.type`.
+- parser-derived `bodyLayout.type`.
 
 The candidate-facing prompt is intentionally minimal. It should only point the candidate at the brief and output location; all behavior about brief consumption, layout realization, evidence readability, text compression, module density, Huawei visual consistency, QA, and artifact shape must come from the repository Skill and normal runtime references.
 

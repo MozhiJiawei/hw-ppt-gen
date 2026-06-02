@@ -94,15 +94,15 @@ function repairsForIssueType(type) {
       "Shorten the text, split it across blocks, or enlarge the measured text box.",
       "Prefer structured bullets or a compact table instead of prose-heavy paragraphs.",
     ],
-    content_layout_text_too_long: [
+    body_layout_text_too_long: [
       "Compress the block into short claim lines.",
       "Move dense comparisons into Matrix/table or KPI readout components.",
     ],
-    content_layout_table_frame_too_short: [
+    body_layout_table_frame_too_short: [
       "Increase the table block height.",
       "Reduce rows or cell text, or split the table into another structured block.",
     ],
-    content_layout_evidence_too_small: [
+    body_layout_evidence_too_small: [
       "Give the evidence visual more height or move supporting text out of the module.",
       "Choose a layout with a larger visual slot for the source aspect ratio.",
     ],
@@ -110,7 +110,7 @@ function repairsForIssueType(type) {
       "Add at least one real visual_anchor for the content slide.",
       "Use supporting components only as secondary readouts, not as the proof anchor.",
     ],
-    content_layout_infeasible: [
+    body_layout_infeasible: [
       "Reduce body density, split the module, or move detail to another slide.",
       "Check measured min/preferred sizes before choosing the layout.",
     ],
@@ -142,9 +142,9 @@ function repairsForIssueType(type) {
       "Render the visual through the fixed template implementation selected by kind/template.",
       "Regenerate the manifest after correcting renderer output.",
     ],
-    content_layout_schema_invalid: [
-      "Use an official contentLayout type and module count from the layout contract.",
-      "Keep layout schema as placement structure, not visual semantics.",
+    body_layout_schema_invalid: [
+      "Use an official Body DSL layout family and matching Module count.",
+      "Keep layout tags as placement structure, not visual semantics.",
     ],
   };
   return repairs[key] || [];
@@ -158,8 +158,28 @@ function normalizeTarget(target = {}, fallback = {}) {
     blockIndex: target.blockIndex ?? target.block_index ?? fallback.blockIndex ?? fallback.block_index,
     componentId: target.componentId ?? target.component_id ?? target.visual_component_id ?? fallback.componentId ?? fallback.component_id ?? fallback.visual_component_id,
     path: target.path ?? fallback.path,
+    selector: target.selector ?? fallback.selector,
+    semanticStack: normalizeSemanticStack(target.semanticStack ?? target.semantic_stack ?? fallback.semanticStack ?? fallback.semantic_stack),
+    prop: target.prop ?? fallback.prop,
   });
   return normalized;
+}
+
+function normalizeSemanticStack(stack) {
+  if (!Array.isArray(stack)) return undefined;
+  const frames = stack
+    .map((frame) => {
+      if (!frame || typeof frame !== "object") return null;
+      return stripUndefined({
+        tag: safeText(frame.tag),
+        id: safeText(frame.id),
+        title: safeText(frame.title),
+        path: safeText(frame.path),
+        selector: safeText(frame.selector),
+      });
+    })
+    .filter((frame) => frame && frame.tag);
+  return frames.length ? frames : undefined;
 }
 
 function normalizeDetails(details, source = {}) {

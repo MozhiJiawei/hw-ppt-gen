@@ -82,10 +82,9 @@ function layoutVertical(area, blocks, measures, flow, gap) {
       "error",
       "One or more primitives require more width than the module body provides.",
       {
+        target: firstDslTarget(measures),
         available_width: round(availableWidth),
-        claimants: widthFailures.map(({ measure, index }) => ({
-          index,
-          taxonomy_key: measure.primitive.taxonomy_key,
+        claimants: widthFailures.map(({ measure, index }) => claimantFor(measure, index, {
           min_w: round(measure.minSize.w),
           preferred_w: round(measure.preferredSize.w),
         })),
@@ -99,11 +98,10 @@ function layoutVertical(area, blocks, measures, flow, gap) {
       "error",
       "Module content minimum height exceeds available body height.",
       {
+        target: firstDslTarget(measures),
         available_height: round(available),
         minimum_required_height: round(minTotal),
-        claimants: measures.map((measure, index) => ({
-          index,
-          taxonomy_key: measure.primitive.taxonomy_key,
+        claimants: measures.map((measure, index) => claimantFor(measure, index, {
           min_h: round(measure.minSize.h),
           preferred_h: round(measure.preferredSize.h),
         })),
@@ -134,6 +132,7 @@ function layoutVertical(area, blocks, measures, flow, gap) {
         {
           index: item.index,
           taxonomy_key: measures[item.index].primitive.taxonomy_key,
+          target: dslTargetFor(measures[item.index]),
           shrink_h: round(shrink),
           final_h: round(sizes[item.index]),
         }
@@ -187,11 +186,10 @@ function layoutHorizontal(area, blocks, measures, flow, gap) {
       "error",
       "Horizontal primitive minimum width exceeds available body width.",
       {
+        target: firstDslTarget(measures),
         available_width: round(available),
         minimum_required_width: round(minTotal),
-        claimants: measures.map((measure, index) => ({
-          index,
-          taxonomy_key: measure.primitive.taxonomy_key,
+        claimants: measures.map((measure, index) => claimantFor(measure, index, {
           min_w: round(measure.minSize.w),
           preferred_w: round(measure.preferredSize.w),
         })),
@@ -222,6 +220,7 @@ function layoutHorizontal(area, blocks, measures, flow, gap) {
         {
           index: item.index,
           taxonomy_key: measures[item.index].primitive.taxonomy_key,
+          target: dslTargetFor(measures[item.index]),
           shrink_w: round(shrink),
           final_w: round(widths[item.index]),
         }
@@ -283,6 +282,31 @@ function chooseGrowable(measures) {
 
 function sum(values) {
   return values.reduce((total, value) => total + Number(value || 0), 0);
+}
+
+function claimantFor(measure = {}, index, extra = {}) {
+  return {
+    index,
+    taxonomy_key: measure.primitive?.taxonomy_key,
+    target: dslTargetFor(measure),
+    ...extra,
+  };
+}
+
+function dslTargetFor(measure = {}) {
+  const dsl = measure.dsl || {};
+  return {
+    path: dsl.path,
+    selector: dsl.selector,
+    componentId: dsl.id,
+    tag: dsl.tag,
+    semanticStack: dsl.semanticStack,
+  };
+}
+
+function firstDslTarget(measures = []) {
+  const measure = measures.find((item) => item?.dsl?.selector);
+  return measure ? dslTargetFor(measure) : undefined;
 }
 
 module.exports = {

@@ -7,7 +7,7 @@ const path = require("path");
 const ROOT = path.resolve(__dirname, "..", "..");
 const {
   parsePptContentBrief,
-  recommendContentLayoutForSummary,
+  recommendBodyLayoutForSummary,
   validatePptContentBrief,
 } = require("../pptx/parse_ppt_content_brief");
 
@@ -47,7 +47,7 @@ function assertValidBriefMapsHardConstraints() {
     { label: "显存压力", text: "KV cache 随层数、序列长度和 batch 线性扩张。" },
     { label: "成本边界", text: "缓存 footprint 会限制并发容量和长上下文服务。" },
   ]);
-  assert.deepStrictEqual(parsed.slideContract.contentSlides[0].contentLayoutRecommendation, {
+  assert.deepStrictEqual(parsed.slideContract.contentSlides[0].bodyLayoutRecommendation, {
     type: "two_column",
     reference: "05 内容 二分栏",
     viewpointCount: 2,
@@ -60,7 +60,7 @@ function assertValidBriefMapsHardConstraints() {
     title: slide.title,
     titleNote: slide.titleNote,
     currentSection: slide.currentSection || "",
-    contentLayoutType: slide.contentLayout.type,
+    bodyLayoutType: slide.bodyLayout.type,
   })), [
     {
       page: 2,
@@ -68,7 +68,7 @@ function assertValidBriefMapsHardConstraints() {
       title: "Stochastic KV Routing",
       titleNote: "用随机跨层注意力训练，换取部署期可选的 KV cache 深度共享。",
       currentSection: "",
-      contentLayoutType: "three_column",
+      bodyLayoutType: "three_column",
     },
     {
       page: 4,
@@ -76,7 +76,7 @@ function assertValidBriefMapsHardConstraints() {
       title: "KV Cache 瓶颈",
       titleNote: "每层 KV state 放大长上下文显存占用，压缩 batch 和 context 空间。",
       currentSection: "瓶颈来自 KV cache",
-      contentLayoutType: "two_column",
+      bodyLayoutType: "two_column",
     },
     {
       page: 5,
@@ -84,7 +84,7 @@ function assertValidBriefMapsHardConstraints() {
       title: "R-CLA 机制",
       titleNote: "训练期随机跨层注意力，让部署期固定 cache sharing 不再脆弱。",
       currentSection: "弹性来自随机路由",
-      contentLayoutType: "two_column",
+      bodyLayoutType: "two_column",
     },
   ]);
 }
@@ -117,7 +117,7 @@ function assertSummaryOnlyBriefDoesNotRequireToc() {
   assert.equal(parsed.sections.length, 0);
   assert.equal(parsed.contentPages.length, 0);
   assert.equal(parsed.summaryPage.pageNumber, 1);
-  assert.deepStrictEqual(parsed.summaryPage.contentLayoutRecommendation, {
+  assert.deepStrictEqual(parsed.summaryPage.bodyLayoutRecommendation, {
     type: "biased_column",
     reference: "06 内容 偏分栏",
     viewpointCount: 1,
@@ -180,25 +180,25 @@ function assertIssueContractIsDocumentedInSkillAndReferences() {
   assert(reference.includes("Hard Fields"), "reference should separate hard constraints from reference-only fields");
   assert(skill.includes("Source evidence is TOP1"), "SKILL should state the evidence-first principle");
   assert(reference.includes("`参考图片`: source evidence"), "reference should state the evidence-first principle");
-  assert(reference.includes("Layout Family"), "reference should document summary-count-driven content layout");
+  assert(reference.includes("Layout Family"), "reference should document summary-count-driven Body DSL layout");
   assert(reference.includes("source locators"), "reference should document absolute paths as source locators");
   assert(reference.includes("research_audit.md"), "reference should document audit file as verification-only");
   assert(pkg.scripts.smoke.includes("scripts/quality/software_test_report.js"), "npm run smoke should generate the software test report");
   assert(softwareReport.includes("scripts/smoke/test_ppt_content_brief_consumption.js"), "software test report should cover content brief parsing");
 }
 
-function assertSummaryCountRecommendsContentLayout() {
-  assert.deepStrictEqual(recommendContentLayoutForSummary({ body: [{ label: "一", text: "一个观点" }] }), {
+function assertSummaryCountRecommendsBodyLayout() {
+  assert.deepStrictEqual(recommendBodyLayoutForSummary({ body: [{ label: "一", text: "一个观点" }] }), {
     type: "biased_column",
     reference: "06 内容 偏分栏",
     viewpointCount: 1,
   });
-  assert.deepStrictEqual(recommendContentLayoutForSummary({ body: [{ label: "一", text: "一个观点" }, { label: "二", text: "两个观点" }] }), {
+  assert.deepStrictEqual(recommendBodyLayoutForSummary({ body: [{ label: "一", text: "一个观点" }, { label: "二", text: "两个观点" }] }), {
     type: "two_column",
     reference: "05 内容 二分栏",
     viewpointCount: 2,
   });
-  assert.deepStrictEqual(recommendContentLayoutForSummary({ body: [{ label: "一", text: "一个观点" }, { label: "二", text: "两个观点" }, { label: "三", text: "三个观点" }] }), {
+  assert.deepStrictEqual(recommendBodyLayoutForSummary({ body: [{ label: "一", text: "一个观点" }, { label: "二", text: "两个观点" }, { label: "三", text: "三个观点" }] }), {
     type: "three_column",
     reference: "07 内容 三分栏",
     viewpointCount: 3,
@@ -212,7 +212,7 @@ function main() {
   collect("absolute paths are accepted as brief source locators", assertAbsolutePathsAreAcceptedAsBriefSourceLocators, failures);
   collect("invalid brief fails field, chapter, path, and banned-token checks", assertInvalidBriefFailsContract, failures);
   collect("runtime docs and smoke wiring mention the content brief contract", assertIssueContractIsDocumentedInSkillAndReferences, failures);
-  collect("analysis summary count recommends matching content layout", assertSummaryCountRecommendsContentLayout, failures);
+  collect("analysis summary count recommends matching Body DSL layout", assertSummaryCountRecommendsBodyLayout, failures);
 
   if (failures.length) {
     console.error(`ppt content brief consumption tests failed: ${failures.length} issue(s)`);

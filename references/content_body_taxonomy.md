@@ -11,7 +11,7 @@ Every body-content block should derive:
 - `family`: `LayoutContainer`, `Evidence`, `QuantitativeReadout`, `StructuredText`, `RelationshipDiagram`, `MatrixTable`, or `MediaDecorative`.
 - `type`: a concrete semantic type such as `SourceFigure`, `KpiCardRow`, `RichBulletBlock`, or `NativeTable`.
 - `anchorEligibility`: `real_anchor`, `supporting_component`, or `not_anchor`.
-- `measureSupport`: `measured`, `estimated`, `legacy_fallback`, or `unsupported`. Official body-content templates must be `measured`; `estimated`, `legacy_fallback`, and `unsupported` are not acceptable for the strict content-layout path.
+- `measureSupport`: `measured`, `estimated`, `legacy_fallback`, or `unsupported`. Official body-content templates must be `measured`; `estimated`, `legacy_fallback`, and `unsupported` are not acceptable for the strict Body DSL layout path.
 - `resizePolicy`: `fixed`, `preserve_aspect`, `flexible`, `shrink_text`, `simplify`, or `fail_below_floor`.
 
 ## Families
@@ -22,7 +22,7 @@ Every body-content block should derive:
 
 ### Evidence
 
-`SourceFigure`, `SourceChart`, `SourceTableImage`, `SourceScreenshot`, and `SourceDiagram`.
+`SourceFigure`, `SourceChart`, and `SourceDiagram`.
 
 Evidence is normally `real_anchor`. Source-backed evidence should preserve aspect ratio and fail or warn when it falls below a readable floor.
 
@@ -42,7 +42,7 @@ Structured text is editable PPT text and is not an anchor.
 
 `ProcessFlow`, `Timeline`, `Pipeline`, `ArchitectureMap`, `CausalChain`, `DecisionGraph`, `ConstraintMap`, `ComparisonFlow`, `LayerStack`, `TreeHierarchy`, `CycleLoop`, and `NetworkGraph`.
 
-Generated relationship diagrams can be real anchors when they explain the module claim. Official relationship templates must have measured geometry before they can enter strict content layout.
+Generated relationship diagrams can be real anchors when they explain the module claim. Official relationship templates must have measured geometry before they can enter strict Body DSL layout.
 
 ### Matrix / Table
 
@@ -60,8 +60,6 @@ Decorative media does not satisfy visual-anchor requirements.
 
 - `Evidence/source_figure` -> `Evidence.SourceFigure`, `real_anchor`, `measured`.
 - `Evidence/source_chart` -> `Evidence.SourceChart`, `real_anchor`, `measured`.
-- `Evidence/source_table` -> `Evidence.SourceTableImage`, `real_anchor`, `measured`.
-- `Evidence/source_screenshot` -> `Evidence.SourceScreenshot`, `real_anchor`, `measured`.
 - `Quantity/data_cards` -> `QuantitativeReadout.KpiCardRow`, `supporting_component`, `measured`.
 - `Quantity/bar_chart` -> `QuantitativeReadout.MiniBarChart`, `real_anchor`, `measured`.
 - `Quantity/line_chart` -> `QuantitativeReadout.MiniLineChart`, `real_anchor`, `measured`.

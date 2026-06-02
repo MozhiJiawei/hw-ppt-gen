@@ -25,7 +25,7 @@ Body DSL
 -> FeedbackIssue
 ```
 
-This is the cleanup step: the old body plan path and old QA implementation details should either become compatibility-only or be removed, and `generated_visual_schema.md` should be demoted from AI-facing authoring docs to renderer-facing Visual IR.
+This is the cleanup step: the retired body-plan path and duplicate QA implementation details should be removed, and `generated_visual_schema.md` should be demoted from AI-facing authoring docs to renderer-facing Visual IR.
 
 ---
 
@@ -33,7 +33,7 @@ This is the cleanup step: the old body plan path and old QA implementation detai
 
 Step 2 makes DSL work for registered official components by bridging to the current renderer. That is not enough for an agent-native tool: humans will ask for new diagrams that no prebuilt DSL component can express. The system needs an escape hatch where agents can create deck-local draw functions dynamically while still being measured, rendered, manifested, and QA-governed.
 
-Once that dynamic path is in place, the old plan/contentLayout body authoring and duplicate QA rule surfaces should be cleaned up so the architecture does not carry two competing authoring models.
+Once that dynamic path is in place, the old plan/bodyDsl body authoring and duplicate QA rule surfaces should be cleaned up so the architecture does not carry two competing authoring models.
 
 ---
 
@@ -46,7 +46,7 @@ Once that dynamic path is in place, the old plan/contentLayout body authoring an
 - R5. Preserve existing editable PPT output and COM measurement quality.
 - R6. Demote `generated_visual_schema.md` into renderer-facing Visual IR guidance or replace it with `visual_ir_schema.md`.
 - R7. Make all QA output FeedbackIssue-compatible and remove duplicate eligibility/template checks where registry imports can replace them.
-- R8. Clean up old body plan/contentLayout authoring from AI-facing runtime guidance.
+- R8. Clean up retired body-plan authoring from AI-facing runtime guidance.
 - R9. Move forward tests to skeleton plan + Body DSL, including at least one deck-local dynamic visual fixture.
 - R10. Run full smoke and forward tests after cleanup.
 
@@ -56,7 +56,7 @@ Once that dynamic path is in place, the old plan/contentLayout body authoring an
 
 - Do not allow arbitrary Node scripts as dynamic components.
 - Do not allow raw `<Image>` or unregistered visual artifacts to satisfy anchor requirements.
-- Do not remove compatibility needed by existing fixtures until replacements are in place.
+- Replace fixture dependencies before removing retired paths.
 - Do not replace COM measurement with non-COM fallbacks.
 - Do not make `SKILL.md` a component rule list; it should point to generated discovery docs.
 
@@ -287,7 +287,7 @@ scripts/qa/
 
 - U5. **Migrate Runtime Workflow and Forward Tests**
 
-**Goal:** Make skeleton plan + Body DSL the primary runtime path, including dynamic visuals, and move old plan body authoring to compatibility-only or remove it.
+**Goal:** Make skeleton plan + Body DSL the only runtime path for body authoring, including dynamic visuals.
 
 **Requirements:** R8, R9, R10
 
@@ -296,7 +296,7 @@ scripts/qa/
 **Files:**
 - Modify: `SKILL.md`
 - Modify: `README.md`
-- Modify: `references/content_layout_schema.md`
+- Modify: `references/slide_dsl_authoring_schema.md`
 - Modify: `scripts/quality/software_test_report.js`
 - Modify or add: `forward-tests/huawei-ppt-gen/*`
 
@@ -305,7 +305,7 @@ scripts/qa/
 - Teach escalation: official sugar components first, `Visual(draw, model)` for unusual visuals, deck-local draw functions when existing components cannot express the request.
 - Update forward fixtures so all primary content pages use skeleton plan + Body DSL.
 - Include at least one forward fixture with deck-local dynamic visual.
-- Remove or mark old body plan authoring docs as compatibility-only.
+- Remove retired body-plan authoring docs.
 
 **Patterns to follow:**
 - Existing forward-test structure.
@@ -326,7 +326,7 @@ scripts/qa/
 - **Interaction graph:** Dynamic draw functions become registry-governed render capabilities rather than raw image bypasses.
 - **Error propagation:** Dynamic visual failures become FeedbackIssue with draw id and model-field context.
 - **State lifecycle risks:** Deck-local registries must stay scoped to the deck and not leak into official catalog.
-- **API surface parity:** Compatibility for old body content should be explicitly marked or removed after forward migration.
+- **API surface cleanup:** Retired body-plan compatibility should be removed after forward migration.
 - **Unchanged invariants:** Evidence through `Evidence`; supporting components not anchors; COM measurement authoritative.
 
 ---
@@ -337,7 +337,7 @@ scripts/qa/
 - Dynamic visual fixture passes smoke and forward tests.
 - `generated_visual_schema.md` is no longer the primary AI authoring surface.
 - QA duplicate lists are reduced in favor of shared registry/contract imports.
-- Old body plan authoring is removed from runtime guidance or marked compatibility-only.
+- Retired body-plan authoring is removed from runtime guidance.
 - Full smoke and forward tests pass.
 
 ---
@@ -348,7 +348,7 @@ scripts/qa/
 |------|------------|
 | Dynamic functions become arbitrary code | Restrict drawing context and reject direct filesystem/manifest/renderer bypasses. |
 | Raw images masquerade as anchors | Require registry role, measurement, manifest, and QA proof for all dynamic visuals. |
-| Cleanup breaks legacy fixtures | Migrate forward fixtures before removing compatibility paths. |
+| Cleanup breaks old fixtures | Migrate forward fixtures before removing retired paths. |
 | Registry becomes too permissive | Smoke-test official/deck-local visibility, eligibility, and destructive fitting rules. |
 
 ---

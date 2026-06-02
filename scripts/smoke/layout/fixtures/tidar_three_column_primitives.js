@@ -15,7 +15,7 @@ function createTidarPrimitiveFixture(rootDir) {
     modules: [
       {
         title: "收益证据",
-        blocks: [
+        componentPrimitives: [
           evidenceBlock("tidar_gain_evidence", evidence),
           kpiBlock("tidar_gain_kpis", [
             { label: "1.5B接收", value: "7.45" },
@@ -27,7 +27,7 @@ function createTidarPrimitiveFixture(rootDir) {
       },
       {
         title: "关键技术",
-        blocks: [
+        componentPrimitives: [
           evidenceBlock("tidar_mechanism_evidence", mechanism),
           kpiBlock("tidar_mechanism_cards", [
             { label: "AR 区域", value: "sampling" },
@@ -39,7 +39,7 @@ function createTidarPrimitiveFixture(rootDir) {
       },
       {
         title: "落地边界",
-        blocks: [
+        componentPrimitives: [
           evidenceBlock("tidar_boundary_evidence", boundary),
           kpiBlock("tidar_boundary_kpis", [
             { label: "1.5B训练", value: "50B" },

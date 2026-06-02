@@ -3,6 +3,7 @@ const fs = require("fs");
 const path = require("path");
 
 const ROOT = path.resolve(__dirname, "..", "..");
+const { parseSlideBodyDsl } = require("../pptx/dsl/jsx_dsl");
 
 const expectedContentSlideExports = [
   "addVisualAnchorContentSlide",
@@ -37,31 +38,27 @@ function writeSourceSvg(relativePath, width, height, label = "source") {
   return filePath;
 }
 
-function evidenceSourceAnchor(id, sourcePath) {
-  return {
-    id,
-    title: id,
-    claim: "源图作为证据锚点进入内容布局。",
-    kind: "Evidence",
-    template: "source_figure",
-    source: { path: sourcePath, caption: "Source figure for auto layout." },
-  };
+function bodyDsl(markup, scope = {}) {
+  return parseSlideBodyDsl(markup, scope).bodyDsl;
 }
 
-function biasedContentLayout(anchor, sideModules = [], options = {}) {
-  return {
-    type: "biased_column",
-    reference: "06 内容 偏分栏",
-    modules: [
-      {
-        role: "visual_anchor",
-        title: options.visualTitle || anchor.title || "主视觉",
-        visual_anchor: anchor,
-        visual_anchor_caption: options.visual_anchor_caption,
-      },
-      ...sideModules,
-    ],
-  };
+function biasedBodyDsl(anchor, sideText = [], options = {}) {
+  return bodyDsl(`<Slide>
+  <BiasedColumn>
+    <Module title={visualTitle}>
+      <Visual id={anchor.id} title={anchor.title} claim={anchor.claim} draw={draw} model={anchor.visual_spec} caption={caption} />
+    </Module>
+    <Module title="证据说明">
+      <InsightText body={sideText} maxLines={4} />
+    </Module>
+  </BiasedColumn>
+</Slide>`, {
+    anchor,
+    draw: `${anchor.kind}/${anchor.template}`,
+    caption: options.visual_anchor_caption,
+    sideText,
+    visualTitle: options.visualTitle || anchor.title || "主视觉",
+  });
 }
 
 function read(relativePath) {
@@ -92,9 +89,7 @@ function assertContentSlideRecordsFixedOutputEvidence() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "证据留痕", text: "图片型视觉锚点应记录实际输出证据。" }] },
-    contentLayout: biasedContentLayout(imageVisualSpec, [
-      { role: "text", title: "证据说明", body: "图片型视觉锚点应记录实际输出证据。" },
-    ]),
+    bodyDsl: biasedBodyDsl(imageVisualSpec, ["图片型视觉锚点应记录实际输出证据。"]),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_output_manifest.json"));
@@ -111,7 +106,7 @@ function assertContentSlideUsesProportionalImagePlacement() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "等比", text: "SVG 图片只能 contain 等比放入区域，不能拉伸填满。" }] },
-    contentLayout: biasedContentLayout({
+    bodyDsl: biasedBodyDsl({
       ...imageVisualSpec,
       id: "proportional_image",
       visual_spec: {
@@ -122,9 +117,7 @@ function assertContentSlideUsesProportionalImagePlacement() {
         ],
         highlight: { category: "保持比例", series: "等比" },
       },
-    }, [
-      { role: "text", title: "缩放原则", body: "图片只能 contain 等比放入正文布局给定的视觉区域。" },
-    ]),
+    }, ["图片只能 contain 等比放入正文布局给定的视觉区域。"]),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_image_placement_manifest.json"));
@@ -147,12 +140,10 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "可编辑", text: "视觉锚点描述必须在 PPT 文本层。" }] },
-    contentLayout: biasedContentLayout({
+    bodyDsl: biasedBodyDsl({
       ...imageVisualSpec,
       id: "caption_outside_visual_spec",
-    }, [
-      { role: "text", title: "解读", body: ["侧边模块用于形成图文并茂阅读路径。"] },
-    ], {
+    }, ["侧边模块用于形成图文并茂阅读路径。"], {
       visual_anchor_caption: {
         text: "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。",
         source: "说明：图注不属于图形规格。",
@@ -164,9 +155,9 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
 
   const slide = manifest.slides[0];
   assert(slide.visual_anchor_caption, "manifest should record PPT-layer visual anchor caption placement");
-  assert.equal(slide.resolved_layout_type, "biased_column", "manifest should record the resolved content layout family");
-  assert.equal(slide.content_layout_schema.reference, "06 内容 偏分栏", "manifest should record the derived reference template");
-  assert.equal(slide.content_layout_schema.modules_count, 2, "manifest should record contentLayout side modules");
+  assert.equal(slide.resolved_layout_type, "biased_column", "manifest should record the resolved Body DSL layout family");
+  assert.equal(slide.body_layout_schema.reference, "06 内容 偏分栏", "manifest should record the derived reference template");
+  assert.equal(slide.body_layout_schema.modules_count, 2, "manifest should record Body DSL side modules");
   assert.equal(slide.visual_anchor_caption.text, "图 1：流程视觉锚点只保留步骤结构，图注为可编辑 PPT 文本。");
   assert(!slide.visual_anchor.visual_spec.caption, "caption must stay outside visual_spec");
   assert(!slide.visual_anchor.visual_spec.figure_legend, "figure legend must stay outside visual_spec");
@@ -174,7 +165,7 @@ function assertContentSlideRendersEditableCaptionOutsideVisualSpec() {
   assert(slide.visual_anchor_caption.area.y >= slide.image_area.y + slide.image_area.h - 0.01, "caption should sit below the rendered image area");
 }
 
-function assertContentLayoutAutoResolvesTallEvidenceSideText() {
+function assertBodyDslAutoResolvesTallEvidenceSideText() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide, writeVisualAnchorManifest } = require("../pptx/hw_visual_anchor_slide");
   const sourcePath = writeSourceSvg(".tmp/visual_anchor_contract/tall_source.svg", 360, 1100, "tall");
@@ -184,29 +175,24 @@ function assertContentLayoutAutoResolvesTallEvidenceSideText() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "自适应", text: "模型不给 flow，渲染器根据源图比例选择左右结构。" }] },
-    contentLayout: {
-      type: "two_column",
-      reference: "05 内容 二分栏",
-      modules: [
-        {
-          role: "content_panel",
-          title: "瘦高图",
-          blocks: [
-            { type: "visual_anchor", visual_anchor: evidenceSourceAnchor("auto_tall_evidence", sourcePath) },
-            { type: "text", body: ["瘦高源图不应强行上图下文。", "解释文字应自动放到图的右侧。"], fontSize: 10 },
-          ],
-        },
-        {
-          role: "content_panel",
-          title: "说明",
-          blocks: [{ type: "text", body: "另一个模块用于保持二分栏结构完整。" }],
-        },
-      ],
-    },
+    bodyDsl: bodyDsl(`<Slide>
+  <TwoColumn>
+    <Module title="瘦高图">
+      <EvidenceFigure id="auto_tall_evidence" title="auto_tall_evidence" claim="源图作为证据锚点进入内容布局。" source={source} fit="contain" />
+      <InsightText body={body} fontSize={10} />
+    </Module>
+    <Module title="说明">
+      <InsightText body="另一个模块用于保持二分栏结构完整。" />
+    </Module>
+  </TwoColumn>
+</Slide>`, {
+      source: { path: sourcePath, caption: "Source figure for auto layout." },
+      body: ["瘦高源图不应强行上图下文。", "解释文字应自动放到图的右侧。"],
+    }),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_auto_flow_manifest.json"));
-  const moduleLayout = manifest.slides[0].content_layout_schema.module_layouts[0];
+  const moduleLayout = manifest.slides[0].body_layout_schema.module_layouts[0];
   assert.equal(moduleLayout.resolved_flow, "left_right", "tall source evidence plus text should auto-resolve to side-by-side layout");
   assert(moduleLayout.block_areas[0].area.x < moduleLayout.block_areas[1].area.x, "visual block should be placed to the left of its text block");
   assert(Math.abs(moduleLayout.block_areas[0].visible_area.y - moduleLayout.block_areas[0].area.y) < 0.001, "source evidence should be top-aligned inside its visual block");
@@ -223,57 +209,35 @@ function assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "拥挤", text: "同一模块内有证据图、KPI 卡和正文时，KPI 卡不能被压成小框。" }] },
-    contentLayout: {
-      type: "two_column",
-      reference: "05 内容 二分栏",
-      modules: [
-        {
-          role: "content_panel",
-          title: "算法：验证与预草稿重叠",
-          blocks: [
-            { type: "visual_anchor", visual_anchor: evidenceSourceAnchor("wide_evidence_with_cards", sourcePath) },
-            {
-              type: "supporting_component",
-              component: {
-                id: "readable_data_cards_with_evidence",
-                title: "三段 token 读数",
-                claim: "KPI 卡在证据图和正文之间仍应保持可读高度。",
-                kind: "Quantity",
-                template: "data_cards",
-                visual_spec: {
-                  cards: [
-                    { id: "prefix", label: "prefix", value: "确认" },
-                    { id: "prev", label: "draft", value: "验证" },
-                    { id: "mask", label: "mask", value: "预草稿" },
-                  ],
-                  highlight: "mask",
-                },
-                highlight_reason: "高亮预草稿，因为它承载下一批 proposal 的准备。",
-              },
-            },
-            {
-              type: "text",
-              body: [
-                "TiDAR用三段token组织和混合attention mask，在单forward内并行完成验证与预草稿",
-                "机制变化：本步接受多少 token，都有对应下一批 proposal。",
-                "收益入口：one-step diffusion 把草稿计算压进当前 forward。",
-              ],
-              emphasis: ["单forward", "对应下一批", "当前 forward"],
-              fontSize: 10,
-            },
-          ],
-        },
-        {
-          role: "content_panel",
-          title: "辅助模块",
-          blocks: [{ type: "text", body: "保持二分栏结构完整。" }],
-        },
+    bodyDsl: bodyDsl(`<Slide>
+  <TwoColumn>
+    <Module title="算法：验证与预草稿重叠">
+      <EvidenceFigure id="wide_evidence_with_cards" title="wide_evidence_with_cards" claim="源图作为证据锚点进入内容布局。" source={source} fit="contain" />
+      <KpiCards id="readable_data_cards_with_evidence" title="三段 token 读数" claim="KPI 卡在证据图和正文之间仍应保持可读高度。" cards={cards} highlight="mask" highlightReason="高亮预草稿，因为它承载下一批 proposal 的准备。" />
+      <InsightText body={body} emphasis={emphasis} fontSize={10} />
+    </Module>
+    <Module title="辅助模块">
+      <InsightText body="保持二分栏结构完整。" />
+    </Module>
+  </TwoColumn>
+</Slide>`, {
+      source: { path: sourcePath, caption: "Source figure for auto layout." },
+      cards: [
+        { id: "prefix", label: "prefix", value: "确认" },
+        { id: "prev", label: "draft", value: "验证" },
+        { id: "mask", label: "mask", value: "预草稿" },
       ],
-    },
+      body: [
+        "TiDAR用三段token组织和混合attention mask，在单forward内并行完成验证与预草稿",
+        "机制变化：本步接受多少 token，都有对应下一批 proposal。",
+        "收益入口：one-step diffusion 把草稿计算压进当前 forward。",
+      ],
+      emphasis: ["单forward", "对应下一批", "当前 forward"],
+    }),
     page: "01",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_data_card_height_manifest.json"));
-  const moduleLayout = manifest.slides[0].content_layout_schema.module_layouts[0];
+  const moduleLayout = manifest.slides[0].body_layout_schema.module_layouts[0];
   const cardBlock = moduleLayout.block_areas.find((block) => block.template === "data_cards");
   const evidenceBlock = moduleLayout.block_areas.find((block) => block.kind === "Evidence");
   const textBlock = moduleLayout.block_areas.find((block) => block.type === "text");
@@ -295,29 +259,23 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "密度", text: "二分栏和三分栏把空间优先留给图本体。" }] },
-    contentLayout: {
-      type: "two_column",
-      reference: "05 内容 二分栏",
-      modules: [
-        {
-          role: "content_panel",
-          title: "主证据",
-          blocks: [{
-            type: "visual_anchor",
-            visual_anchor: { ...imageVisualSpec, id: "two_column_caption_suppressed" },
-            visual_anchor_caption: {
-              text: "这段图题在二分栏中不应渲染。",
-              source: "这段来源在二分栏中不应渲染。",
-            },
-          }],
-        },
-        {
-          role: "content_panel",
-          title: "解读",
-          blocks: [{ type: "text", body: "解释文字承接图中证据。" }],
-        },
-      ],
-    },
+    bodyDsl: bodyDsl(`<Slide>
+  <TwoColumn>
+    <Module title="主证据">
+      <Visual id="two_column_caption_suppressed" title={anchor.title} claim={anchor.claim} draw={draw} model={anchor.visual_spec} caption={caption} />
+    </Module>
+    <Module title="解读">
+      <InsightText body="解释文字承接图中证据。" />
+    </Module>
+  </TwoColumn>
+</Slide>`, {
+      anchor: imageVisualSpec,
+      draw: `${imageVisualSpec.kind}/${imageVisualSpec.template}`,
+      caption: {
+        text: "这段图题在二分栏中不应渲染。",
+        source: "这段来源在二分栏中不应渲染。",
+      },
+    }),
     page: "01",
   });
   addVisualAnchorContentSlide(pptx, {
@@ -325,47 +283,26 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
     sections: ["测试"],
     currentSection: "测试",
     summary: { body: [{ label: "密度", text: "三分栏同样不为图题和来源预留额外高度。" }] },
-    contentLayout: {
-      type: "three_column",
-      reference: "07 内容 三分栏",
-      modules: [
-        {
-          role: "content_panel",
-          title: "证据一",
-          blocks: [{
-            type: "visual_anchor",
-            visual_anchor: { ...imageVisualSpec, id: "three_column_caption_suppressed" },
-            visual_anchor_caption: "这段图题在三分栏中不应渲染。",
-          }],
-        },
-        {
-          role: "content_panel",
-          title: "证据二",
-          blocks: [{
-            type: "visual_anchor",
-            visual_anchor: {
-              id: "three_column_matrix_caption_suppressed",
-              title: "Matrix Visual",
-              claim: "非 Evidence 的视觉锚点也不应在三分栏渲染图注。",
-              kind: "Matrix",
-              template: "table",
-              visual_spec: {
-                rows: [
-                  ["指标", "判断"],
-                  ["密度", "优先给图"],
-                  ["来源", "放入正文"],
-                ],
-              },
-            },
-            visual_anchor_caption: {
-              text: "这段 Matrix 图题在三分栏中不应渲染。",
-              source: "这段 Matrix 来源在三分栏中不应渲染。",
-            },
-          }],
-        },
-        { role: "content_panel", title: "证据三", blocks: [{ type: "text", body: "第三栏文字。" }] },
-      ],
-    },
+    bodyDsl: bodyDsl(`<Slide>
+  <ThreeColumn>
+    <Module title="证据一">
+      <Visual id="three_column_caption_suppressed" title={anchor.title} claim={anchor.claim} draw={draw} model={anchor.visual_spec} caption="这段图题在三分栏中不应渲染。" />
+    </Module>
+    <Module title="证据二">
+      <Visual id="three_column_second_caption_suppressed" title={anchor.title} claim="第二个视觉锚点也不应在三分栏渲染图注。" draw={draw} model={anchor.visual_spec} caption={secondCaption} />
+    </Module>
+    <Module title="证据三">
+      <InsightText body="第三栏文字。" />
+    </Module>
+  </ThreeColumn>
+</Slide>`, {
+      anchor: imageVisualSpec,
+      draw: `${imageVisualSpec.kind}/${imageVisualSpec.template}`,
+      secondCaption: {
+        text: "这段第二视觉图题在三分栏中不应渲染。",
+        source: "这段第二视觉来源在三分栏中不应渲染。",
+      },
+    }),
     page: "02",
   });
   const manifest = writeVisualAnchorManifest(pptx, path.join(ROOT, ".tmp", "visual_anchor_contract_column_caption_manifest.json"));
@@ -376,68 +313,45 @@ function assertTwoAndThreeColumnLayoutsSuppressVisualCaptions() {
   }
 }
 
-function assertTableBlocksAreRejectedByBehavior() {
+function assertTableHelperIsNotPublicEscapeHatch() {
   const helpers = require("../pptx/hw_pptx_helpers");
-  const { createHuaweiDeck } = helpers;
-  const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
   assert.equal(Object.prototype.hasOwnProperty.call(helpers, "addHuaweiTable"), false, "addHuaweiTable must not be exported as a page-level helper");
-  assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
-    title: "非法表格块",
-    contentLayout: {
-      type: "two_column",
-      reference: "05 内容 二分栏",
-      modules: [
-        { role: "content_panel", title: "证据", blocks: [{ type: "visual_anchor", visual_anchor: imageVisualSpec }] },
-        { role: "content_panel", title: "错误表格", blocks: [{ type: "table", body: [["A", "B"]] }] },
-      ],
-    },
-  }), /table blocks were removed/, "contentLayout should reject direct table blocks");
 }
 
-function assertSupportingOnlyLayoutFails() {
+function assertSupportingOnlyBodyDslFails() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
   assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
     title: "支撑组件不能当锚点",
-    contentLayout: {
-      type: "two_column",
-      reference: "05 内容 二分栏",
-      modules: [
-        {
-          role: "content_panel",
-          title: "只有卡片",
-          blocks: [{
-            type: "supporting_component",
-            component: {
-              id: "supporting_only_cards",
-              title: "只有数据卡",
-              claim: "数据卡不能满足视觉锚点要求。",
-              kind: "Quantity",
-              template: "data_cards",
-              visual_spec: { cards: [{ label: "A", value: "1" }] },
-            },
-          }],
-        },
-        { role: "content_panel", title: "说明", blocks: [{ type: "text", body: "没有真实视觉锚点。" }] },
-      ],
-    },
-  }), /real visual_anchor block/, "supporting components must not satisfy the real visual-anchor requirement");
+    bodyDsl: bodyDsl(`<Slide>
+  <TwoColumn>
+    <Module title="只有卡片">
+      <KpiCards id="supporting_only_cards" title="只有数据卡" claim="数据卡不能满足视觉锚点要求。" cards={cards} />
+    </Module>
+    <Module title="说明">
+      <InsightText body="没有真实视觉锚点。" />
+    </Module>
+  </TwoColumn>
+</Slide>`, { cards: [{ label: "A", value: "1" }] }),
+  }), /real visual component/, "supporting components must not satisfy the real visual-anchor requirement");
 }
 
-function assertContentLayoutDoesNotExposeManualBodyLayout() {
+function assertBodyDslDoesNotExposeManualBodyLayout() {
   const { createHuaweiDeck } = require("../pptx/hw_pptx_helpers");
   const { addVisualAnchorContentSlide } = require("../pptx/hw_visual_anchor_slide");
   assert.throws(() => addVisualAnchorContentSlide(createHuaweiDeck(), {
     title: "缺少语义锚点",
-    contentLayout: {
-      type: "two_column",
-      reference: "05 内容 二分栏",
-      modules: [
-        { role: "content_panel", title: "模块一", blocks: [{ type: "text", body: "正文模块必须提供真实视觉锚点。" }] },
-        { role: "content_panel", title: "模块二", blocks: [{ type: "text", body: "固定版心由渲染器决定。" }] },
-      ],
-    },
-  }), /real visual_anchor block/, "contentLayout should require semantic body modules instead of honoring page-region coordinates");
+    bodyDsl: bodyDsl(`<Slide>
+  <TwoColumn>
+    <Module title="模块一">
+      <InsightText body="正文模块必须提供真实视觉锚点。" />
+    </Module>
+    <Module title="模块二">
+      <InsightText body="固定版心由渲染器决定。" />
+    </Module>
+  </TwoColumn>
+</Slide>`),
+  }), /real visual component/, "Body DSL should require semantic proof components instead of honoring page-region coordinates");
 }
 
 function assertPackageScriptsRunContractBeforeSmoke() {
@@ -453,13 +367,13 @@ function main() {
   collect("visual-anchor content-slide surface exists", assertVisualAnchorSlideSurface, failures);
   collect("content-slide entrypoint records fixed output evidence", assertContentSlideRecordsFixedOutputEvidence, failures);
   collect("content-slide images preserve aspect ratio", assertContentSlideUsesProportionalImagePlacement, failures);
-  collect("content layout auto-resolves tall evidence side text", assertContentLayoutAutoResolvesTallEvidenceSideText, failures);
+  collect("Body DSL auto-resolves tall evidence side text", assertBodyDslAutoResolvesTallEvidenceSideText, failures);
   collect("supporting data cards keep readable height with evidence and text", assertSupportingDataCardsKeepReadableHeightWithEvidenceAndText, failures);
   collect("content-slide captions stay outside visual_spec", assertContentSlideRendersEditableCaptionOutsideVisualSpec, failures);
   collect("dense column layouts suppress visual captions", assertTwoAndThreeColumnLayoutsSuppressVisualCaptions, failures);
-  collect("native table helper is not a public schema escape hatch", assertTableBlocksAreRejectedByBehavior, failures);
-  collect("supporting-only layouts fail", assertSupportingOnlyLayoutFails, failures);
-  collect("content layout does not expose manual body layout", assertContentLayoutDoesNotExposeManualBodyLayout, failures);
+  collect("native table helper is not a public schema escape hatch", assertTableHelperIsNotPublicEscapeHatch, failures);
+  collect("supporting-only Body DSL fails", assertSupportingOnlyBodyDslFails, failures);
+  collect("Body DSL does not expose manual body layout", assertBodyDslDoesNotExposeManualBodyLayout, failures);
   collect("package scripts wire the contract into smoke", assertPackageScriptsRunContractBeforeSmoke, failures);
 
   if (failures.length) {

@@ -195,9 +195,7 @@ function caseForTaxonomyKey(key, sourceFiles) {
 function evidenceSourceKey(template) {
   return ({
     source_figure: "figure",
-    source_screenshot: "screenshot",
     source_chart: "chart",
-    source_table: "table",
   })[template] || "figure";
 }
 

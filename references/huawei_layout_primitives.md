@@ -5,7 +5,7 @@ Huawei content-page layout uses measured primitives before rendering. A primitiv
 The supported path is:
 
 ```text
-contentLayout module blocks
+Body DSL component tree
 -> taxonomy classification
 -> primitive measurement
 -> module stack allocation
@@ -30,7 +30,7 @@ The renderer receives final boxes from the layout layer. It should not renegotia
 
 Every official body-content visual template is required to enter the measured path:
 
-- Evidence: `Evidence/source_figure`, `Evidence/source_chart`, `Evidence/source_table`, and `Evidence/source_screenshot`.
+- Evidence: `Evidence/source_figure` and `Evidence/source_chart`. Tables, screenshots, and UI captures are image inputs; bind them as `source_figure` unless the source is specifically a chart.
 - Quantitative readouts/charts: `Quantity/data_cards`, `Quantity/bar_chart`, `Quantity/line_chart`, `Quantity/proportion_chart`, and `Quantity/heatmap`.
 - Relationship diagrams: `Sequence/process`, `Sequence/timeline`, `Sequence/swimlane`, `Loop/closed_loop`, `Loop/dual_loop`, `Loop/spiral_iteration_ladder`, `Hierarchy/tree`, `Hierarchy/layered_architecture`, and all `Network/*` templates.
 - Matrix/table primitives: `Matrix/table`, `Matrix/quadrant_matrix`, `Matrix/capability_matrix`, and `Matrix/heatmap`.

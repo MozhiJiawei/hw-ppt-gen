@@ -1408,6 +1408,7 @@ function resolveBodyCompileResult(data = {}, pptx = null) {
     pageId: data.pageId || data.id || String(data.page || page || ""),
     bodyDsl: data.bodyDsl,
     dslScope: data.dslScope || data.scope || {},
+    anchorMemory: ensureBodyAnchorMemory(pptx),
   };
   const dslResult = runDslInputChecks(pageContext);
   const dslErrors = (dslResult.issues || []).filter((issue) => issue.severity === "error");
@@ -1419,11 +1420,27 @@ function resolveBodyCompileResult(data = {}, pptx = null) {
       dslResult,
     });
   }
+  emitAnchorMemoryCliLog(dslResult.issues || []);
   return {
     renderModel: dslResult.compileIr?.renderModel || null,
     compileIr: dslResult.compileIr,
     dslResult,
   };
+}
+
+function ensureBodyAnchorMemory(pptx) {
+  if (!pptx || typeof pptx !== "object") return undefined;
+  if (!pptx.__hwBodyAnchorMemory) pptx.__hwBodyAnchorMemory = { entries: {} };
+  return pptx.__hwBodyAnchorMemory;
+}
+
+function emitAnchorMemoryCliLog(issues = []) {
+  const memoryIssues = issues.filter((issue) => /^dsl_visual_anchor_memory_/.test(issue.code));
+  for (const issue of memoryIssues) {
+    const anchor = issue.details?.anchorMemory || issue.details?.currentAnchor || {};
+    const moduleLabel = Number.isFinite(Number(anchor.moduleIndex)) ? `module ${Number(anchor.moduleIndex) + 1}` : "module";
+    console.error(`[Runtime QA memory] ${issue.message} (${moduleLabel}, selector: ${anchor.selector || issue.target?.selector || "unknown"})`);
+  }
 }
 
 module.exports = {

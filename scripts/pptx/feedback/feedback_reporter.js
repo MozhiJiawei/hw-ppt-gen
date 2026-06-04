@@ -177,7 +177,10 @@ function summarizeDetails(details = {}) {
 }
 
 function labelFor(key) {
-  return key.replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function formatDetail(value) {
@@ -193,7 +196,7 @@ function sortBySeverity(issues) {
 function cliDetailLines(details = {}) {
   const lines = [];
   if (!details || typeof details !== "object" || Array.isArray(details)) return lines;
-  for (const key of ["unusedSpace", "overflow", "readability", "scale", "resizeLimits", "box"]) {
+  for (const key of ["unusedSpace", "overflow", "readability", "scale", "resizeLimits", "previousAnchor", "currentAnchor", "anchorMemory", "box"]) {
     if (details[key] !== undefined) lines.push(`${labelFor(key)}: ${formatDetail(details[key])}`);
   }
   return lines;

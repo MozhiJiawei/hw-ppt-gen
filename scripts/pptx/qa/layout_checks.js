@@ -98,7 +98,7 @@ function runLayoutChecks(input = {}) {
       }));
     }
     if (visualSlotUnderfilled(record)) {
-      issues.push(issue("layout_visual_slot_underfilled", ir, record, "Visual element leaves excessive unused space inside its allocated slot. Preserve the current proof tier; when the anchor is source evidence, keep the original evidence and fill by adding source-grounded visual or text content around it.", {
+      issues.push(issue("layout_visual_slot_underfilled", ir, record, "Visual element leaves excessive unused space inside its allocated slot. Preserve the current proof tier; when the anchor is source evidence, keep the original evidence. Review the source material for the module claim and add source-grounded visual or text content that supports that same viewpoint.", {
         unusedSpace: record.unusedSpace,
       }));
     }
@@ -136,7 +136,7 @@ function runLayoutChecks(input = {}) {
   for (const container of ir.containers || []) {
     const blockGap = blockGapExcessive(container, ir.records || []);
     if (blockGap) {
-      issues.push(issue("layout_block_gap_excessive", ir, blockGap.record, "Adjacent blocks inside one module are separated by excessive blank space. Preserve the module's current proof tier; if it uses source evidence, keep that original evidence and fill the gap with source-grounded visual or text content that strengthens the same claim.", {
+      issues.push(issue("layout_block_gap_excessive", ir, blockGap.record, "Adjacent blocks inside one module are separated by excessive blank space. Preserve the module's current proof tier; if it uses source evidence, keep that original evidence. Review the source material for this module's claim and add source-grounded visual or text content that strengthens the same viewpoint.", {
         container: container.nodeId,
         bodyBox: container.bodyBox,
         previousBlock: blockGap.previousBlock,
@@ -160,14 +160,14 @@ function runLayoutChecks(input = {}) {
       }));
     }
     if (moduleFillLow(container)) {
-      issues.push(issue("layout_module_fill_low", ir, container, "Module visible content leaves excessive empty space inside the body slot.", {
+      issues.push(issue("layout_module_fill_low", ir, container, "Module visible content leaves excessive empty space inside the body slot. Review the source material for this module's claim and add source-grounded supporting content before weakening the evidence anchor.", {
         bodyBox: container.bodyBox,
         visibleOccupiedBox: container.visibleOccupiedBox,
         fill: container.fill,
       }));
     }
     if (moduleContentDensityLow(container)) {
-      issues.push(issue("layout_content_density_low", ir, container, "Module content density is too low after layout; add editable InsightText conclusion lines first, then change layout or split the page. Use KPI/table only when the content semantics require metrics or row/column comparison.", {
+      issues.push(issue("layout_content_density_low", ir, container, "Module content density is too low after layout. Review the original source text for this module's claim and add source-grounded conclusions, evidence boundaries, or supporting facts. Use KPI/table only when content semantics require metrics or row/column comparison.", {
         bodyBox: container.bodyBox,
         visibleOccupiedBox: container.visibleOccupiedBox,
         fill: container.fill,
@@ -180,7 +180,7 @@ function runLayoutChecks(input = {}) {
       issues.push(issue("layout_forced_scale_present", ir, diagnostic, "Layout solver had to force-scale content below declared minimum sizes.", diagnostic));
     }
     if (diagnostic?.code === "layout_internal_gap_excessive" || (diagnostic?.code === "layout_stack_gap_expand" && internalGapExcessive(diagnostic))) {
-      issues.push(issue("layout_internal_gap_excessive", ir, diagnostic, "Column content still has excessive internal blank space after adaptive layout. Preserve the current proof tier; if the module uses source evidence, keep it and add source-grounded visual or text content around the same claim.", diagnostic));
+      issues.push(issue("layout_internal_gap_excessive", ir, diagnostic, "Column content still has excessive internal blank space after adaptive layout. Preserve the current proof tier; if the module uses source evidence, keep it. Review the source material and add source-grounded visual or text content around the same claim.", diagnostic));
     }
   }
 

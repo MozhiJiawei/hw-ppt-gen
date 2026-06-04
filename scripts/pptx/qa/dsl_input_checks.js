@@ -49,9 +49,6 @@ function runDslInputChecks(page = {}) {
 
   const primitives = ir.compileIr?.visiblePrimitives || [];
   const anchors = primitives.filter((primitive) => primitive.identity.blockType === "visual_anchor");
-  const contaminatedText = primitives
-    .filter((primitive) => primitive.identity.blockType === "text")
-    .flatMap((primitive) => visibleTextMetaContamination(primitive));
 
   for (const anchor of anchors) {
     const visual = anchor.primitive?.visual_anchor || {};
@@ -66,53 +63,14 @@ function runDslInputChecks(page = {}) {
     }
   }
 
-  for (const contamination of contaminatedText) {
-    issues.push(issue("dsl_visible_text_meta_contamination", page, {
-      target: contamination.target,
-      message: "Visible PPT text contains generation, QA-repair, or cross-page presentation meta commentary instead of source-grounded business content.",
-      details: {
-        text: contamination.text,
-        matchedPattern: contamination.pattern,
-      },
-      repairs: [
-        "Replace process-meta commentary with the business claim proved by this module's evidence.",
-        "Do not explain that another page contains the source image; place the source evidence here or remove the meta sentence.",
-      ],
-    }));
-  }
+  issues.push(...applyVisualAnchorMemory(page, ir.compileIr));
 
   return withPhaseResult({
-    ok: issues.length === 0,
+    ok: !issues.some((item) => item.severity === "error"),
     dslIr: ir.dslIr,
     compileIr: ir.compileIr,
     issues,
   });
-}
-
-const META_TEXT_PATTERNS = Object.freeze([
-  { name: "cross_page_figure_reference", regex: /\bFigure\s*\d+[\s\S]{0,24}\bPage\s*\d+\b/i },
-  { name: "cross_page_chinese_reference", regex: /(?:原图|源图|证据图)[\s\S]{0,12}(?:Page|第?\s*\d+\s*页|本页|另[一个]页|放大呈现)/i },
-  { name: "summary_process_meta", regex: /\bSummary\b[\s\S]{0,24}(?:压缩|概览|呈现|替代)/i },
-  { name: "repair_rationale_visible", regex: /(?:不替代|保留证据|保留源图|QA|runtime|修复|降级|proof tier|source evidence|generated drawing)/i },
-]);
-
-function visibleTextMetaContamination(primitive = {}) {
-  const body = primitive.primitive?.body;
-  const lines = Array.isArray(body) ? body : [body].filter(Boolean);
-  const out = [];
-  for (const line of lines) {
-    const text = String(line || "").trim();
-    if (!text) continue;
-    const match = META_TEXT_PATTERNS.find((entry) => entry.regex.test(text));
-    if (match) {
-      out.push({
-        text,
-        pattern: match.name,
-        target: primitive.dsl || primitive.source || primitive.sourceComponent,
-      });
-    }
-  }
-  return out;
 }
 
 function withPhaseResult(result = {}) {
@@ -124,6 +82,78 @@ function withPhaseResult(result = {}) {
       diagnostics: result.issues || [],
     }),
   };
+}
+
+function applyVisualAnchorMemory(page = {}, compileIr = {}) {
+  const memory = page.anchorMemory;
+  if (!memory || typeof memory !== "object") return [];
+  if (!memory.entries) memory.entries = {};
+  const pageKey = String(page.pageId || `page-${Number(page.pageIndex ?? 0) + 1}`);
+  const anchors = collectPrimaryModuleAnchors(pageKey, compileIr);
+  const out = [];
+  for (const anchor of anchors) {
+    const previous = memory.entries[anchor.key];
+    if (!previous) {
+      memory.entries[anchor.key] = anchor;
+      out.push(issue("dsl_visual_anchor_memory_recorded", page, {
+        severity: "info",
+        target: anchor.target,
+        message: `Visual anchor memory recorded for this block: ${anchor.proofClass}. Future edits must keep the same anchor type.`,
+        details: { anchorMemory: anchor },
+      }));
+      continue;
+    }
+    if (previous.proofClass !== anchor.proofClass) {
+      out.push(issue("dsl_visual_anchor_type_changed", page, {
+        target: anchor.target,
+        message: `Visual anchor type changed from ${previous.proofClass} to ${anchor.proofClass}. Anchor memory locks each block's proof type after the first successful DSL compile.`,
+        details: { previousAnchor: previous, currentAnchor: anchor },
+        repairs: [
+          `Restore this block's ${previous.proofClass} anchor.`,
+          "If the original evidence cannot fit, keep the source evidence and add source-grounded supporting content or report the layout as not fit instead of downgrading the anchor type.",
+        ],
+      }));
+      continue;
+    }
+    memory.entries[anchor.key] = { ...previous, lastSeen: anchor };
+    out.push(issue("dsl_visual_anchor_memory_checked", page, {
+      severity: "info",
+      target: anchor.target,
+      message: `Visual anchor memory checked for this block: ${anchor.proofClass} remains locked.`,
+      details: { previousAnchor: previous, currentAnchor: anchor },
+    }));
+  }
+  return out;
+}
+
+function collectPrimaryModuleAnchors(pageKey, compileIr = {}) {
+  const byModule = new Map();
+  for (const primitive of compileIr.visiblePrimitives || []) {
+    if (primitive.identity?.blockType !== "visual_anchor") continue;
+    if (!byModule.has(primitive.moduleIndex)) byModule.set(primitive.moduleIndex, primitive);
+  }
+  return [...byModule.entries()].map(([moduleIndex, primitive]) => {
+    const visual = primitive.primitive?.visual_anchor || {};
+    const target = primitive.dsl || primitive.source || primitive.sourceComponent || {};
+    return {
+      key: `${pageKey}:module:${moduleIndex}:primary_visual_anchor`,
+      pageKey,
+      moduleIndex,
+      proofClass: visual.kind === "Evidence" ? "source_evidence" : "generated_drawing",
+      kind: visual.kind,
+      template: visual.template,
+      componentId: visual.id || primitive.identity?.componentId,
+      sourceKey: sourceIdentity(visual.source),
+      selector: target.selector,
+      target,
+    };
+  });
+}
+
+function sourceIdentity(source) {
+  if (!source) return "";
+  if (typeof source === "string") return source;
+  return source.path || source.caption || source.id || "";
 }
 
 function isTraceCompilerIssue(issue = {}) {
@@ -138,7 +168,7 @@ function issue(code, page = {}, input = {}) {
   return createFeedbackIssue({
     code,
     phase: "dsl_input",
-    severity: "error",
+    severity: input.severity || "error",
     location_quality: input.location_quality || ((input.target?.selector || input.target?.sourceSpan) ? "dsl_mapped" : "page_only"),
     target: {
       pageIndex: page.pageIndex,

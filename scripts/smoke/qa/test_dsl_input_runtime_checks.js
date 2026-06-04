@@ -48,12 +48,12 @@ assert.equal(multipleRoots.issues[0].target.sourceSpan.line, 2);
 assert(multipleRoots.issues[0].target.codeFrame.includes("<TwoColumn"));
 assertCliForAll(multipleRoots);
 
-const metaContaminatedBodyDsl = `
+const generatedDrawingBodyDsl = `
 <Slide>
   <TwoColumn>
     <Module title="机制证据">
-      <EvidenceFigure id="fig2" title="Figure 2" claim="Figure 2 支撑机制判断。" source={source} />
-      <InsightText body={metaBody} />
+      <Visual id="fig2_summary" title="机制概览" claim="机制概览支撑机制判断。" source={source} draw="Sequence/process" model={processModel} />
+      <InsightText body={body} />
     </Module>
     <Module title="结论">
       <EvidenceFigure id="secondary_evidence" title="补充来源图" claim="补充来源图让结论模块满足真实锚点规则。" source={source} fit="contain" />
@@ -61,17 +61,32 @@ const metaContaminatedBodyDsl = `
     </Module>
   </TwoColumn>
 </Slide>`;
-const metaScope = {
+const memoryScope = {
   ...scope,
-  metaBody: ["保留证据：Figure 2 原图在 Page 6 放大呈现。", "概览表达：Summary 只压缩机制顺序，不替代源图。"],
+  processModel: {
+    steps: [
+      { id: "a", label: "request 等待" },
+      { id: "b", label: "token 间隙" },
+      { id: "c", label: "抢占换模" },
+    ],
+    highlight: "b",
+  },
 };
-const metaContaminated = runDslInputChecks({ pageIndex: 8, bodyDsl: metaContaminatedBodyDsl, dslScope: metaScope });
-assert(metaContaminated.issues.some((issue) => issue.code === "dsl_visible_text_meta_contamination"));
-const contaminationIssue = metaContaminated.issues.find((issue) => issue.code === "dsl_visible_text_meta_contamination");
-assert(contaminationIssue.target.selector.includes("InsightText"));
-assert(contaminationIssue.details.text.includes("Figure 2"));
-assert(contaminationIssue.repairs.join(" ").includes("business claim"));
-assertCliForAll(metaContaminated);
+const anchorMemory = { entries: {} };
+const memoryRecorded = runDslInputChecks({ pageIndex: 8, pageId: "stable-page", bodyDsl: VALID_BODY_DSL, dslScope: scope, anchorMemory });
+assert.equal(memoryRecorded.ok, true);
+assert(memoryRecorded.issues.some((issue) => issue.code === "dsl_visual_anchor_memory_recorded"));
+assert.equal(memoryRecorded.issues.find((issue) => issue.code === "dsl_visual_anchor_memory_recorded").severity, "info");
+assertCliForAll(memoryRecorded);
+
+const memoryChanged = runDslInputChecks({ pageIndex: 8, pageId: "stable-page", bodyDsl: generatedDrawingBodyDsl, dslScope: memoryScope, anchorMemory });
+assert(memoryChanged.issues.some((issue) => issue.code === "dsl_visual_anchor_type_changed"));
+const anchorChangedIssue = memoryChanged.issues.find((issue) => issue.code === "dsl_visual_anchor_type_changed");
+assert.equal(anchorChangedIssue.details.previousAnchor.proofClass, "source_evidence");
+assert.equal(anchorChangedIssue.details.currentAnchor.proofClass, "generated_drawing");
+assert(anchorChangedIssue.message.includes("Anchor memory locks"));
+assert(anchorChangedIssue.repairs.join(" ").includes("Restore this block's source_evidence anchor"));
+assertIssueCliFeedback(anchorChangedIssue, { includes: ["Previous Anchor", "Current Anchor"] });
 
 assert.deepStrictEqual(
   codes(runDslInputChecks({ pageIndex: 2, bodyDsl: SUPPORTING_ONLY_BODY_DSL, dslScope: scope })),
@@ -121,35 +136,56 @@ assert(cliOutput.includes("Source: line 5, column 7"), cliOutput);
 assert(cliOutput.includes("Code: <EvidenceFigure"), cliOutput);
 assert(!/^\s+at\s+\S+/m.test(cliOutput), cliOutput);
 
-const metaCli = spawnSync(process.execPath, ["-e", `
+const memoryCli = spawnSync(process.execPath, ["-e", `
 const { createHuaweiDeck } = require("./scripts/pptx/hw_pptx_helpers");
 const { addVisualAnchorContentSlide } = require("./scripts/pptx/hw_visual_anchor_slide");
 const { parseSlideBodyDsl } = require("./scripts/pptx/dsl/jsx_dsl");
-const bodyDsl = parseSlideBodyDsl(${JSON.stringify(metaContaminatedBodyDsl)}, {
+const evidenceDsl = parseSlideBodyDsl(${JSON.stringify(VALID_BODY_DSL)}, {
   source: { path: ".tmp/source.png", caption: "source" },
   body: ["判断：真实生成入口必须阻断正文元话语。"],
-  metaBody: ["保留证据：Figure 2 原图在 Page 6 放大呈现。"],
 }).bodyDsl;
-const pptx = createHuaweiDeck({ title: "DSL meta contamination smoke" });
+const drawingDsl = parseSlideBodyDsl(${JSON.stringify(generatedDrawingBodyDsl)}, {
+  source: { path: ".tmp/source.png", caption: "source" },
+  body: ["判断：真实生成入口必须记住视觉锚点类型。"],
+  processModel: {
+    steps: [
+      { id: "a", label: "request 等待" },
+      { id: "b", label: "token 间隙" },
+      { id: "c", label: "抢占换模" },
+    ],
+    highlight: "b",
+  },
+}).bodyDsl;
+const pptx = createHuaweiDeck({ title: "DSL anchor memory smoke" });
 try {
   addVisualAnchorContentSlide(pptx, {
     page: "01",
-    title: "DSL meta contamination",
+    title: "DSL anchor memory record",
     sections: ["QA"],
     currentSection: "QA",
-    summary: { body: [{ label: "检查", text: "DSL input QA must reject visible process meta commentary." }] },
-    bodyDsl,
+    summary: { body: [{ label: "检查", text: "DSL input QA records anchor type after successful compile." }] },
+    bodyDsl: evidenceDsl,
+  });
+  addVisualAnchorContentSlide(pptx, {
+    page: "01",
+    title: "DSL anchor memory changed",
+    sections: ["QA"],
+    currentSection: "QA",
+    summary: { body: [{ label: "检查", text: "DSL input QA rejects anchor type downgrade." }] },
+    bodyDsl: drawingDsl,
   });
 } catch (error) {
   console.error(error.message || String(error));
   process.exit(1);
 }
 `], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
-const metaCliOutput = `${metaCli.stdout || ""}${metaCli.stderr || ""}`;
-assert.notEqual(metaCli.status, 0, "real content slide CLI path should fail on visible process meta text");
-assert(metaCliOutput.includes("dsl_input:dsl_visible_text_meta_contamination"), metaCliOutput);
-assert(metaCliOutput.includes("Visible PPT text contains generation"), metaCliOutput);
-assert(metaCliOutput.includes("Selector: Slide > TwoColumn:nth-child(1) > Module:nth-child(1) > InsightText:nth-child(2)"), metaCliOutput);
-assert(!/^\s+at\s+\S+/m.test(metaCliOutput), metaCliOutput);
+const memoryCliOutput = `${memoryCli.stdout || ""}${memoryCli.stderr || ""}`;
+assert.notEqual(memoryCli.status, 0, "real content slide CLI path should fail when anchor memory detects a type change");
+assert(memoryCliOutput.includes("[Runtime QA memory] Visual anchor memory recorded"), memoryCliOutput);
+assert(memoryCliOutput.includes("dsl_input:dsl_visual_anchor_type_changed"), memoryCliOutput);
+assert(memoryCliOutput.includes("Visual anchor type changed from source_evidence to generated_drawing"), memoryCliOutput);
+assert(memoryCliOutput.includes("Previous Anchor"), memoryCliOutput);
+assert(memoryCliOutput.includes("Current Anchor"), memoryCliOutput);
+assert(!/^\s+at\s+\S+/m.test(memoryCliOutput), memoryCliOutput);
 
 console.log("Runtime QA DSL input checks passed.");

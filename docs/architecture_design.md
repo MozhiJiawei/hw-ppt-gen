@@ -278,7 +278,9 @@ Real visual anchors have an explicit proof hierarchy:
 | `supporting_readout` | `<KpiCards>`, `<Table>`, `<CapabilityStack>` | Compact readout that supports an already-proven claim. It does not satisfy source evidence by itself. |
 | `text` | `<InsightText>` | Editable explanation and conclusion. It never replaces visual proof. |
 
-When the authored Body DSL first chooses source evidence for a page or module, later QA repair should preserve that same source evidence identity. Layout fixes should give the evidence more effective slot, reduce neighboring prose/supporting readouts, rebalance columns, or add source-grounded text around it. A generated drawing may annotate or explain the same evidence chain, but it must not downgrade the original source evidence merely because drawing is easier to lay out.
+When the authored Body DSL first chooses source evidence for a page or module, later QA repair should preserve that same source evidence identity. After a successful DSL compile, the runtime records the primary visual-anchor proof type for each page/module and the CLI echoes that memory so the next repair loop knows the anchor is locked. Layout fixes should give the evidence more effective slot, reduce neighboring prose/supporting readouts, rebalance columns, or add source-grounded content around it. A generated drawing may annotate or explain the same evidence chain, but it must not downgrade the original source evidence merely because drawing is easier to lay out.
+
+When layout diagnostics report sparse content or excessive internal gaps, feedback should stay objective and positive: state the measured gap/density problem and ask the author to review the source material for the module claim, then add source-grounded visual or text content that supports the same viewpoint. The feedback should not teach authors to write repair notes into the slide body.
 
 Supporting components include KPI cards, tables, capability stacks, structured bullets, and compact readouts. They can clarify evidence, but they do not replace it.
 

@@ -108,9 +108,9 @@ The visual proof hierarchy is semantic, not cosmetic:
 - `supporting_readout`: KPI, table, and capability components support an already-proven claim.
 - `text`: editable conclusions and boundaries.
 
-When the first authored DSL uses source evidence for a module, keep that evidence component through QA repair. Improve layout by reallocating body slot, reducing neighboring prose/readouts, or adding source-grounded text; use generated drawing only when it preserves or explains the same evidence chain.
+When the first authored DSL uses source evidence for a module, keep that evidence component through QA repair. After a successful DSL compile, runtime QA records the primary visual-anchor proof type for each page/module and rejects later downgrades from source evidence to generated drawing. Improve layout by reallocating body slot, reducing neighboring prose/readouts, or adding source-grounded text; use generated drawing only when it preserves or explains the same evidence chain.
 
-Visible `InsightText` lines are final PPT content, not repair notes. They must state business conclusions, evidence boundaries, or decision criteria. Do not write process-meta text such as QA status, "Summary only", "not replacing source image", or "Figure X is enlarged on another page".
+When spacing or density feedback says a module is too sparse, review the original source material for that module's claim. Add source-grounded conclusions, evidence boundaries, decision criteria, or supporting facts; add another meaningful visual only when the source material supports it.
 
 As of this contract, generated drawing is discovered as draw capabilities, not as one JSX tag per drawing. If a new official draw template is added to `scripts/pptx/contracts/visual_templates.js`, it should automatically appear in the first-level draw index and receive a second-level detail file unless explicitly hidden as internal.
 

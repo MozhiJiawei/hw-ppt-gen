@@ -1,0 +1,13 @@
+schema_version: 1
+name: huawei-pptx-generator
+title: 华为风格 PPT 生成
+description: 基于材料生成华为风格 PPTX，并执行交付前 QA 和视觉检查。
+entry: docs/index.md
+nav:
+  - title: 概览
+    path: docs/index.md
+  - title: 使用方式
+    path: docs/usage.md
+  - title: 参考
+    path: docs/reference.md
+status: bootstrap

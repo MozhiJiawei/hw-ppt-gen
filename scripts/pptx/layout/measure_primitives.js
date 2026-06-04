@@ -13,6 +13,7 @@ function measurePrimitive(block = {}, area = {}, options = {}) {
     preferredSize: { w: Number(area.w || 0), h: 0.3 },
     maxUsefulSize: { w: Number(area.w || 0), h: Number(area.h || 0) },
     resizePolicy: classification.resizePolicy,
+    resizeLimits: resizeLimitsFor(classification),
     priority: primitivePriority(classification, block),
     diagnostics: withDslContext([...classification.diagnostics], block),
     dsl: block.dsl || null,
@@ -77,8 +78,9 @@ function measureTextPrimitive(base, block, area, options = {}) {
     ...base,
     minSize: { w: minWidth, h: measuredHeight },
     preferredSize: { w: Math.max(availableWidth, minWidth), h: measuredHeight },
-    maxUsefulSize: { w: Math.max(availableWidth, minWidth), h: measuredHeight + 0.18 },
+    maxUsefulSize: { w: Math.max(availableWidth, minWidth), h: measuredHeight },
     resizePolicy: RESIZE_POLICY.SHRINK_TEXT,
+    resizeLimits: resizeLimitsFor({ resizePolicy: RESIZE_POLICY.SHRINK_TEXT }),
     measurement: measured.result,
     diagnostics: base.diagnostics,
   };
@@ -93,19 +95,22 @@ function measureEvidencePrimitive(base, block, visualAnchor, area, options) {
   const availableWidth = Number(area.w || measuredWidth || 0);
   const availableHeight = Number(area.h || measuredHeight || 0);
   const readable = evidenceReadableFloor(block, visualAnchor, area);
-  const minWidth = Math.max(readable.minWidth, Math.min(availableWidth || measuredWidth, measuredWidth * 0.5));
-  const minHeight = Math.max(readable.minHeight, Math.min(availableHeight || measuredHeight, measuredHeight * 0.5));
+  const minWidth = Math.max(readable.minWidth, Math.min(availableWidth || measuredWidth, measuredWidth * 0.7));
+  const minHeight = Math.max(readable.minHeight, Math.min(availableHeight || measuredHeight, measuredHeight * 0.7));
   const preferredWidth = Math.max(minWidth, Math.min(availableWidth || measuredWidth, measuredWidth));
   const preferredHeight = Math.max(minHeight, Math.min(availableHeight || measuredHeight, measuredHeight));
+  const resizeLimits = resizeLimitsFor(base.primitive);
+  const axisMax = Number(resizeLimits.axisScale?.max || 1);
   return {
     ...base,
     minSize: { w: minWidth, h: minHeight },
     preferredSize: { w: preferredWidth, h: preferredHeight },
     maxUsefulSize: {
-      w: Math.max(preferredWidth, Math.min(availableWidth || preferredWidth, measuredWidth * 1.2)),
-      h: Math.max(preferredHeight, Math.min(availableHeight || preferredHeight, measuredHeight * 1.2)),
+      w: Math.max(preferredWidth, Math.min(availableWidth || preferredWidth, preferredWidth * axisMax)),
+      h: Math.max(preferredHeight, Math.min(availableHeight || preferredHeight, preferredHeight * axisMax)),
     },
     resizePolicy: RESIZE_POLICY.PRESERVE_ASPECT,
+    resizeLimits,
     measurement: measured.result,
     diagnostics: [
       ...base.diagnostics,
@@ -126,6 +131,7 @@ function measureTablePrimitive(base, visualAnchor, area = {}, options = {}) {
     minSize: { w: Math.max(1.1, Math.min(Number(area.w || 0), Number(bounds.w || 0) + 0.12)), h: measuredHeight },
     preferredSize: { w: Math.max(Number(area.w || 0), Number(bounds.w || 0) + 0.12), h: measuredHeight },
     maxUsefulSize: { w: Math.max(Number(area.w || 0), Number(bounds.w || 0) + 0.12), h: measuredHeight + 0.18 },
+    resizeLimits: resizeLimitsFor(base.primitive),
     table: { rows, measuredHeight },
     measurement: measured.result,
   };
@@ -157,7 +163,8 @@ function measureDataCardsPrimitive(base, visualAnchor, area = {}, options = {}) 
     ...base,
     minSize: { w: measuredWidth, h: measuredHeight },
     preferredSize: { w: Math.max(availableWidth, measuredWidth), h: measuredHeight },
-    maxUsefulSize: { w: Math.max(availableWidth, measuredWidth), h: measuredHeight + 0.1 },
+    maxUsefulSize: { w: Math.max(availableWidth, measuredWidth), h: measuredHeight },
+    resizeLimits: resizeLimitsFor(base.primitive),
     cards: { count: Array.isArray(cards) ? cards.length : 0, measuredHeight },
     measurement: fit.measurement,
     diagnostics,
@@ -253,8 +260,50 @@ function measureVisualPrimitive(base, block, area = {}, options = {}) {
     minSize: { w: minWidth, h: minHeight },
     preferredSize: { w: preferredWidth, h: Math.max(minHeight, preferredHeight) },
     maxUsefulSize: { w: Math.max(preferredWidth, availableWidth || preferredWidth), h: Math.max(heightPolicy.max, Math.min(availableHeight || heightPolicy.max, measuredHeight)) },
+    resizeLimits: resizeLimitsFor(base.primitive),
     measurement: measured.result,
     diagnostics: base.diagnostics,
+  };
+}
+
+function resizeLimitsFor(classification = {}) {
+  const policy = classification.resizePolicy;
+  if (classification.family === "Evidence") {
+    return {
+      preserveAspect: false,
+      uniformScale: { min: 0.67, max: 1.33 },
+      axisScale: { min: 0.8, max: 1.2 },
+    };
+  }
+  if (policy === RESIZE_POLICY.PRESERVE_ASPECT) {
+    return {
+      preserveAspect: true,
+      uniformScale: { min: 0.67, max: 1.33 },
+    };
+  }
+  if (policy === RESIZE_POLICY.FLEXIBLE) {
+    return {
+      preserveAspect: false,
+      uniformScale: { min: 0.67, max: 1.33 },
+      axisScale: { min: 0.8, max: 1.2 },
+    };
+  }
+  if (policy === RESIZE_POLICY.FIXED) {
+    return {
+      preserveAspect: true,
+      uniformScale: { min: 1, max: 1 },
+    };
+  }
+  if (policy === RESIZE_POLICY.SHRINK_TEXT) {
+    return {
+      preserveAspect: false,
+      textScale: { min: 1, max: 1 },
+    };
+  }
+  return {
+    preserveAspect: false,
+    uniformScale: { min: 0.67, max: 1.33 },
+    axisScale: { min: 0.8, max: 1.2 },
   };
 }
 

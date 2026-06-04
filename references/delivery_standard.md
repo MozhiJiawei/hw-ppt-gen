@@ -7,9 +7,11 @@ This is the standard for a finished Huawei-style deck. Use it before planning or
 - The deck is evidence-first and fact-presenting.
 - Source figures, charts, screenshots, and tables that establish a claim must appear as readable evidence.
 - One page has one primary evidence object. Do not merge several source figures into one unreadable evidence collage.
-- Generated visuals are secondary. Use them only when the source has no usable evidence image or when they replace long prose with one clear visual explanation.
+- Generated visuals are secondary. Use them only when the source has no usable evidence image, when they annotate preserved source evidence, or when they replace long prose with one clear visual explanation.
+- Proof priority is explicit: `source_evidence > generated_drawing > supporting_readout > text`. If the first Body DSL draft selects source evidence for a module, repair keeps that source evidence identity as the primary proof.
 - Text serves evidence. It states the conclusion the evidence proves and the boundary that prevents overclaiming.
 - High density means readable evidence plus compact conclusions, not long paragraphs or empty cards.
+- QA repair preserves meaning before shape. When fixing density, spacing, alignment, overflow, or readability feedback, keep the module's semantic anchor if it still carries the claim. For source evidence, repair by giving it more slot, reducing nearby prose/supporting readouts, and adding source-grounded text around it. Generated drawing may explain the same chain, but it does not downgrade the original source evidence.
 
 ## Evidence Readability
 
@@ -58,8 +60,8 @@ Huawei density is made from layers, not paragraphs. A strong page can be scanned
 - `分析总结`;
 - red module headers;
 - source evidence;
-- KPI/readout cards as supporting components;
-- compact supporting tables;
+- KPI/readout cards only when the source gives real metrics;
+- compact supporting tables only when row/column intersections carry meaning;
 - short conclusion boxes;
 - red-bold keywords inside short lines.
 
@@ -72,12 +74,12 @@ For dense text blocks, mark 1-3 decisive terms in red bold through `emphasis` in
 
 Red emphasis should form a reading path. If a reader scans only the red terms, they should recover the page's conclusion, not a random list of tidy labels. Do not red-bold structural labels such as `资源下降`, `机制变化`, or `边界条件` when they merely name the line's role.
 
-A column module should not accumulate more than 6 visible prose lines across multiple text blocks. When a column needs more detail, first split the information into KPI rows or a conclusion box. Use a compact table only when the point depends on row/column comparison. These are supporting components; they cannot replace the module's evidence image or generated diagram/chart.
+A column module should not accumulate more than 6 visible prose lines across multiple text blocks. When a column needs more detail, first sharpen or add `InsightText` conclusion lines, or use a conclusion box. Use KPI cards only when the content is genuinely numeric, and use a compact table only when the point depends on row/column comparison. These are supporting components; they cannot replace the module's evidence image or generated diagram/chart.
 
 Prefer structural compression over prose compression:
 
-- turn a list of facts into KPI cards;
-- turn mechanism pairs into a 2x2 comparison table;
+- turn source metrics into KPI cards;
+- turn true mechanism pairs into a 2x2 comparison table;
 - turn a final decision into a bordered conclusion note;
 - use arrows between columns when the page tells a scenario -> mechanism -> result story.
 
@@ -121,6 +123,15 @@ Use a generated table only when the axes matter:
 - Use only 10, 12, 14, 18, and 24 pt font sizes.
 - Main page title is 24 pt Huawei red; title note is 18 pt Huawei red.
 - Body text is 12 pt by default; use 14 pt only for larger conclusion boxes.
+
+## Runtime QA Gate
+
+Before accepting a generated deck, run the runtime QA layers for DSL input, measurement, layout, and render/export. Every error-level issue is a blocking defect.
+
+- Do not waive `severity: "error"` feedback because the slide looks acceptable by eye.
+- Do not replace DSL-mapped QA with visual-review judgment; fix the underlying DSL, measurement input, layout choice, or render/export artifact.
+- After each repair, rerun the affected QA layer and the downstream layers until all error-level issues are cleared.
+- Visual review remains required, but it is the final human-quality check after runtime QA errors are gone.
 
 ## Visual Review Mindset
 

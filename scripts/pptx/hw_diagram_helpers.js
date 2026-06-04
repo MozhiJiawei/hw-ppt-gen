@@ -2848,7 +2848,9 @@ function drawNativeEvidence(slide, spec, area) {
   const imagePath = source.path ? path.resolve(source.path) : "";
   if (imagePath && fs.existsSync(imagePath)) {
     const dimensions = readImageDimensions(imagePath);
-    const fitted = dimensions ? fitAreaContain(area, dimensions.width, dimensions.height) : area;
+    const fitted = spec.__hwLayoutFitMode === "fill"
+      ? area
+      : (dimensions ? fitAreaContain(area, dimensions.width, dimensions.height) : area);
     slide.addImage({ path: imagePath, ...fitted });
     return {
       image_area: fitted,

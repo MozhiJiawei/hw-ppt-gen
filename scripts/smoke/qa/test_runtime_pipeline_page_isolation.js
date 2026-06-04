@@ -110,6 +110,13 @@ function okMeasurement({ compileIr }) {
       dsl: primitive.dsl,
       status: "ok",
       measureSupport: "measured",
+      minSize: { w: 2.1, h: 1.4 },
+      preferredSize: { w: 3, h: 2 },
+      maxUsefulSize: { w: 3.9, h: 2.6 },
+      resizePolicy: primitive.identity.blockType === "text" ? "shrink_text" : "preserve_aspect",
+      resizeLimits: primitive.identity.blockType === "text"
+        ? { preserveAspect: false, textScale: { min: 1, max: 1 } }
+        : { preserveAspect: true, uniformScale: { min: 0.7, max: 1.3 } },
       bounds: { w: 3, h: 2 },
       measurement: { ok: true, shape_bounds: { w: 3, h: 2 } },
     })),

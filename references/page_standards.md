@@ -19,6 +19,8 @@ Use this reference to decide what each page type must deliver.
 
 The summary page is the deck's evidence overview, not a KPI-only dashboard.
 
+When repairing density, alignment, spacing, or readability feedback, preserve the semantic anchor of each column first. The anchor may be source evidence, a generated visual, a chart, a compact table, KPI readouts, or a key text block, depending on what carries the column's main claim. Source evidence has the highest proof priority: if the first Body DSL draft selected `<EvidenceFigure>` or `<EvidenceChart>` for a column, keep that same source image/chart as the primary proof and repair the layout around it. Strengthen the same claim with nearby source-grounded text, supporting readouts, or generated explanation that preserves the evidence chain, and replace the anchor only when it no longer proves the claim.
+
 Required:
 
 - preserves the brief's title, title note, and `分析总结`;

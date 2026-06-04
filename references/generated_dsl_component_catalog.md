@@ -7,12 +7,14 @@ Use this as the first-level drawing index. It should stay short: choose the body
 ## Authoring Entry
 
 - Body layout and non-drawing readouts use JSX-like tags such as `<TwoColumn>`, `<Module>`, `<EvidenceFigure>`, `<KpiCards>`, `<Table>`, and `<InsightText>`.
-- Generated drawing uses the soft entry `<Visual draw="Kind/template" model={...} />`.
+- Generated drawing uses the soft entry `<Visual draw="Kind/template" model={...} source={source} />`.
 - `draw="Kind/template"` can call an existing official renderer, and later can route to dynamic agent-generated draw functions behind the same registry boundary.
 
 ## Drawing Principles
 
-- Prefer source evidence when it proves the claim; generated drawing is secondary and should replace prose only when it clarifies structure, sequence, comparison, or relationship.
+- Proof priority is explicit: `source_evidence > generated_drawing > supporting_readout > text`.
+- Prefer source evidence when it proves the claim. If the first authored DSL chose `<EvidenceFigure>` or `<EvidenceChart>`, keep that same source evidence through QA repair and improve the layout around it.
+- Generated drawing is secondary. Use it when no readable source evidence exists, when it annotates preserved source evidence, or when it replaces prose by clarifying structure, sequence, comparison, or relationship.
 - Keep drawing models relationship-native: steps for flows, nodes/edges for networks, rows/columns/values for matrices, series/categories for charts. Put explanations in editable PPT text, not inside the drawing model.
 - Respect the body slot budget. Large drawings need fewer neighboring text lines and fewer supporting components.
 - Use Huawei-compatible restraint: readable Microsoft YaHei text, red only for decisive emphasis, clear labels, no decorative clutter, and no manual page coordinates in Body DSL.

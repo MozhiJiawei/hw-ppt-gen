@@ -62,7 +62,7 @@ async function writeSkeletonDeck(plan, outFile) {
   } = require("../pptx/hw_pptx_helpers");
 
   const pptx = renderHuaweiPptSkeleton(plan);
-  assert(!Array.isArray(pptx._hwVisualAnchorManifest) || pptx._hwVisualAnchorManifest.length === 0, "skeleton rendering must not create a visual-anchor manifest");
+  assert(!Array.isArray(pptx._hwBodyPipelinePages) || pptx._hwBodyPipelinePages.length === 0, "skeleton rendering must not create body pipeline records");
   await pptx.writeFile({ fileName: outFile });
   await repairPptxForPowerPointCom(outFile);
 }

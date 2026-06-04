@@ -1,6 +1,6 @@
 # Judge Rubric: TiDAR Evidence Readability Forward Test
 
-Use this rubric after the candidate agent generates a deck. The judge may inspect the candidate's PPTX, plan, manifest, visual-review notes, exported PNGs, and generation script.
+Use this rubric after the candidate agent generates a deck. The judge may inspect the candidate's PPTX, plan, exported PNGs, and generation script. Forward-test judgment is based on the visible PPT result and contamination discipline; do not require separate runtime QA reports, render/export QA reports, or visual-review notes as candidate deliverables.
 
 ## Scoring
 
@@ -13,13 +13,13 @@ Score each dimension from 0 to 3.
 - Summary Boundary Fidelity: the Summary page third column explains TiDAR's real landing boundary: 50B/150B continued pretraining, single-H100 batch=1 evidence scope, and H100 kernel / KV cache / serving adaptation constraints.
 - AI-Image Discipline: uses AI images only when they communicate the target claim better than source evidence or structured native diagrams; any AI image must support the module claim, not merely decorate or disclaim.
 - Huawei Visual Language: follows the repository Huawei-style visual system without decorative clutter.
-- Review Discipline: exports slides and records visual-review notes that specifically discuss evidence size/readability.
+- Export Discipline: exports slides so the main agent can visually inspect evidence size/readability.
 
 ## Blocking Findings
 
 Treat any of the following as a likely fail:
 
-- Required export or visual-review evidence is missing.
+- Required exported slide PNGs are missing.
 - A primary source figure or table is present but visibly unreadable in exported PNGs.
 - The deck replaces available source evidence with AI-generated imagery without a documented reason.
 - Summary page "落地边界" is shown as generic deployment, server, shield, validation, or AI-fallback imagery without the training-cost / batch=1 / kernel-KV-serving boundary claim.
@@ -45,7 +45,7 @@ Treat any of the following as a likely fail:
 - Summary Boundary Fidelity: [0-3]
 - AI-Image Discipline: [0-3]
 - Huawei Visual Language: [0-3]
-- Review Discipline: [0-3]
+- Export Discipline: [0-3]
 
 ## Blocking Findings
 
@@ -63,7 +63,5 @@ Treat any of the following as a likely fail:
 
 - [PPTX path]
 - [Plan path]
-- [Manifest path]
-- [Visual-review notes path]
 - [Slide PNG directory]
 ```

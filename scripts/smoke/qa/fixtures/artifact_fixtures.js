@@ -8,7 +8,7 @@ function validArtifacts() {
       { slide: 1, xml: "<p:sld><a:r><a:rPr sz=\"1400\"><a:latin typeface=\"Microsoft YaHei\"/><a:solidFill><a:srgbClr val=\"333333\"/></a:solidFill></a:rPr><a:t>标题</a:t></a:r></p:sld>" },
       { slide: 2, xml: "<p:sld><p:sp><p:spPr><a:solidFill><a:srgbClr val=\"FFFFFF\"/></a:solidFill><a:ln w=\"6350\"><a:solidFill><a:srgbClr val=\"C00000\"/></a:solidFill></a:ln></p:spPr></p:sp></p:sld>" },
     ],
-    renderManifest: {
+    renderEvidence: {
       slides: [
         { slide: 1, visual_component_id: "main_evidence", kind: "Evidence", template: "source_figure", visual_role: "visual_anchor", visual_anchor: { id: "main_evidence" }, renderer: "evidence", rendered: true },
       ],

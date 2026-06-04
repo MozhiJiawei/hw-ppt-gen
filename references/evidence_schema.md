@@ -4,7 +4,7 @@ Use this reference before placing any source image evidence.
 
 ## Contract
 
-Evidence anchors route source visuals through the unified content-slide path and manifest. Do not bypass this with direct `slide.addImage`.
+Evidence anchors route source visuals through the unified content-slide path and render evidence. Do not bypass this with direct `slide.addImage`.
 
 ```json
 {

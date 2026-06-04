@@ -1,6 +1,7 @@
 const { HW_STYLE } = require("../hw_pptx_helpers");
+const fs = require("fs");
 const { collectPremeasurePrimitiveItems, measurePrimitive, premeasurePrimitives } = require("./measure_primitives");
-const { modulePrimitives } = require("./content_model");
+const { getBlockVisualSpec, modulePrimitives } = require("./content_model");
 
 function fixedBodyLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop) {
   const bottomPadding = layout.schema.special === "large_visual_with_side_cards" ? 0.35 : 0.17;
@@ -123,14 +124,45 @@ function measureModuleWidthDemand(module, layoutType, probeModuleW, moduleH, opt
   premeasurePrimitives(blocks, bodyArea, measureOptions);
   const measures = blocks.map((block) => measurePrimitive(block, bodyArea, measureOptions));
   const min = Math.max(0.6, ...measures.map((measure) => Number(measure.minSize?.w || 0))) + framePaddingW;
-  const preferred = Math.max(min, ...measures.map((measure) => Number(measure.preferredSize?.w || 0) + framePaddingW));
-  const maxUseful = Math.max(preferred, ...measures.map((measure) => Number(measure.maxUsefulSize?.w || 0) + framePaddingW));
+  const naturalPreferred = Math.max(min, ...measures.map((measure) => Number(measure.preferredSize?.w || 0) + framePaddingW));
+  const aspectDemand = measureAspectAwareWidthDemand(blocks, measures, bodyArea, framePaddingW, options);
+  const preferred = Math.max(min, naturalPreferred, aspectDemand.preferred);
+  const maxUseful = Math.max(preferred, aspectDemand.maxUseful, ...measures.map((measure) => Number(measure.maxUsefulSize?.w || 0) + framePaddingW));
   return {
     min,
     preferred,
     maxUseful,
     diagnostics: measures.flatMap((measure) => measure.diagnostics || []),
   };
+}
+
+function measureAspectAwareWidthDemand(blocks = [], measures = [], bodyArea = {}, framePaddingW = 0, options = {}) {
+  const visualItems = blocks
+    .map((block, index) => ({ block, measure: measures[index], visual: getBlockVisualSpec(block) }))
+    .filter((item) => item.visual);
+  if (!visualItems.length) return { preferred: 0, maxUseful: 0 };
+  const gap = Number(options.blockGap ?? 0.12);
+  const nonVisualHeight = blocks.reduce((sum, block, index) => {
+    if (getBlockVisualSpec(block)) return sum;
+    return sum + Number(measures[index]?.preferredSize?.h || 0);
+  }, 0);
+  const visualHeightBudget = Math.max(0.6, Number(bodyArea.h || 0) - nonVisualHeight - gap * Math.max(0, blocks.length - 1));
+  const perVisualHeight = visualHeightBudget / visualItems.length;
+  let preferred = 0;
+  let maxUseful = 0;
+  for (const item of visualItems) {
+    const dimensions = sourceDimensions(item.visual);
+    if (!dimensions) continue;
+    const aspect = dimensions.width / Math.max(1, dimensions.height);
+    if (!Number.isFinite(aspect) || aspect <= 1.05) continue;
+    const desiredContentWidth = perVisualHeight * aspect;
+    const currentContentWidth = Number(bodyArea.w || 0);
+    if (desiredContentWidth <= currentContentWidth + 0.05) continue;
+    const cappedPreferred = Math.min(desiredContentWidth, currentContentWidth * 1.45) + framePaddingW;
+    preferred = Math.max(preferred, cappedPreferred);
+    maxUseful = Math.max(maxUseful, Math.min(desiredContentWidth, currentContentWidth * 1.65) + framePaddingW);
+  }
+  return { preferred, maxUseful };
 }
 
 function allocateMeasuredWidths(demands, availableW) {
@@ -162,6 +194,54 @@ function allocateMeasuredWidths(demands, availableW) {
     overflow -= shrink;
   }
   return widths;
+}
+
+function sourceDimensions(visual = {}) {
+  const filePath = visual.source?.path || visual.path;
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  const lower = String(filePath).toLowerCase();
+  try {
+    if (lower.endsWith(".svg")) return svgDimensions(fs.readFileSync(filePath, "utf8"));
+    const buffer = fs.readFileSync(filePath);
+    if (lower.endsWith(".png")) return pngDimensions(buffer);
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return jpegDimensions(buffer);
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+function svgDimensions(text = "") {
+  const width = Number((text.match(/\bwidth=["']?([0-9.]+)/i) || [])[1]);
+  const height = Number((text.match(/\bheight=["']?([0-9.]+)/i) || [])[1]);
+  if (width > 0 && height > 0) return { width, height };
+  const viewBox = (text.match(/\bviewBox=["']([^"']+)["']/i) || [])[1];
+  if (!viewBox) return null;
+  const parts = viewBox.trim().split(/\s+/).map(Number);
+  if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) return { width: parts[2], height: parts[3] };
+  return null;
+}
+
+function pngDimensions(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 24) return null;
+  if (buffer.readUInt32BE(0) !== 0x89504e47) return null;
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+function jpegDimensions(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) return null;
+    const marker = buffer[offset + 1];
+    const length = buffer.readUInt16BE(offset + 2);
+    if (length < 2) return null;
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+    }
+    offset += 2 + length;
+  }
+  return null;
 }
 
 function moduleBodyArea(area) {

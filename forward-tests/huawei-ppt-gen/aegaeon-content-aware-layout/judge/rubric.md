@@ -1,6 +1,6 @@
 # Judge Rubric: Aegaeon Content-Aware Layout Forward Test
 
-Use this rubric after the candidate agent generates a deck. The judge may inspect the candidate's PPTX, plan, manifest, visual-review notes, exported PNGs, and generation script.
+Use this rubric after the candidate agent generates a deck. The judge may inspect the candidate's PPTX, plan, exported PNGs, and generation script. Forward-test judgment is based on the visible PPT result and contamination discipline; do not require separate runtime QA reports, render/export QA reports, or visual-review notes as candidate deliverables.
 
 Do not judge by whether the candidate reproduced a hidden answer exactly. Judge whether the output demonstrates the intended Skill capability under the upstream-brief division of labor.
 
@@ -76,14 +76,13 @@ Checks:
 - Empty space is filled, when appropriate, with source-grounded structure such as compact comparison tables, KPI rows, dense notes, or readout blocks.
 - Added density does not become clutter or duplicate the same claim.
 
-### 7. Review Discipline
+### 7. Export Discipline
 
 Checks:
 
-- Exported slide PNGs and visual-review notes were produced.
-- Exported slide PNGs were inspected.
-- Visual-review notes identify actual issues rather than only claiming success.
-- Remaining caveats are concrete and bounded.
+- Exported slide PNGs were produced.
+- The main agent can visually inspect the deck from the exported PNGs.
+- Remaining caveats reported by the candidate are concrete and bounded.
 
 ## Recommended Verdict Labels
 
@@ -109,7 +108,7 @@ Checks:
 - Evidence Readability: [0-3]
 - Text Compression: [0-3]
 - Information Density: [0-3]
-- Review Discipline: [0-3]
+- Export Discipline: [0-3]
 
 ## Blocking Findings
 
@@ -127,7 +126,5 @@ Checks:
 
 - [PPTX path]
 - [Plan path]
-- [Manifest path]
-- [Visual-review notes path]
 - [Slide PNG directory]
 ```

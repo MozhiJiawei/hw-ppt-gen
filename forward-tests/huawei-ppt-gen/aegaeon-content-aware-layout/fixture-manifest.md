@@ -61,9 +61,8 @@ Expected artifacts are judged after the run, but should be required by the Skill
 
 - generated `.pptx`;
 - deck plan JSON;
-- visual-anchor manifest JSON;
-- exported slide PNGs;
-- exported slide PNG directory and visual-review notes;
-- visual-review notes.
+- exported slide PNGs.
+
+Runtime QA is part of normal deck generation and export. Forward-test judgment should not require the candidate to hand over separate runtime QA reports, render/export QA reports, or visual-review notes. The main agent judges the visible exported PPT images and contamination discipline.
 
 The fixture does not include runtime automation. It only fixes the input, candidate prompt, and judging criteria.

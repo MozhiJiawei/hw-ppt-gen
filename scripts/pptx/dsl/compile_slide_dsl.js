@@ -1,6 +1,7 @@
 "use strict";
 
 const { createFeedbackIssue } = require("../feedback/feedback_issue");
+const { createFeedbackCliError, feedbackToCliText } = require("../feedback/feedback_reporter");
 const { normalizeComponentTree } = require("./normalize_component_tree");
 const { componentTreeToRenderModel } = require("./component_tree_model");
 
@@ -46,7 +47,7 @@ function compileSlideDsl(bodyDsl, options = {}) {
       renderModel = componentTreeToRenderModel(tree, options);
     } catch (error) {
       feedbackIssues.push(createFeedbackIssue({
-        code: "dsl_component_tree_invalid",
+        code: error.feedbackCode || "dsl_component_tree_invalid",
         severity: "error",
         phase: "compile",
         target: error.feedbackTarget || {
@@ -66,10 +67,6 @@ function compileSlideDsl(bodyDsl, options = {}) {
   return finalize(tree, renderModel, feedbackIssues, options);
 }
 
-function compileBodyDslToRenderModel(bodyDsl, options = {}) {
-  return compileSlideDsl(bodyDsl, { ...options, throwOnError: true }).renderModel;
-}
-
 function finalize(tree, renderModel, feedbackIssues, options = {}) {
   const result = {
     ok: !feedbackIssues.some((issue) => issue.severity === "error"),
@@ -78,15 +75,14 @@ function finalize(tree, renderModel, feedbackIssues, options = {}) {
     feedbackIssues,
   };
   if (!result.ok && options.throwOnError !== false) {
-    const error = new Error(feedbackIssues.map((issue) => issue.message).join("\n") || "Body DSL compile failed.");
-    error.feedbackIssues = feedbackIssues;
-    error.compileResult = result;
-    throw error;
+    throw createFeedbackCliError(feedbackToCliText(feedbackIssues, { title: "Body DSL compile failed" }), {
+      feedbackIssues,
+      compileResult: result,
+    });
   }
   return result;
 }
 
 module.exports = {
-  compileBodyDslToRenderModel,
   compileSlideDsl,
 };

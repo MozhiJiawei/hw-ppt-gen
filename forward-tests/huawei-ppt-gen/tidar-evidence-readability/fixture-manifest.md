@@ -57,8 +57,7 @@ Expected artifacts:
 
 - generated `.pptx`;
 - deck plan JSON;
-- visual-anchor manifest JSON;
 - exported slide PNGs;
-- exported slide PNG directory and visual-review notes;
-- visual-review notes;
 - notes on any evidence-first relayout, density reduction, source-image replacement, data/native visual choice, or AI-image decision.
+
+Runtime QA is part of normal deck generation and export. Forward-test judgment should not require the candidate to hand over separate runtime QA reports, render/export QA reports, or visual-review notes. The main agent judges the visible exported PPT images and contamination discipline.

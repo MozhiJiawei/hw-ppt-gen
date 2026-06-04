@@ -27,7 +27,7 @@ const SOURCE_DIR = path.join(OUT_DIR, "sources");
 const SOURCE_PPTX = path.join(OUT_DIR, "dsl_draw_matrix_source.pptx");
 const PPTX_OUT = path.join(OUT_DIR, "dsl_draw_matrix.pptx");
 const FULL_REVIEW_PPTX = path.join(OUT_DIR, "dsl_draw_matrix_full_review.pptx");
-const MANIFEST_OUT = path.join(OUT_DIR, "dsl_draw_matrix_manifest.json");
+const RENDER_EVIDENCE_OUT = path.join(OUT_DIR, "dsl_draw_matrix_render_evidence.json");
 const RAW_MEASUREMENT_OUT = path.join(OUT_DIR, "dsl_draw_matrix_com_measurement.json");
 const COMPILE_OUT = path.join(OUT_DIR, "dsl_draw_compile_report.json");
 const MEASURE_OUT = path.join(OUT_DIR, "dsl_draw_measurement_report.json");
@@ -156,7 +156,7 @@ async function main() {
 
   const pptx = createHuaweiDeck({ title: "DSL Draw Matrix Review" });
   measurementRows.forEach((row) => renderReviewSlide(pptx, row));
-  const manifest = writeVisualAnchorManifest(pptx, MANIFEST_OUT, measurementRows);
+  writeRenderEvidence(RENDER_EVIDENCE_OUT, measurementRows);
   await pptx.writeFile({ fileName: PPTX_OUT });
   await repairPptxForPowerPointCom(PPTX_OUT);
 
@@ -177,21 +177,24 @@ function buildDrawFixture(spec, row, tier) {
       "该页通过 Body DSL 编译、测量并进入 review deck。",
     ],
   };
-  const visual = `<Visual id="${componentId}" title="${escapeAttr(spec.title || spec.id)}" claim="${escapeAttr(spec.claim || "DSL draw fixture")}" draw="${drawId(spec)}" model={model} />`;
-  const evidence = `<EvidenceFigure id="${componentId}_evidence" title="配套证据" claim="支撑组件页仍需要真实证据锚点。" source={source} fit="contain" />`;
+  const visual = `<Visual id="${componentId}" title="${escapeAttr(spec.title || spec.id)}" claim="${escapeAttr(spec.claim || "DSL draw fixture")}" source={source} draw="${drawId(spec)}" model={model} />`;
+  const evidence = (suffix, claim = "支撑组件页仍需要真实证据锚点。") => `<EvidenceFigure id="${componentId}_${suffix}_evidence" title="配套证据" claim="${claim}" source={source} fit="contain" />`;
   const markup = row.anchorEligibility === ANCHOR_ELIGIBILITY.SUPPORTING_COMPONENT
     ? `<Slide title="DSL Draw：${drawId(spec)}">
   <${layoutTag}>
     <Module title="证据">
-      ${evidence}
+      ${evidence("proof")}
     </Module>
     <Module title="绘图">
+      ${evidence("draw")}
       ${visual}
     </Module>
     <Module title="说明">
+      ${evidence("text")}
       <InsightText body={textBody} maxLines={4} />
     </Module>
     ${layoutTag === "FourColumn" ? `<Module title="检查">
+      ${evidence("check")}
       <InsightText body={textBody} maxLines={3} />
     </Module>` : ""}
   </${layoutTag}>
@@ -202,9 +205,11 @@ function buildDrawFixture(spec, row, tier) {
       ${visual}
     </Module>
     <Module title="说明">
+      ${evidence("text", "说明模块也需要真实证据锚点。")}
       <InsightText body={textBody} maxLines={4} />
     </Module>
     ${layoutTag === "ThreeColumn" ? `<Module title="检查">
+      ${evidence("check", "检查模块也需要真实证据锚点。")}
       <InsightText body={textBody} maxLines={3} />
     </Module>` : ""}
   </${layoutTag}>
@@ -476,8 +481,8 @@ function extractDrawPrimitive(renderModel, componentId) {
   return primitive;
 }
 
-function writeVisualAnchorManifest(_pptx, fileName, rows = []) {
-  const manifest = {
+function writeRenderEvidence(fileName, rows = []) {
+  const evidence = {
     generated_at: new Date().toISOString(),
     source: "Body DSL draw matrix",
     slides: rows.map((row, idx) => ({
@@ -501,8 +506,8 @@ function writeVisualAnchorManifest(_pptx, fileName, rows = []) {
       dsl_markup: row.markup,
     })),
   };
-  fs.writeFileSync(fileName, JSON.stringify(manifest, null, 2), "utf8");
-  return manifest;
+  fs.writeFileSync(fileName, JSON.stringify(evidence, null, 2), "utf8");
+  return evidence;
 }
 
 function isExpectedRenderRejection(error) {

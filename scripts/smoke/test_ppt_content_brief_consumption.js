@@ -185,6 +185,8 @@ function assertIssueContractIsDocumentedInSkillAndReferences() {
   assert(reference.includes("research_audit.md"), "reference should document audit file as verification-only");
   assert(pkg.scripts.smoke.includes("scripts/quality/software_test_report.js"), "npm run smoke should generate the software test report");
   assert(softwareReport.includes("scripts/smoke/test_ppt_content_brief_consumption.js"), "software test report should cover content brief parsing");
+  assert(softwareReport.includes("printRunFailure"), "software test report should echo failed smoke output in CLI");
+  assert(softwareReport.includes("PPTX EXPORT"), "software test report should echo failed PPTX export output in CLI");
 }
 
 function assertSummaryCountRecommendsBodyLayout() {

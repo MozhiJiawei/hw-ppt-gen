@@ -19,12 +19,12 @@ const scope = {
   style: { display: "grid" },
 };
 
-function twoColumn(innerA, innerB = `<InsightText body={body} />`) {
+function twoColumn(innerA, innerB = withEvidence("", "fig_secondary")) {
   return `<Slide><TwoColumn><Module title="证据">${innerA}</Module><Module title="结论">${innerB}</Module></TwoColumn></Slide>`;
 }
 
-function withEvidence(extra = "") {
-  return `<EvidenceFigure id="fig_ok" title="来源图" claim="来源图支撑判断。" source={source} fit="contain" ${extra} />`;
+function withEvidence(extra = "", id = "fig_ok") {
+  return `<EvidenceFigure id="${id}" title="来源图" claim="来源图支撑判断。" source={source} fit="contain" ${extra} />`;
 }
 
 const cases = [
@@ -33,7 +33,7 @@ const cases = [
   bad("unknown-under-layout", `<Slide><TwoColumn><MysteryBox /></TwoColumn></Slide>`, "dsl_component_prop_invalid"),
   bad("unknown-under-module", twoColumn(`<MysteryBox />`), "dsl_component_prop_invalid"),
   bad("unknown-nested", twoColumn(`<EvidenceFigure id="fig1" title="图" claim="证明" source={source}><MysteryBox /></EvidenceFigure>`), "dsl_component_prop_invalid"),
-  bad("internal-raw-visual-missing-contract", twoColumn(`<RawVisualSpec />`), "dsl_component_tree_invalid"),
+  bad("internal-raw-visual-missing-contract", twoColumn(`<RawVisualSpec />`), "dsl_module_real_anchor_missing"),
 
   // Forbidden manual layout/style props.
   ...["style", "x", "y", "w", "h", "width", "height", "left", "top", "right", "bottom", "margin", "padding", "zIndex", "z-index", "coordinates"].map((prop) => {
@@ -65,7 +65,7 @@ const cases = [
   bad("text-priority-main", twoColumn(`${withEvidence()}`, `<InsightText body={body} priority="main" />`), "dsl_component_prop_invalid"),
   bad("text-density-dense", twoColumn(`${withEvidence()}`, `<InsightText body={body} density="dense" />`), "dsl_component_prop_invalid"),
   bad("kpi-fit-stretch", twoColumn(`${withEvidence()}<KpiCards id="kpi1" title="读数" claim="辅助" cards={cards} fit="stretch" />`), "dsl_component_prop_invalid"),
-  bad("columns-invalid-type", `<Slide><Columns type="grid"><Module title="证据">${withEvidence()}</Module><Module title="结论"><InsightText body={body} /></Module></Columns></Slide>`, "dsl_component_prop_invalid"),
+  bad("columns-invalid-type", `<Slide><Columns type="grid"><Module title="证据">${withEvidence()}</Module><Module title="结论">${withEvidence("", "fig_secondary")}</Module></Columns></Slide>`, "dsl_component_prop_invalid"),
 
   // Numeric limits.
   bad("kpi-maxcards-too-high", twoColumn(`${withEvidence()}<KpiCards id="kpi1" title="读数" claim="辅助" cards={cards} maxCards={9} />`), "dsl_component_prop_invalid"),
@@ -80,12 +80,12 @@ const cases = [
   bad("root-module", `<Slide><Module title="孤立模块">${withEvidence()}</Module></Slide>`, "dsl_root_invalid"),
   bad("empty-two-column", `<Slide><TwoColumn></TwoColumn></Slide>`, "dsl_modules_missing"),
   bad("two-column-one-module", `<Slide><TwoColumn><Module title="证据">${withEvidence()}</Module></TwoColumn></Slide>`, "dsl_component_tree_invalid"),
-  bad("three-column-two-modules", `<Slide><ThreeColumn><Module title="证据">${withEvidence()}</Module><Module title="结论"><InsightText body={body} /></Module></ThreeColumn></Slide>`, "dsl_component_tree_invalid"),
-  bad("four-column-three-modules", `<Slide><FourColumn><Module title="一">${withEvidence()}</Module><Module title="二"><InsightText body={body} /></Module><Module title="三"><InsightText body={body} /></Module></FourColumn></Slide>`, "dsl_component_tree_invalid"),
+  bad("three-column-two-modules", `<Slide><ThreeColumn><Module title="证据">${withEvidence()}</Module><Module title="结论">${withEvidence("", "fig_secondary")}</Module></ThreeColumn></Slide>`, "dsl_component_tree_invalid"),
+  bad("four-column-three-modules", `<Slide><FourColumn><Module title="一">${withEvidence()}</Module><Module title="二">${withEvidence("", "fig_secondary")}</Module><Module title="三">${withEvidence("", "fig_third")}</Module></FourColumn></Slide>`, "dsl_component_tree_invalid"),
   bad("columns-child-not-module", `<Slide><TwoColumn><EvidenceFigure id="fig1" title="图" claim="证明" source={source} fit="contain" /></TwoColumn></Slide>`, "dsl_child_component_invalid"),
-  bad("supporting-only-table", twoColumn(`<Table id="tbl1" title="表" claim="辅助" rows={rows} />`), "dsl_component_tree_invalid"),
-  bad("supporting-only-kpi", twoColumn(`<KpiCards id="kpi1" title="读数" claim="辅助" cards={cards} />`), "dsl_component_tree_invalid"),
-  bad("text-only", twoColumn(`<InsightText body={body} />`), "dsl_component_tree_invalid"),
+  bad("supporting-only-table", twoColumn(`<Table id="tbl1" title="表" claim="辅助" rows={rows} />`), "dsl_module_real_anchor_missing"),
+  bad("supporting-only-kpi", twoColumn(`<KpiCards id="kpi1" title="读数" claim="辅助" cards={cards} />`), "dsl_module_real_anchor_missing"),
+  bad("text-only", twoColumn(`<InsightText body={body} />`), "dsl_module_real_anchor_missing"),
 
   // Official draw mistakes.
   bad("visual-bad-kind", twoColumn(`<Visual id="v1" title="坏图" claim="测试" draw="Nope/process" model={{}} />`), "dsl_component_prop_invalid"),

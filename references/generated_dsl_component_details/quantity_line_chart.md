@@ -17,7 +17,7 @@ Use for trend or progression across ordered categories.
 ## DSL
 
 ```jsx
-<Visual id="line_chart_1" title="MiniLineChart 标题" claim="MiniLineChart 支撑当前模块判断。" draw="Quantity/line_chart" model={model} />
+<Visual id="line_chart_1" title="MiniLineChart 标题" claim="MiniLineChart 支撑当前模块判断。" source={source} draw="Quantity/line_chart" model={model} />
 ```
 
 ## Model
@@ -46,6 +46,7 @@ Use for trend or progression across ordered categories.
 
 ## Authoring Notes
 
+- `<Visual>` is generated drawing, not source evidence. It may annotate or explain a source-evidence chain, but it should not replace an authored `<EvidenceFigure>` or `<EvidenceChart>` just to satisfy layout feedback.
 - Keep `title` and `claim` as metadata on `<Visual>`; they are not a place for long prose.
 - Keep explanatory text, captions, source notes, and conclusions in nearby `<InsightText>` or supporting readouts.
 - If measurement feedback reports crowding, simplify the model first, then reduce neighboring prose or split the claim.

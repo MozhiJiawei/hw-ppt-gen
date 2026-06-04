@@ -10,10 +10,19 @@ const LOG_DIR = path.join(OUT_DIR, "logs");
 const PPTX_PAGE_DIR = path.join(OUT_DIR, "pptx_pages");
 const HTML_OUT = path.join(OUT_DIR, "index.html");
 
+const ARCHITECTURE_CATEGORY_ORDER = [
+  "01 AI 输入契约",
+  "02 DSL 编译",
+  "03 测量",
+  "04 排版",
+  "05 导出渲染",
+  "06 运行态 QA 与 CLI 反馈",
+];
+
 const TEST_CASES = [
   {
     id: "brief-contract",
-    category: "输入契约",
+    category: "01 AI 输入契约",
     title: "PPT Content Brief 可以稳定解析成页面计划。",
     command: ["node", ["scripts/smoke/test_ppt_content_brief_consumption.js"]],
     script: "scripts/smoke/test_ppt_content_brief_consumption.js",
@@ -31,7 +40,7 @@ const TEST_CASES = [
   },
   {
     id: "ppt-skeleton-rendering",
-    category: "内容页契约",
+    category: "01 AI 输入契约",
     title: "PPT 骨架渲染固定走 addVisualAnchorContentSlide 且正文区域留白。",
     command: ["node", ["scripts/smoke/test_ppt_skeleton_rendering.js"]],
     script: "scripts/smoke/test_ppt_skeleton_rendering.js",
@@ -52,7 +61,7 @@ const TEST_CASES = [
   },
   {
     id: "diagram-helper-contract",
-    category: "视觉模板",
+    category: "05 导出渲染",
     title: "所有视觉模板遵守 schema、renderer 和文本容量规则。",
     command: ["node", ["scripts/smoke/test_diagram_helpers.js"]],
     script: "scripts/smoke/test_diagram_helpers.js",
@@ -69,7 +78,7 @@ const TEST_CASES = [
   },
   {
     id: "diagram-component-smoke",
-    category: "Body DSL",
+    category: "02 DSL 编译",
     title: "所有 draw 能力都能通过 Body DSL 编译、测量并生成 review deck。",
     command: ["node", ["scripts/smoke/dsl/test_dsl_draw_matrix.js"]],
     script: "scripts/smoke/dsl/test_dsl_draw_matrix.js",
@@ -84,13 +93,13 @@ const TEST_CASES = [
       artifact("DSL draw 编译报告", ".tmp/dsl_draw_matrix/dsl_draw_compile_report.json"),
       pptArtifact("DSL draw 全量人工审阅 PPTX", ".tmp/dsl_draw_matrix/dsl_draw_matrix_full_review.pptx", ".tmp/software_test_report/pptx/dsl_draw_matrix_full_review"),
       artifact("DSL draw 测量报告", ".tmp/dsl_draw_matrix/dsl_draw_measurement_report.json"),
-      artifact("DSL draw manifest", ".tmp/dsl_draw_matrix/dsl_draw_matrix_manifest.json"),
+      artifact("DSL draw render evidence", ".tmp/dsl_draw_matrix/dsl_draw_matrix_render_evidence.json"),
       pptArtifact("DSL draw 哨兵测量 review PPTX", ".tmp/dsl_draw_matrix/dsl_draw_matrix.pptx", ".tmp/software_test_report/pptx/dsl_draw_matrix"),
     ],
   },
   {
     id: "layout-taxonomy",
-    category: "布局测量",
+    category: "03 测量",
     title: "正文 block 可以被分类为可测量的布局 primitive。",
     command: ["node", ["scripts/smoke/layout/test_content_body_taxonomy.js"]],
     script: "scripts/smoke/layout/test_content_body_taxonomy.js",
@@ -105,7 +114,7 @@ const TEST_CASES = [
   },
   {
     id: "layout-taxonomy-coverage",
-    category: "布局测量",
+    category: "03 测量",
     title: "官方 kind/template 全部纳入 taxonomy 和测量白名单。",
     command: ["node", ["scripts/smoke/layout/test_taxonomy_coverage_contract.js"]],
     script: "scripts/smoke/layout/test_taxonomy_coverage_contract.js",
@@ -121,7 +130,7 @@ const TEST_CASES = [
   },
   {
     id: "primitive-measurement",
-    category: "布局测量",
+    category: "03 测量",
     title: "Evidence、KPI 和正文 primitive 能产出可用尺寸。",
     command: ["node", ["scripts/smoke/layout/test_primitive_measurement.js"]],
     script: "scripts/smoke/layout/test_primitive_measurement.js",
@@ -137,7 +146,7 @@ const TEST_CASES = [
   },
   {
     id: "all-official-primitive-measurement",
-    category: "布局测量",
+    category: "03 测量",
     title: "所有官方 primitive 都能测出 min/preferred/max 尺寸。",
     command: ["node", ["scripts/smoke/layout/test_all_official_primitive_measurement.js"]],
     script: "scripts/smoke/layout/test_all_official_primitive_measurement.js",
@@ -153,7 +162,7 @@ const TEST_CASES = [
   },
   {
     id: "module-stack-layout",
-    category: "布局测量",
+    category: "04 排版",
     title: "模块内 Evidence、KPI、正文可以垂直排布并识别不可行布局。",
     command: ["node", ["scripts/smoke/layout/test_module_stack_layout.js"]],
     script: "scripts/smoke/layout/test_module_stack_layout.js",
@@ -168,7 +177,7 @@ const TEST_CASES = [
   },
   {
     id: "layout-diagnostics",
-    category: "布局测量",
+    category: "04 排版",
     title: "布局诊断能区分信息提示和硬错误。",
     command: ["node", ["scripts/smoke/layout/test_layout_diagnostics.js"]],
     script: "scripts/smoke/layout/test_layout_diagnostics.js",
@@ -180,7 +189,7 @@ const TEST_CASES = [
   },
   {
     id: "body-dsl-registry",
-    category: "Body DSL",
+    category: "01 AI 输入契约",
     title: "Body DSL 组件注册表定义 AI 可发现组件和约束边界。",
     command: ["node", ["scripts/smoke/dsl/test_component_registry.js"]],
     script: "scripts/smoke/dsl/test_component_registry.js",
@@ -194,7 +203,7 @@ const TEST_CASES = [
   },
   {
     id: "body-dsl-discovery",
-    category: "Body DSL",
+    category: "01 AI 输入契约",
     title: "Body DSL discovery helper 可以生成组件索引、详情和 catalog。",
     command: ["node", ["scripts/smoke/dsl/test_component_discovery_catalog.js"]],
     script: "scripts/smoke/dsl/test_component_discovery_catalog.js",
@@ -210,7 +219,7 @@ const TEST_CASES = [
   },
   {
     id: "body-dsl-generated-catalog",
-    category: "Body DSL",
+    category: "01 AI 输入契约",
     title: "Body DSL 组件 catalog 从 registry 生成并保持同步。",
     command: ["node", ["scripts/smoke/dsl/test_generated_component_catalog.js"]],
     script: "scripts/smoke/dsl/test_generated_component_catalog.js",
@@ -226,7 +235,7 @@ const TEST_CASES = [
   },
   {
     id: "body-dsl-skill-discovery",
-    category: "Body DSL",
+    category: "01 AI 输入契约",
     title: "SKILL 只暴露稳定 discovery 入口，不手写组件清单。",
     command: ["node", ["scripts/smoke/dsl/test_skill_dsl_discovery_contract.js"]],
     script: "scripts/smoke/dsl/test_skill_dsl_discovery_contract.js",
@@ -243,8 +252,25 @@ const TEST_CASES = [
     ],
   },
   {
+    id: "agent-cli-error-logs",
+    category: "06 运行态 QA 与 CLI 反馈",
+    title: "Agent 执行路径上的 CLI 失败会直接回显可行动错误，不要求查报告或读 JS 调用栈。",
+    command: ["node", ["scripts/smoke/test_agent_cli_error_logs.js"]],
+    script: "scripts/smoke/test_agent_cli_error_logs.js",
+    checks: [
+      "brief parser 输入文件缺失时直接回显文件错误。",
+      "Body DSL component describe 输入未知组件时直接回显未知组件。",
+      "PPTX 导出输入文件缺失时直接回显缺失路径。",
+      "PPTX 测量输入文件缺失时直接回显缺失路径。",
+      "这些 CLI 失败样例不能打印 JS stack，也不能要求 agent 另行打开报告才能继续修复。",
+    ],
+    artifacts: [
+      artifact("Agent CLI 错误日志样例", ".tmp/agent_cli_error_logs/samples.md"),
+    ],
+  },
+  {
     id: "body-dsl-feedback",
-    category: "Body DSL",
+    category: "02 DSL 编译",
     title: "Body DSL 解析和约束错误会生成 FeedbackIssue。",
     command: ["node", ["scripts/smoke/dsl/test_dsl_feedback_contract.js"]],
     script: "scripts/smoke/dsl/test_dsl_feedback_contract.js",
@@ -258,7 +284,7 @@ const TEST_CASES = [
   },
   {
     id: "runtime-qa-pipeline",
-    category: "运行态 QA",
+    category: "06 运行态 QA 与 CLI 反馈",
     title: "运行态 QA 按 DSL、测量、排版、最终产物分层输出可追踪诊断。",
     command: ["node", ["scripts/smoke/qa/run_runtime_qa_smoke.js"]],
     script: "scripts/smoke/qa/run_runtime_qa_smoke.js",
@@ -269,6 +295,7 @@ const TEST_CASES = [
       "measurement/layout runtime checks 使用构造 IR 覆盖每个已确认 QA code。",
       "render/export fallback 只报告 artifact/slide/deck target，不要求 DSL 映射。",
       "page runner 保证单页失败不会阻塞其他页的诊断报告。",
+      "正文页生成入口默认执行 runtime QA gate，layout error 会像编译错误一样阻断交付页生成。",
       "retired QA entrypoint 和旧 smoke 名称不会重新进入 scripts。",
     ],
     artifacts: [
@@ -284,7 +311,7 @@ const TEST_CASES = [
   },
   {
     id: "body-dsl-bad-case-feedback-matrix",
-    category: "Body DSL",
+    category: "02 DSL 编译",
     title: "典型错误 DSL 会产生可追踪、可修复的编译器式反馈。",
     command: ["node", ["scripts/smoke/dsl/test_dsl_bad_case_feedback_matrix.js"]],
     script: "scripts/smoke/dsl/test_dsl_bad_case_feedback_matrix.js",
@@ -303,7 +330,7 @@ const TEST_CASES = [
   },
   {
     id: "body-dsl-component-matrix",
-    category: "Body DSL",
+    category: "02 DSL 编译",
     title: "每个 AI-visible DSL 原子组件都有 Agent 暴露面、fixture、编译、渲染和测量证据。",
     command: ["node", ["scripts/smoke/dsl/test_dsl_component_matrix.js"]],
     script: "scripts/smoke/dsl/test_dsl_component_matrix.js",
@@ -311,7 +338,7 @@ const TEST_CASES = [
       "AI-visible component registry 与 fixture 矩阵一一对应。",
       "每个组件的 describe output 包含说明、use/avoid、预算提示、修复提示和示例。",
       "每个 fixture 都能通过 Body DSL compile/typecheck。",
-      "每个可渲染原子组件都进入 review PPT、manifest 和 source-mapped block measurement。",
+      "每个可渲染原子组件都进入 review PPT、render evidence 和 source-mapped block measurement。",
       "测量报告包含 min_size、preferred_size、max_useful_size、final_size、taxonomy 和 renderer 路径证据。",
     ],
     artifacts: [
@@ -319,13 +346,30 @@ const TEST_CASES = [
       artifact("Agent exposure report", ".tmp/dsl_component_matrix/dsl_component_agent_exposure.json"),
       artifact("Compile report", ".tmp/dsl_component_matrix/dsl_component_compile_report.json"),
       artifact("Measurement report", ".tmp/dsl_component_matrix/dsl_component_measurement_report.json"),
-      artifact("Render manifest", ".tmp/dsl_component_matrix/dsl_component_matrix_manifest.json"),
       pptArtifact("DSL component matrix PPTX", ".tmp/dsl_component_matrix/dsl_component_matrix.pptx", ".tmp/software_test_report/pptx/dsl_component_matrix"),
     ],
   },
   {
+    id: "layout-dsl-alignment-smoke",
+    category: "04 排版",
+    title: "真实 Body DSL 二分栏、偏分栏、三分栏可以形成对齐、留白、分布和可读 slot 约束。",
+    command: ["node", ["scripts/smoke/qa/test_layout_dsl_alignment_smoke.js"]],
+    script: "scripts/smoke/qa/test_layout_dsl_alignment_smoke.js",
+    checks: [
+      "二分栏、偏分栏、三分栏 fixture 都从真实 JSX-like Body DSL 编译到 render model。",
+      "每个布局都会形成 LayoutIR containers、records、spacing constraints、distribution constraints 和 alignment groups。",
+      "模块顶端/底端对齐、横向/纵向分布、规范化 gap token、visual readability facts 都必须通过 runtime layout QA。",
+      "所有 layout QA 结果都保留原始 DSL selector、source span、code frame 和 semantic stack。",
+      "测试报告落盘展示 DSL、模块 box、gap、对齐值和 visual slot 可读面积，供人工审阅排版基础质量。",
+    ],
+    artifacts: [
+      artifact("布局排版 DSL 对齐报告", ".tmp/layout_dsl_alignment_smoke/layout_alignment_report.md"),
+      pptArtifact("布局排版 review PPTX", ".tmp/layout_dsl_alignment_smoke/layout_alignment_review.pptx", ".tmp/software_test_report/pptx/layout_alignment_review"),
+    ],
+  },
+  {
     id: "tidar-three-column-layout",
-    category: "布局测量",
+    category: "04 排版",
     title: "TiDAR 三分栏真实 fixture 可以容纳 evidence、KPI 和 bullets。",
     command: ["node", ["scripts/smoke/layout/test_tidar_three_column_primitives.js"]],
     script: "scripts/smoke/layout/test_tidar_three_column_primitives.js",
@@ -341,7 +385,7 @@ const TEST_CASES = [
   },
   {
     id: "powerpoint-measurement-guard",
-    category: "PowerPoint 集成",
+    category: "03 测量",
     title: "PowerPoint COM 可以读回所有测量组件的真实边界。",
     command: ["node", ["scripts/smoke/layout/test_powerpoint_measurement_harness.js"]],
     script: "scripts/smoke/layout/test_powerpoint_measurement_harness.js",
@@ -361,7 +405,7 @@ const TEST_CASES = [
   },
   {
     id: "powerpoint-com-export",
-    category: "PowerPoint 集成",
+    category: "05 导出渲染",
     title: "公开 PPT 生成接口产物可以被 PowerPoint COM 打开并逐页导出。",
     command: ["node", ["scripts/smoke/test_powerpoint_com_export.js"]],
     script: "scripts/smoke/test_powerpoint_com_export.js",
@@ -369,10 +413,9 @@ const TEST_CASES = [
       "覆盖页面基础 helper、直接 renderer、Evidence 和官方视觉模板。",
       "生成的 PPTX 经过 PowerPoint 兼容性修复后不能包含 negative extents。",
       "PowerPoint COM 必须能导出所有页面 PNG。",
-      "image-based manifest entry 必须保留 image area、visual slot、图像尺寸和等比关系。",
+      "image-based render evidence 必须保留 image area、visual slot、图像尺寸和等比关系。",
     ],
     artifacts: [
-      artifact("视觉锚点 manifest", ".tmp/powerpoint_com_interface_test_visual_anchor_manifest.json"),
       pptArtifact("PowerPoint COM interface PPTX", ".tmp/powerpoint_com_interface_test.pptx", ".tmp/powerpoint_com_interface_test_slides"),
     ],
   },
@@ -453,7 +496,7 @@ function exportPptxArtifacts(testCase) {
     if (fs.existsSync(manifestPath)) {
       try {
         const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-        item.renderManifest = rel(manifestPath);
+        item.renderIndex = rel(manifestPath);
         item.images = (manifest.slides || [])
           .map((slidePath) => path.resolve(slidePath))
           .filter((slidePath) => fs.existsSync(slidePath))
@@ -482,6 +525,46 @@ function summarizeOutput(result) {
   const text = `${result.stdout}\n${result.stderr}`.trim();
   const lines = text.split(/\r?\n/).filter(Boolean);
   return lines.slice(-8).join("\n") || "无输出。";
+}
+
+function summarizeText(text, maxLines = 24) {
+  const lines = String(text || "").split(/\r?\n/).filter(Boolean);
+  return lines.slice(-maxLines).join("\n") || "无输出。";
+}
+
+function summarizeLog(logPath, maxLines = 24) {
+  if (!logPath || !fs.existsSync(logPath)) return "日志文件不存在。";
+  return summarizeText(fs.readFileSync(logPath, "utf8"), maxLines);
+}
+
+function printRunFailure(testCase, result) {
+  if (result.status !== "failed") return;
+  console.error("");
+  console.error(`[software-test-report] FAIL ${testCase.id}`);
+  console.error(`Command: ${testCase.command[0]} ${testCase.command[1].join(" ")}`);
+  console.error(`Exit code: ${result.exitCode}`);
+  console.error(`Log: ${rel(result.logPath)}`);
+  console.error("--- output tail ---");
+  console.error(summarizeOutput(result));
+  console.error("--- end output tail ---");
+}
+
+function printArtifactExportFailures(testCase) {
+  for (const item of testCase.artifacts.filter((entry) => entry.type === "pptx")) {
+    if (item.exportStatus !== "failed" && item.exportStatus !== "missing") continue;
+    const exportLogPath = item.exportLog ? abs(item.exportLog) : null;
+    console.error("");
+    console.error(`[software-test-report] PPTX EXPORT ${String(item.exportStatus).toUpperCase()} ${testCase.id}`);
+    console.error(`Artifact: ${item.label}`);
+    console.error(`PPTX: ${item.relativePath}`);
+    if (item.exportMessage) console.error(`Message: ${item.exportMessage}`);
+    if (item.exportLog) console.error(`Log: ${item.exportLog}`);
+    if (exportLogPath) {
+      console.error("--- export output tail ---");
+      console.error(summarizeLog(exportLogPath));
+      console.error("--- end export output tail ---");
+    }
+  }
 }
 
 function enhanceArtifacts(artifacts) {
@@ -513,7 +596,7 @@ function renderArtifact(item) {
   if (item.type === "pptx") {
     html += `<p class="muted">${htmlEscape(item.exportMessage || "PPTX 产物会通过 PowerPoint COM 导出为图片。")}</p>`;
     if (item.exportLog) html += `<p><a href="${htmlEscape(linkHref(item.exportLog))}">查看 COM 导出日志</a></p>`;
-    if (item.renderManifest) html += `<p><a href="${htmlEscape(linkHref(item.renderManifest))}">查看 render_manifest.json</a></p>`;
+    if (item.renderIndex) html += `<p><a href="${htmlEscape(linkHref(item.renderIndex))}">查看 render_manifest.json</a></p>`;
     if (item.images && item.images.length) {
       if (item.galleryIndex) {
         html += `<p><a href="${htmlEscape(linkHref(item.galleryIndex))}">打开 ${item.images.length} 页逐页大图审阅</a></p>`;
@@ -533,11 +616,12 @@ function renderArtifact(item) {
 }
 
 function renderReport(results) {
+  const orderedResults = orderResultsByArchitecture(results);
   const passed = results.filter((item) => item.result.status === "passed").length;
   const failed = results.length - passed;
   const artifactCount = results.reduce((sum, item) => sum + item.artifacts.length, 0);
   const pptImageCount = results.reduce((sum, item) => sum + item.artifacts.reduce((inner, artifactItem) => inner + ((artifactItem.images || []).length), 0), 0);
-  const categories = [...new Set(results.map((item) => item.category))];
+  const categories = ARCHITECTURE_CATEGORY_ORDER.filter((category) => orderedResults.some((item) => item.category === category));
   const generatedAt = new Date().toLocaleString("zh-CN", { hour12: false });
 
   return `<!doctype html>
@@ -633,7 +717,7 @@ function renderReport(results) {
     <table>
       <thead><tr><th>状态</th><th>分类</th><th>用例</th><th>脚本</th><th>交付件</th></tr></thead>
       <tbody>
-        ${results.map((item) => `<tr>
+        ${orderedResults.map((item) => `<tr>
           <td><span class="pill status-${item.result.status}">${statusLabel(item.result.status)}</span></td>
           <td>${htmlEscape(item.category)}</td>
           <td><a href="#${htmlEscape(item.id)}">${htmlEscape(item.title)}</a></td>
@@ -646,7 +730,7 @@ function renderReport(results) {
 
   ${categories.map((category) => `<section>
     <h2>${htmlEscape(category)}</h2>
-    ${results.filter((item) => item.category === category).map((item) => `<article id="${htmlEscape(item.id)}" class="case ${item.result.status}">
+    ${orderedResults.filter((item) => item.category === category).map((item) => `<article id="${htmlEscape(item.id)}" class="case ${item.result.status}">
       <div class="meta">
         <span class="pill status-${item.result.status}">${statusLabel(item.result.status)}</span>
         <span class="tag">${htmlEscape(item.category)}</span>
@@ -679,6 +763,20 @@ function renderReport(results) {
 </main>
 </body>
 </html>`;
+}
+
+function orderResultsByArchitecture(results) {
+  const originalIndex = new Map(results.map((item, index) => [item.id, index]));
+  return [...results].sort((a, b) => {
+    const categoryDelta = categoryRank(a.category) - categoryRank(b.category);
+    if (categoryDelta !== 0) return categoryDelta;
+    return originalIndex.get(a.id) - originalIndex.get(b.id);
+  });
+}
+
+function categoryRank(category) {
+  const index = ARCHITECTURE_CATEGORY_ORDER.indexOf(category);
+  return index === -1 ? ARCHITECTURE_CATEGORY_ORDER.length : index;
 }
 
 function writePptxGalleryPages(results) {
@@ -816,6 +914,8 @@ function main() {
       testCase.artifacts.push(...testCase.collectArtifacts());
     }
     exportPptxArtifacts(testCase);
+    printRunFailure(testCase, result);
+    printArtifactExportFailures(testCase);
     results.push({
       ...testCase,
       result,
@@ -825,9 +925,10 @@ function main() {
 
   writePptxGalleryPages(results);
 
+  const orderedResults = orderResultsByArchitecture(results);
   const payload = {
     generated_at: new Date().toISOString(),
-    results: results.map((item) => ({
+    results: orderedResults.map((item) => ({
       id: item.id,
       category: item.category,
       title: item.title,

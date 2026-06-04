@@ -8,6 +8,7 @@ const {
   getComponentContract,
   listAiComponents,
   listComponentRegistry,
+  PROOF_CLASS,
   validateRegisteredProps,
 } = require("../../pptx/dsl/component_registry");
 
@@ -18,6 +19,8 @@ function main() {
   assert.equal(evidence.visual.kind, "Evidence");
   assert.equal(evidence.visual.template, "source_figure");
   assert.equal(evidence.visual.anchorEligibility, ANCHOR_ELIGIBILITY.REAL_ANCHOR);
+  assert.equal(evidence.visual.proofClass, PROOF_CLASS.SOURCE_EVIDENCE);
+  assert.equal(evidence.visual.proofPriority, 100);
   assert.equal(evidence.measureSupport, "measured");
   assert.equal(evidence.resizePolicy, "preserve_aspect");
   assert.deepStrictEqual(validateRegisteredProps("EvidenceFigure", {
@@ -42,10 +45,23 @@ function main() {
     style: { width: "50%" },
   }).some((message) => message.includes("style")), "arbitrary style must be rejected");
 
+  const evidenceChart = getComponentContract("EvidenceChart");
+  assert.equal(evidenceChart.visual.proofClass, PROOF_CLASS.SOURCE_EVIDENCE);
+  assert.equal(evidenceChart.visual.proofPriority, 100);
+  assert(evidence.docs.repairHints.join(" ").includes("same source evidence identity"), "Evidence repair guidance should preserve source identity");
+
+  const visual = getComponentContract("Visual");
+  assert.equal(visual.visual.proofClass, PROOF_CLASS.GENERATED_DRAWING, "Visual should be explicit generated drawing");
+  assert(visual.visual.proofPriority < evidence.visual.proofPriority, "generated drawing must rank below source evidence");
+  assert(visual.docs.avoidWhen.includes("EvidenceFigure"), "Visual guidance should not replace source evidence");
+  assert(visual.examples[0].props.source, "Visual example should keep source traceability visible");
+
   const cards = getComponentContract("KpiCards");
   assert.equal(cards.visual.anchorEligibility, ANCHOR_ELIGIBILITY.SUPPORTING_COMPONENT, "KPI cards are supporting components");
+  assert.equal(cards.visual.proofClass, PROOF_CLASS.SUPPORTING_READOUT, "KPI cards are supporting readouts");
   const table = getComponentContract("Table");
   assert.equal(table.visual.anchorEligibility, ANCHOR_ELIGIBILITY.SUPPORTING_COMPONENT, "Table is a supporting component");
+  assert.equal(table.visual.proofClass, PROOF_CLASS.SUPPORTING_READOUT, "Table is a supporting readout");
   const stack = getComponentContract("CapabilityStack");
   assert.equal(stack.visual.anchorEligibility, ANCHOR_ELIGIBILITY.SUPPORTING_COMPONENT, "Capability stack is a supporting component");
 

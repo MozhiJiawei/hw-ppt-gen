@@ -9,6 +9,9 @@ const deny = [
   "check_huawei_pptx",
   "test_visual_anchor_content_contract",
   "test_feedback_issue_contract",
+  "runtimeQa: false",
+  "runtimeQa !== false",
+  "runtimeQa === false",
 ];
 const retiredPaths = [
   "scripts/qa/check_huawei_pptx.js",

@@ -8,7 +8,7 @@ const {
 } = require("./ir_contracts");
 
 function compilePageBodyDslToIr(page = {}) {
-  const parsed = parseSlideBodyDsl(page.bodyDsl, page.dslScope || page.scope || {});
+  const parsed = parsePageBodyDsl(page.bodyDsl, page.dslScope || page.scope || {});
   const compileResult = compileSlideDsl(parsed.bodyDsl, { throwOnError: false, source: page.bodyDsl });
   return {
     ok: compileResult.ok,
@@ -23,6 +23,15 @@ function compilePageBodyDslToIr(page = {}) {
     }),
     compileIr: compileResultToIr(compileResult, page),
     issues: compileResult.feedbackIssues || [],
+  };
+}
+
+function parsePageBodyDsl(bodyDsl, scope = {}) {
+  if (typeof bodyDsl === "string") return parseSlideBodyDsl(bodyDsl, scope);
+  return {
+    slideProps: {},
+    bodyDsl,
+    root: bodyDsl,
   };
 }
 

@@ -28,8 +28,18 @@ const evidence = measurePrimitive({
 }, area, { layoutType: "three_column" });
 assert.equal(evidence.primitive.taxonomy_key, "Evidence.SourceFigure");
 assert.equal(evidence.resizePolicy, "preserve_aspect");
+assert.deepStrictEqual(
+  evidence.resizeLimits,
+  {
+    preserveAspect: false,
+    uniformScale: { min: 0.67, max: 1.33 },
+    axisScale: { min: 0.8, max: 1.2 },
+  },
+  "Evidence measurement should expose the layout-owned safe stretch envelope."
+);
 assert(evidence.minSize.h >= 0.72);
 assert(evidence.preferredSize.h >= evidence.minSize.h);
+assert(evidence.maxUsefulSize.h >= evidence.preferredSize.h, "Evidence should be growable within its safe envelope.");
 assert(evidence.measurement?.ok, "Evidence measurement must come from PowerPoint COM");
 assert(evidence.measurement?.shape_bounds?.w > 0, "Evidence COM measurement should report rendered bounds");
 
@@ -78,5 +88,10 @@ assert.equal(text.primitive.taxonomy_key, "StructuredText.RichBulletBlock");
 assert.equal(text.measurement.kind, "text");
 assert(text.measurement.text_bounds.h > 0);
 assert(text.preferredSize.h >= text.minSize.h);
+assert.equal(
+  text.maxUsefulSize.h,
+  text.preferredSize.h,
+  "Text can grow its allocated box, but its visible line content does not become taller."
+);
 
 console.log("Primitive measurement smoke passed.");

@@ -6,7 +6,7 @@ The Body DSL is a tree-shaped authoring surface for agents. It sits below the fi
 
 ```text
 skeleton/frame data -> fixed frame/chrome
-Body DSL -> registry parse/check/resolve -> DSL-native measure/render -> manifest/review
+Body DSL -> registry parse/check/resolve -> DSL-native measure/render -> LayoutIR/render review
 ```
 
 New creative body authoring uses `bodyDsl`.
@@ -100,6 +100,15 @@ The registry must expose the complete official surface, not just a few hand-writ
 - source evidence: `<EvidenceFigure>`, `<EvidenceChart>`
 - supporting readouts and text: `<KpiCards>`, `<Table>`, `<CapabilityStack>`, `<InsightText>`
 - generated drawing: `<Visual draw="Kind/template" model={...} />`
+
+The visual proof hierarchy is semantic, not cosmetic:
+
+- `source_evidence`: `<EvidenceFigure>`, `<EvidenceChart>` preserve original source proof and have the highest priority.
+- `generated_drawing`: `<Visual>` calls an official renderer. It can explain a mechanism or annotate source evidence, but it is secondary to source evidence.
+- `supporting_readout`: KPI, table, and capability components support an already-proven claim.
+- `text`: editable conclusions and boundaries.
+
+When the first authored DSL uses source evidence for a module, keep that evidence component through QA repair. Improve layout by reallocating body slot, reducing neighboring prose/readouts, or adding source-grounded text; use generated drawing only when it preserves or explains the same evidence chain.
 
 As of this contract, generated drawing is discovered as draw capabilities, not as one JSX tag per drawing. If a new official draw template is added to `scripts/pptx/contracts/visual_templates.js`, it should automatically appear in the first-level draw index and receive a second-level detail file unless explicitly hidden as internal.
 

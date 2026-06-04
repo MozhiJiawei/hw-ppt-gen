@@ -17,7 +17,7 @@ Use as a supporting readout for layered capabilities.
 ## DSL
 
 ```jsx
-<Visual id="capability_stack_1" title="LayerStack 标题" claim="LayerStack 支撑当前模块判断。" draw="Hierarchy/capability_stack" model={model} />
+<Visual id="capability_stack_1" title="LayerStack 标题" claim="LayerStack 支撑当前模块判断。" source={source} draw="Hierarchy/capability_stack" model={model} />
 ```
 
 ## Model
@@ -44,6 +44,7 @@ Use as a supporting readout for layered capabilities.
 
 ## Authoring Notes
 
+- `<Visual>` is generated drawing, not source evidence. It may annotate or explain a source-evidence chain, but it should not replace an authored `<EvidenceFigure>` or `<EvidenceChart>` just to satisfy layout feedback.
 - Keep `title` and `claim` as metadata on `<Visual>`; they are not a place for long prose.
 - Keep explanatory text, captions, source notes, and conclusions in nearby `<InsightText>` or supporting readouts.
 - If measurement feedback reports crowding, simplify the model first, then reduce neighboring prose or split the claim.

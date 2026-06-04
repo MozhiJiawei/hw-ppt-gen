@@ -17,7 +17,7 @@ Use as a supporting matrix for capability coverage or maturity.
 ## DSL
 
 ```jsx
-<Visual id="capability_matrix_1" title="CapabilityMatrix 标题" claim="CapabilityMatrix 支撑当前模块判断。" draw="Matrix/capability_matrix" model={model} />
+<Visual id="capability_matrix_1" title="CapabilityMatrix 标题" claim="CapabilityMatrix 支撑当前模块判断。" source={source} draw="Matrix/capability_matrix" model={model} />
 ```
 
 ## Model
@@ -48,6 +48,7 @@ Use as a supporting matrix for capability coverage or maturity.
 
 ## Authoring Notes
 
+- `<Visual>` is generated drawing, not source evidence. It may annotate or explain a source-evidence chain, but it should not replace an authored `<EvidenceFigure>` or `<EvidenceChart>` just to satisfy layout feedback.
 - Keep `title` and `claim` as metadata on `<Visual>`; they are not a place for long prose.
 - Keep explanatory text, captions, source notes, and conclusions in nearby `<InsightText>` or supporting readouts.
 - If measurement feedback reports crowding, simplify the model first, then reduce neighboring prose or split the claim.

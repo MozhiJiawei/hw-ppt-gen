@@ -61,7 +61,12 @@ function createMeasurementIr(input = {}) {
 function createLayoutIr(input = {}) {
   return createIrBase("LayoutIr", input, {
     status: input.status || "ok",
+    pageBounds: input.pageBounds || null,
     bodyBounds: input.bodyBounds || input.pageBounds || null,
+    layoutType: input.layoutType || input.layout_type || null,
+    containers: (input.containers || []).map(createLayoutContainer),
+    constraints: (input.constraints || []).map(createLayoutConstraint),
+    alignmentGroups: (input.alignmentGroups || input.alignment_groups || []).map(createAlignmentGroup),
     expectedPrimitives: (input.expectedPrimitives || []).map((node, index) => createPrimitiveNode(node, index)),
     measuredPrimitives: (input.measuredPrimitives || []).map(createMeasurementRecord),
     records: (input.records || []).map(createLayoutBox),
@@ -115,6 +120,12 @@ function createMeasurementRecord(input = {}) {
     dsl: input.dsl || source,
     status: input.status || (input.measurement?.ok === false ? "failed" : "ok"),
     measureSupport: input.measureSupport || input.measure_support || input.primitive?.measureSupport,
+    minSize: input.minSize || input.min_size || input.measure?.min_size,
+    preferredSize: input.preferredSize || input.preferred_size || input.measure?.preferred_size,
+    maxUsefulSize: input.maxUsefulSize || input.max_useful_size || input.measure?.max_useful_size,
+    resizePolicy: input.resizePolicy || input.resize_policy || input.measure?.resize_policy,
+    resizeLimits: input.resizeLimits || input.resize_limits || input.measure?.resize_limits,
+    constraintBox: input.constraintBox || input.constraint_box,
     bounds: input.bounds || input.shape_bounds || input.text_bounds || input.measurement?.shape_bounds || input.measurement?.text_bounds,
     measurement: input.measurement,
     raw: input.raw,
@@ -132,8 +143,70 @@ function createLayoutBox(input = {}) {
     dsl: input.dsl || source,
     status: input.status || "ok",
     box: input.box || input.area,
+    visibleBox: input.visibleBox || input.visible_box || input.visibleArea || input.visible_area,
     measuredBounds: input.measuredBounds || input.measured_bounds,
+    measurementRef: input.measurementRef || input.measurement_ref,
+    fitPolicy: input.fitPolicy || input.fit_policy,
+    resizePolicy: input.resizePolicy || input.resize_policy || input.measure?.resize_policy,
+    resizeLimits: input.resizeLimits || input.resize_limits || input.measure?.resize_limits,
+    scale: input.scale,
+    unusedSpace: input.unusedSpace || input.unused_space,
+    readability: input.readability,
+    overflow: input.overflow,
     style: input.style || {},
+  });
+}
+
+function createLayoutContainer(input = {}) {
+  const source = createSourceLocation(input.source || input.dsl || input.target || {});
+  return stripUndefined({
+    nodeKind: "LayoutContainer",
+    nodeId: input.nodeId || input.node_id || input.id,
+    role: input.role || input.type,
+    source,
+    dsl: input.dsl || source,
+    box: input.box || input.area || input.frame_area,
+    bodyBox: input.bodyBox || input.body_box || input.module_body_slot,
+    visibleOccupiedBox: input.visibleOccupiedBox || input.visible_occupied_box || input.visibleOccupiedArea || input.visible_occupied_area,
+    fill: input.fill,
+    parentId: input.parentId || input.parent_id,
+    constraints: input.constraints || [],
+  });
+}
+
+function createLayoutConstraint(input = {}) {
+  const target = createSourceLocation(input.target || input.source || input.dsl || {});
+  return stripUndefined({
+    id: input.id,
+    type: input.type,
+    axis: input.axis,
+    token: input.token,
+    value: input.value,
+    min: input.min,
+    max: input.max,
+    expectedGap: input.expectedGap || input.expected_gap,
+    actualGaps: input.actualGaps || input.actual_gaps,
+    tolerance: input.tolerance,
+    allowedValues: input.allowedValues || input.allowed_values,
+    members: input.members,
+    target,
+  });
+}
+
+function createAlignmentGroup(input = {}) {
+  const target = createSourceLocation(input.target || input.source || input.dsl || {});
+  return stripUndefined({
+    id: input.id,
+    edge: input.edge,
+    axis: input.axis,
+    tolerance: input.tolerance,
+    target,
+    members: (input.members || []).map((member) => ({
+      nodeId: member.nodeId || member.node_id || member.id,
+      source: createSourceLocation(member.source || member.dsl || member.target || {}),
+      dsl: member.dsl,
+      box: member.box || member.area,
+    })),
   });
 }
 

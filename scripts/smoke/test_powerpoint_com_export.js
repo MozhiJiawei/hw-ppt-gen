@@ -30,7 +30,7 @@ const {
 
 const {
   addVisualAnchorContentSlide,
-  writeVisualAnchorManifest,
+  collectBodyPipelinePages,
 } = visualSlide;
 
 const {
@@ -48,7 +48,6 @@ const {
 } = diagram;
 
 const OUT = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test.pptx"));
-const MANIFEST = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test_visual_anchor_manifest.json"));
 const RENDER_DIR = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test_slides"));
 const ASSET_DIR = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test_assets"));
 
@@ -85,6 +84,11 @@ function baseSpec(kind, template, visual_spec, extra = {}) {
     id: `com_${template}`,
     title: `${kind} ${template}`,
     claim: `${kind}/${template} 应能进入 PowerPoint COM 导出链路。`,
+    source: {
+      kind: "fixture",
+      id: `com_${template}_source`,
+      caption: `${kind}/${template} synthetic source for COM export fixture.`,
+    },
     kind,
     template,
     visual_spec,
@@ -281,35 +285,90 @@ function contentBodyDslForSpec(spec, realAnchorSpec) {
   if (!isSupportingOnlySpec(spec)) {
     const visualNode = spec.kind === "Evidence"
       ? `<EvidenceFigure id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} fit="contain" />`
-      : `<Visual id={spec.id} title={spec.title} claim={spec.claim} draw={draw} model={spec.visual_spec} />`;
+      : `<Visual id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} draw={draw} model={spec.visual_spec} />`;
+    const checkAnchorSpec = {
+      ...realAnchorSpec,
+      id: `${spec.id}_check_anchor`,
+      title: "检查真实锚点",
+      claim: "导出检查模块需要真实锚点。",
+    };
     return parseSlideBodyDsl(`<Slide>
-  <BiasedColumn>
+  <TwoColumn>
     <Module title={spec.title}>
       ${visualNode}
+      <InsightText body={mainText} />
     </Module>
     <Module title="导出检查">
-      <InsightText body="统一正文页入口通过 Body DSL 渲染主视觉。" />
+      <Visual id={checkAnchorSpec.id} title={checkAnchorSpec.title} claim={checkAnchorSpec.claim} source={checkAnchorSpec.source} draw={realDraw} model={checkAnchorSpec.visual_spec} />
+      <InsightText body={checkText} />
     </Module>
-  </BiasedColumn>
-</Slide>`, { spec, draw: `${spec.kind}/${spec.template}` }).bodyDsl;
+  </TwoColumn>
+</Slide>`, {
+      spec,
+      draw: `${spec.kind}/${spec.template}`,
+      checkAnchorSpec,
+      realDraw: `${realAnchorSpec.kind}/${realAnchorSpec.template}`,
+      mainText: [
+        "主视觉：统一正文页入口通过 Body DSL 渲染。",
+        "检查：图形、解释文本和模块边界一起导出。",
+        "版式检查：主视觉与解释文字需要保持紧密绑定。",
+        "结论：单图页面也要保持信息密度。"
+      ],
+      checkText: [
+        "导出检查：PowerPoint COM 必须能逐页导出。",
+        "证据路径：rendered visuals 记录 slot、image area 和尺寸。",
+        "版式检查：图形与说明要保持紧密视觉绑定。",
+        "密度检查：固定版式不能依赖模块内大块空白。",
+        "结论：导出图用于最终人工审阅。"
+      ],
+  }).bodyDsl;
   }
+  const supportAnchorSpec = {
+    ...realAnchorSpec,
+    id: `${spec.id}_support_anchor`,
+    title: "模块真实锚点",
+    claim: "supporting component 所在模块需要独立真实锚点。",
+  };
+  const checkAnchorSpec = {
+    ...realAnchorSpec,
+    id: `${spec.id}_check_anchor`,
+    title: "检查真实锚点",
+    claim: "导出检查模块需要独立真实锚点。",
+  };
   return parseSlideBodyDsl(`<Slide>
   <ThreeColumn>
     <Module title="真实锚点">
-      <Visual id={realAnchorSpec.id} title={realAnchorSpec.title} claim={realAnchorSpec.claim} draw={realDraw} model={realAnchorSpec.visual_spec} />
+      <Visual id={realAnchorSpec.id} title={realAnchorSpec.title} claim={realAnchorSpec.claim} source={realAnchorSpec.source} draw={realDraw} model={realAnchorSpec.visual_spec} />
+      <InsightText body={realAnchorText} />
     </Module>
     <Module title={spec.title}>
-      <Visual id={spec.id} title={spec.title} claim={spec.claim} draw={draw} model={spec.visual_spec} />
+      <Visual id={supportAnchorSpec.id} title={supportAnchorSpec.title} claim={supportAnchorSpec.claim} source={supportAnchorSpec.source} draw={realDraw} model={supportAnchorSpec.visual_spec} />
+      <Visual id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} draw={draw} model={spec.visual_spec} />
     </Module>
     <Module title="导出检查">
-      <InsightText body="supporting component 随 Body DSL 一起渲染，但不充当真实锚点。" />
+      <Visual id={checkAnchorSpec.id} title={checkAnchorSpec.title} claim={checkAnchorSpec.claim} source={checkAnchorSpec.source} draw={realDraw} model={checkAnchorSpec.visual_spec} />
+      <InsightText body={checkText} />
     </Module>
   </ThreeColumn>
 </Slide>`, {
     spec,
     draw: `${spec.kind}/${spec.template}`,
     realAnchorSpec,
+    supportAnchorSpec,
+    checkAnchorSpec,
     realDraw: `${realAnchorSpec.kind}/${realAnchorSpec.template}`,
+    realAnchorText: [
+      "真实锚点：每个 supporting 页面仍需要独立证据。",
+      "检查目标：导出图能看到图形、文字和模块边界。",
+      "结论：不靠空白通过 review。"
+    ],
+    checkText: [
+      "导出检查：supporting component 随 Body DSL 一起渲染。",
+      "边界：它不充当真实锚点。",
+      "版式检查：图形与说明要保持紧密视觉绑定。",
+      "密度检查：固定版式不能依赖模块内大块空白。",
+      "结论：真实锚点、supporting 和解释文本都要可导出。"
+    ],
   }).bodyDsl;
 }
 
@@ -410,7 +469,17 @@ async function buildDeck() {
     });
   });
 
-  writeVisualAnchorManifest(pptx, MANIFEST);
+  const roughEntries = collectBodyPipelinePages(pptx)
+    .flatMap((page) => page.renderedVisuals || [])
+    .filter((entry) => entry.renderer === "rough_svg");
+  assert(roughEntries.length > 0, "interface test should include image-based content slides");
+  roughEntries.forEach((entry) => {
+    assert(entry.image_area && entry.visual_slot, "image-based entries should record image_area and visual_slot");
+    assert(entry.image_width > 0 && entry.image_height > 0, "image-based entries should record image dimensions");
+    const imageRatio = entry.image_width / entry.image_height;
+    const placedRatio = entry.image_area.w / entry.image_area.h;
+    assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_component_id} should preserve image aspect ratio`);
+  });
   await pptx.writeFile({ fileName: OUT });
   await repairPptxForPowerPointCom(OUT);
   await assertNoNegativeExtents(OUT);
@@ -433,17 +502,6 @@ async function main() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   assert(manifest.renderer === "powerpoint", "render manifest should confirm PowerPoint renderer");
   assert(manifest.slide_count === 4 + visualSpecs().length, `expected ${4 + visualSpecs().length} rendered slides`);
-
-   const visualManifest = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
-   const roughEntries = visualManifest.slides.filter((entry) => entry.renderer === "rough_svg");
-   assert(roughEntries.length > 0, "interface test should include image-based content slides");
-   roughEntries.forEach((entry) => {
-     assert(entry.image_area && entry.visual_slot, "image-based entries should record image_area and visual_slot");
-     assert(entry.image_width > 0 && entry.image_height > 0, "image-based entries should record image dimensions");
-     const imageRatio = entry.image_width / entry.image_height;
-     const placedRatio = entry.image_area.w / entry.image_area.h;
-     assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_component_id} should preserve image aspect ratio`);
-   });
 
   console.log(`PowerPoint COM interface export test passed: ${OUT}`);
 }

@@ -8,6 +8,7 @@ const VALID_BODY_DSL = `
       <InsightText body={body} maxLines={2} />
     </Module>
     <Module title="结论">
+      <EvidenceFigure id="secondary_evidence" title="补充来源图" claim="补充来源图让结论模块满足真实锚点规则。" source={source} fit="contain" />
       <InsightText body={body} />
     </Module>
   </TwoColumn>
@@ -20,6 +21,7 @@ const SUPPORTING_ONLY_BODY_DSL = `
       <Table id="support_table" title="辅助表格" claim="表格只是辅助。" rows={rows} />
     </Module>
     <Module title="说明">
+      <EvidenceFigure id="secondary_evidence" title="补充来源图" claim="补充来源图让说明模块满足真实锚点规则。" source={source} fit="contain" />
       <InsightText body={body} />
     </Module>
   </TwoColumn>

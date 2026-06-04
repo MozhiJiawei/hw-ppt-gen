@@ -35,6 +35,11 @@ function runMeasurementChecks(input = {}) {
     if (!validBounds(record.bounds || record.measurement?.shape_bounds || record.measurement?.text_bounds)) {
       issues.push(issue("measure_bounds_invalid", ir, record, "Measurement bounds are missing, zero, negative, NaN, or unusable."));
     }
+    if (!hasResizeContract(record)) {
+      issues.push(issue("measure_resize_contract_missing", ir, record, "Measurement record is missing resizePolicy, size range, or resize limits required by layout."));
+    } else if (resizeRangeInvalid(record)) {
+      issues.push(issue("measure_resize_range_invalid", ir, record, "Measurement resize range violates visual readability or distortion limits."));
+    }
   }
 
   const phaseResult = createPhaseResult({ phase: "measure", ir, diagnostics: issues });
@@ -63,6 +68,12 @@ function normalizeMeasurementRecord(item = {}) {
     blockIndex: item.blockIndex,
     status: item.status || (item.measurement?.ok === false ? "failed" : "ok"),
     measureSupport: item.measureSupport || item.measure_support || item.primitive?.measureSupport,
+    minSize: item.minSize || item.min_size || item.measure?.min_size,
+    preferredSize: item.preferredSize || item.preferred_size || item.measure?.preferred_size,
+    maxUsefulSize: item.maxUsefulSize || item.max_useful_size || item.measure?.max_useful_size,
+    resizePolicy: item.resizePolicy || item.resize_policy || item.measure?.resize_policy,
+    resizeLimits: item.resizeLimits || item.resize_limits || item.measure?.resize_limits,
+    constraintBox: item.constraintBox || item.constraint_box,
     bounds: item.bounds || item.shape_bounds || item.text_bounds || item.measurement?.shape_bounds || item.measurement?.text_bounds,
     measurement: item.measurement,
     raw: item,
@@ -104,6 +115,32 @@ function validBounds(bounds = {}) {
     && Number.isFinite(Number(bounds.h)) && Number(bounds.h) > 0;
 }
 
+function hasResizeContract(record = {}) {
+  return Boolean(record.resizePolicy)
+    && validBounds(record.minSize)
+    && validBounds(record.preferredSize)
+    && validBounds(record.maxUsefulSize)
+    && record.resizeLimits
+    && typeof record.resizeLimits === "object";
+}
+
+function resizeRangeInvalid(record = {}) {
+  if (!validBounds(record.minSize) || !validBounds(record.preferredSize) || !validBounds(record.maxUsefulSize)) return true;
+  if (Number(record.minSize.w) > Number(record.preferredSize.w) + 0.001) return true;
+  if (Number(record.minSize.h) > Number(record.preferredSize.h) + 0.001) return true;
+  if (Number(record.preferredSize.w) > Number(record.maxUsefulSize.w) + 0.001) return true;
+  if (Number(record.preferredSize.h) > Number(record.maxUsefulSize.h) + 0.001) return true;
+  const limits = record.resizeLimits || {};
+  const uniform = limits.uniformScale || limits.uniform_scale;
+  if (uniform && (Number(uniform.min) < 0.67 - 0.001 || Number(uniform.max) > 1.33 + 0.001)) return true;
+  const axis = limits.axisScale || limits.axis_scale;
+  if (axis && (Number(axis.min) < 0.8 - 0.001 || Number(axis.max) > 1.2 + 0.001)) return true;
+  if (limits.preserveAspect === true || limits.preserve_aspect === true) {
+    return !uniform || Number(uniform.min) < 0.67 - 0.001 || Number(uniform.max) > 1.33 + 0.001;
+  }
+  return false;
+}
+
 function issue(code, ir, item = {}, message) {
   return createFeedbackIssue({
     code,
@@ -120,6 +157,8 @@ function issue(code, ir, item = {}, message) {
     details: {
       expected: item.identity,
       measurement: item.raw || item.source,
+      resizePolicy: item.resizePolicy,
+      resizeLimits: item.resizeLimits,
     },
   });
 }

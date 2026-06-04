@@ -29,11 +29,37 @@ function main() {
   }).bodyDsl;
   const tableOnly = compileSlideDsl(tableOnlyDsl, { throwOnError: false });
   assert.equal(tableOnly.ok, false, "supporting-only DSL should fail");
-  assert(tableOnly.feedbackIssues.some((issue) => issue.code === "dsl_component_tree_invalid"), "supporting-only failure should be DSL tree feedback");
+  assert(tableOnly.feedbackIssues.some((issue) => issue.code === "dsl_module_real_anchor_missing"), "supporting-only failure should be module anchor feedback");
   const markdown = feedbackToMarkdown(tableOnly.feedbackIssues);
   assert(markdown.includes("Phase: compile"), "feedback markdown should show compile phase");
   assert(markdown.includes("Selector:"), "feedback markdown should look like DOM inspector output");
-  assert(markdown.includes("supporting components cannot satisfy"), "feedback markdown should carry actionable message");
+  assert(markdown.includes("supporting components and text cannot satisfy module proof"), "feedback markdown should carry actionable message");
+
+  const missingModuleAnchorDsl = parseSlideBodyDsl(`
+    <Slide>
+      <TwoColumn>
+        <Module title="主证据">
+          <EvidenceFigure id="main_evidence" title="来源图" claim="来源图支撑判断。" source={source} fit="contain" />
+        </Module>
+        <Module title="辅助读数">
+          <KpiCards id="support_cards" title="辅助读数" claim="KPI 只是辅助。" cards={cards} />
+          <InsightText body={body} />
+        </Module>
+      </TwoColumn>
+    </Slide>
+  `, {
+    source: { path: ".tmp/source.png", caption: "source" },
+    cards: [{ label: "证据", value: "不足" }],
+    body: ["判断：右栏缺少真实视觉锚点。"],
+  }).bodyDsl;
+  const missingModuleAnchor = compileSlideDsl(missingModuleAnchorDsl, { throwOnError: false });
+  assert.equal(missingModuleAnchor.ok, false, "each non-biased content module should require a real visual anchor");
+  const missingModuleIssue = missingModuleAnchor.feedbackIssues.find((issue) => issue.code === "dsl_module_real_anchor_missing");
+  assert(missingModuleIssue, "missing module anchor should use a dedicated compile feedback code");
+  assert.equal(missingModuleIssue.target.selector, "Slide > TwoColumn:nth-child(1) > Module:nth-child(2)");
+  assert(missingModuleIssue.target.sourceSpan, "missing module anchor feedback should keep source span");
+  assert(missingModuleIssue.target.codeFrame, "missing module anchor feedback should keep code frame");
+  assert.deepEqual(missingModuleIssue.target.semanticStack.map((frame) => frame.tag), ["Columns", "Module"]);
 
   const badIntentDsl = parseSlideBodyDsl(`<Slide><TwoColumn style={style}></TwoColumn></Slide>`, { style: { display: "grid" } }).bodyDsl;
   const badIntent = compileSlideDsl(badIntentDsl, { throwOnError: false });
@@ -49,6 +75,7 @@ function main() {
           <InsightText body={body} maxLines={2} priority="supporting" />
         </Module>
         <Module title="结论">
+          <EvidenceChart id="secondary_evidence" title="补充来源图" claim="补充来源图支撑结论模块。" source={source} fit="contain" priority="supporting" />
           <InsightText body={body} />
         </Module>
       </TwoColumn>
@@ -59,6 +86,19 @@ function main() {
   }).bodyDsl;
   const valid = compileSlideDsl(validDsl, { throwOnError: false });
   assert.equal(valid.ok, true, "valid DSL should compile");
+
+  assert.throws(
+    () => compileSlideDsl(tableOnlyDsl),
+    (error) => {
+      const text = String(error.message || "");
+      return text.includes("Body DSL compile failed")
+        && text.includes("compile:dsl_module_real_anchor_missing")
+        && text.includes("Selector: Slide > TwoColumn:nth-child(1) > Module:nth-child(1)")
+        && text.includes("Code: <Module title=\"只有表格\">");
+    },
+    "compile CLI error should include source-mapped feedback without requiring artifact lookup"
+  );
+
   const evidencePrimitive = valid.renderModel.modules[0].componentPrimitives[0];
   assert.equal(evidencePrimitive.dsl.selector, "Slide > TwoColumn:nth-child(1) > Module:nth-child(1) > EvidenceFigure:nth-child(1)");
   assert.equal(evidencePrimitive.dsl.priority, "primary");

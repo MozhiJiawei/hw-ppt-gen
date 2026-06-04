@@ -50,6 +50,49 @@ function feedbackToMarkdown(items = []) {
   return lines.join("\n").trimEnd();
 }
 
+function feedbackToCliText(items = [], options = {}) {
+  const issues = sortBySeverity(normalizeFeedbackIssues(items));
+  if (!issues.length) return "No feedback issues.";
+  const limit = Number(options.limit || 6);
+  const shown = issues.slice(0, limit);
+  const lines = [options.title || "Runtime QA failed", ""];
+  shown.forEach((issue, index) => {
+    lines.push(`${index + 1}. [${issue.severity}] ${issue.phase}:${issue.code}`);
+    lines.push(`   ${issue.message}`);
+    const target = issue.target || {};
+    if (target.selector) lines.push(`   Selector: ${target.selector}`);
+    if (target.sourceSpan) lines.push(`   Source: line ${target.sourceSpan.line}, column ${target.sourceSpan.column}`);
+    if (target.codeFrame) lines.push(`   Code: ${target.codeFrame}`);
+    if (target.componentId) lines.push(`   Component: ${target.componentId}`);
+    if (target.pageIndex !== undefined && target.pageIndex !== null) lines.push(`   Page: ${Number(target.pageIndex) + 1}`);
+    if (target.slide !== undefined && target.slide !== null) lines.push(`   Slide: ${target.slide}`);
+    if (target.artifact) lines.push(`   Artifact: ${target.artifact}`);
+    if (issue.repairs?.length) lines.push(`   Repair: ${issue.repairs.join(" / ")}`);
+    const usefulDetails = cliDetailLines(issue.details);
+    usefulDetails.forEach((line) => lines.push(`   ${line}`));
+    lines.push("");
+  });
+  if (issues.length > shown.length) {
+    lines.push(`... ${issues.length - shown.length} more issue(s) omitted. Fix the shown issues, then rerun.`);
+  }
+  return lines.join("\n").trimEnd();
+}
+
+function createFeedbackCliError(message, metadata = {}) {
+  const error = new Error(message);
+  error.name = "FeedbackError";
+  error.stack = `${error.name}: ${message}`;
+  for (const [key, value] of Object.entries(metadata)) {
+    Object.defineProperty(error, key, {
+      configurable: true,
+      enumerable: false,
+      value,
+      writable: true,
+    });
+  }
+  return error;
+}
+
 function targetLabel(target = {}) {
   const parts = [];
   if (target.slide !== undefined && target.slide !== null) parts.push(`slide ${target.slide}`);
@@ -147,7 +190,18 @@ function sortBySeverity(issues) {
   return [...issues].sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9) || a.code.localeCompare(b.code));
 }
 
+function cliDetailLines(details = {}) {
+  const lines = [];
+  if (!details || typeof details !== "object" || Array.isArray(details)) return lines;
+  for (const key of ["unusedSpace", "overflow", "readability", "scale", "resizeLimits", "box"]) {
+    if (details[key] !== undefined) lines.push(`${labelFor(key)}: ${formatDetail(details[key])}`);
+  }
+  return lines;
+}
+
 module.exports = {
+  createFeedbackCliError,
+  feedbackToCliText,
   feedbackToJson,
   feedbackToMarkdown,
   normalizeFeedbackIssues,

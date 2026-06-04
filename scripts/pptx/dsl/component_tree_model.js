@@ -102,6 +102,7 @@ function componentNodeToVisualSpec(node) {
       id: node.props.id,
       title: node.props.title,
       claim: node.props.claim,
+      source: node.props.source,
       kind: parsed.kind,
       template: parsed.template,
       visual_spec: node.props.model || {},
@@ -137,8 +138,45 @@ function validateRenderModel(model) {
   if (schema.special === "large_visual_with_side_cards" && modules[0].role !== "visual_anchor") {
     throw new Error(`Columns.type ${type} requires the first Module to be the primary visual module.`);
   }
+  const missingAnchors = modules
+    .map((module, moduleIndex) => ({ module, moduleIndex }))
+    .filter(({ module, moduleIndex }) => {
+      if (schema.special === "large_visual_with_side_cards" && moduleIndex > 0) return false;
+      return !moduleHasRealVisualAnchor(module);
+    });
+  if (missingAnchors.length) {
+    const first = missingAnchors[0];
+    const source = first.module.sourceComponent?.source || {};
+    throwFeedbackError(`Module "${first.module.title}" must contain a real visual anchor; supporting components and text cannot satisfy module proof.`, {
+      missing_modules: missingAnchors.map(({ module, moduleIndex }) => ({
+        module_index: moduleIndex,
+        title: module.title,
+        selector: module.sourceComponent?.source?.selector,
+        components: module.componentPrimitives.map((primitive, blockIndex) => ({
+          block_index: blockIndex,
+          tag: primitive.dsl?.tag,
+          selector: primitive.dsl?.selector,
+          role: primitive.dsl?.role || primitive.type,
+          component_id: primitive.dsl?.id,
+        })),
+      })),
+    }, {
+      code: "dsl_module_real_anchor_missing",
+      target: {
+        path: source.path,
+        selector: source.selector,
+        sourceSpan: source.sourceSpan,
+        codeFrame: source.codeFrame,
+        semanticStack: source.semanticStack,
+      },
+      repairs: [
+        "Add source evidence with <EvidenceFigure>/<EvidenceChart> when available; use a real-anchor <Visual draw=\"Kind/template\"> only as generated drawing when no readable source evidence exists or as secondary explanation.",
+        "Keep KpiCards, Table, and InsightText after the module's real proof component.",
+      ],
+    });
+  }
   const strictAnchorCount = modules.reduce((count, module) => {
-    return count + module.componentPrimitives.filter((primitive) => primitive.type === "visual_anchor" && primitive.visual_anchor && !isStructuredSupportingComponentSpec(primitive.visual_anchor)).length;
+    return count + module.componentPrimitives.filter(isRealVisualAnchorPrimitive).length;
   }, 0);
   if (strictAnchorCount < 1) {
     throwFeedbackError(`Columns.type ${type} requires at least one real visual component; supporting components cannot satisfy the anchor requirement.`, {
@@ -152,7 +190,7 @@ function validateRenderModel(model) {
       }))),
     }, {
       repairs: [
-        "Replace one supporting-only component with <EvidenceFigure>, <EvidenceChart>, or <Visual draw=\"Kind/template\">.",
+        "Add source evidence with <EvidenceFigure>/<EvidenceChart> when available; otherwise add a generated-drawing <Visual draw=\"Kind/template\"> that preserves the same claim.",
         "Keep Table, KpiCards, and InsightText as secondary readouts after the real proof component.",
       ],
     });
@@ -161,9 +199,19 @@ function validateRenderModel(model) {
 
 function throwFeedbackError(message, details = {}, options = {}) {
   const error = new Error(message);
+  error.feedbackCode = options.code;
+  error.feedbackTarget = options.target;
   error.feedbackDetails = details;
   error.feedbackRepairs = options.repairs;
   throw error;
+}
+
+function moduleHasRealVisualAnchor(module = {}) {
+  return module.componentPrimitives.some(isRealVisualAnchorPrimitive);
+}
+
+function isRealVisualAnchorPrimitive(primitive = {}) {
+  return primitive.type === "visual_anchor" && primitive.visual_anchor && !isStructuredSupportingComponentSpec(primitive.visual_anchor);
 }
 
 function buildVisualModelFromProps(node) {

@@ -16,6 +16,7 @@ function buildDslComponentMatrixFixtures(root) {
         <EvidenceFigure id="module_anchor" title="来源图" claim="来源图支撑当前组件测试。" source={figureSource} fit="contain" />
       </Module>
       <Module title="说明模块">
+        <EvidenceFigure id="module_secondary_anchor" title="补充来源图" claim="补充来源图让说明模块满足真实锚点规则。" source={figureSource} fit="contain" />
         <InsightText body={moduleText} emphasis={emphasis} maxLines={3} />
       </Module>
     `), { figureSource: evidenceSource(source("figure"), "来源图 fixture"), moduleText: ["模块：承载标题、证据和结论。"], emphasis: ["组件", "测量"] }),
@@ -25,7 +26,7 @@ function buildDslComponentMatrixFixtures(root) {
     renderable("Table", "matrix_table", { visualRole: "supporting_component", kind: "Matrix", template: "table" }, `<Table id="matrix_table" title="表格组件" claim="表格组件表达二维关系。" rows={rows} />`, { rows: [["对象", "能力", "结果"], ["DSL", "发现", "可用"], ["组件", "测量", "可见"]] }, { includeCompanionEvidence: true, source: source("figure") }),
     renderable("CapabilityStack", "matrix_capability_stack", { visualRole: "supporting_component", kind: "Hierarchy", template: "capability_stack" }, `<CapabilityStack id="matrix_capability_stack" title="能力栈组件" claim="能力栈组件表达层级能力。" levels={levels} highlight="测量" />`, { levels: [{ label: "生成", value: "DSL" }, { label: "测量", value: "COM" }, { label: "验证", value: "审阅" }] }, { includeCompanionEvidence: true, source: source("figure") }),
     renderable("InsightText", "matrix_insight_text", { visualRole: "text" }, `<InsightText id="matrix_insight_text" body={body} emphasis={emphasis} maxLines={3} />`, { body: ["判断：文本组件必须保留 editable PPT 文本。"], emphasis: ["组件", "测量"] }, { includeCompanionEvidence: true, source: source("figure") }),
-    renderable("Visual", "matrix_visual_escape", { visualRole: "visual_anchor", kind: "Sequence", template: "process" }, `<Visual id="matrix_visual_escape" title="官方 Visual" claim="Visual 组件调用官方 Sequence/process。" draw="Sequence/process" model={processModel} />`, { processModel: { steps: [{ id: "a", label: "选择" }, { id: "b", label: "生成" }, { id: "c", label: "检查" }], highlight: "b" } }),
+    renderable("Visual", "matrix_visual_escape", { visualRole: "visual_anchor", kind: "Sequence", template: "process" }, `<Visual id="matrix_visual_escape" title="官方 Visual" claim="Visual 组件调用官方 Sequence/process。" source={visualSource} draw="Sequence/process" model={processModel} />`, { visualSource: evidenceSource(source("figure"), "Visual 追溯来源 fixture"), processModel: { steps: [{ id: "a", label: "选择" }, { id: "b", label: "生成" }, { id: "c", label: "检查" }], highlight: "b" } }, { includeCompanionEvidence: true, source: source("figure") }),
   ];
   const existing = new Set(fixtures.map((fixture) => fixture.tag));
   for (const component of listAiComponents()) {
@@ -59,12 +60,18 @@ function renderable(tag, componentId, expected, componentMarkup, scope = {}, opt
         ${firstModuleChildren}
       </Module>
       <Module title="结论">
+        <EvidenceFigure id="${componentId}_secondary_evidence" title="补充证据" claim="补充证据让结论模块满足真实锚点规则。" source={secondarySource} fit="contain" />
         <InsightText body={fixtureText} emphasis={emphasis} maxLines={3} />
       </Module>
     `), {
       ...scope,
       companionSource: options.source ? evidenceSource(options.source, "伴随证据 fixture") : undefined,
-      fixtureText: [`${tag} 组件应通过 JSX-like DSL 编译、渲染、测量。`],
+      secondarySource: evidenceSource(options.source || scope.figureSource?.path || scope.chartSource?.path, "补充证据 fixture"),
+      fixtureText: [
+        `${tag} 组件应通过 JSX-like DSL 编译、渲染、测量。`,
+        "检查：组件区域要保留真实锚点、解释文本和可测量边界。",
+        "结论：review deck 不能依赖空白或 QA 绕过。"
+      ],
       emphasis: ["组件", "测量"],
     }, {
       expected: { componentId, ...expected },
@@ -99,9 +106,8 @@ ${children}
 
 function layoutMarkup(tag, moduleCount) {
   const modules = Array.from({ length: moduleCount }, (_, index) => {
-    const body = index === 0
-      ? `<EvidenceFigure id="${tag.toLowerCase()}_anchor" title="来源图" claim="来源图支撑当前布局测试。" source={figureSource} fit="contain" />`
-      : `<InsightText body={layoutText} emphasis={emphasis} maxLines={3} />`;
+    const body = `<EvidenceFigure id="${tag.toLowerCase()}_anchor_${index + 1}" title="来源图${index + 1}" claim="来源图支撑当前布局测试。" source={figureSource} fit="contain" />
+        <InsightText body={layoutText} emphasis={emphasis} maxLines={3} />`;
     return `      <Module title="${tag} 模块${index + 1}">
         ${body}
       </Module>`;

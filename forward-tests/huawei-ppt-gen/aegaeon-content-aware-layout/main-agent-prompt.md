@@ -80,15 +80,12 @@ Collect the candidate's output directory and inspect:
 
 - generated `.pptx`
 - deck plan JSON
-- visual-anchor manifest JSON
-- exported slide PNG directory and visual-review notes
 - exported slide PNGs
-- visual-review notes
 - generation script, only as supporting evidence
 
 Use `forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout/judge/rubric.md` to judge the output.
 
-You may inspect the exported slide PNGs visually. Use browser/image viewing tools when available.
+Inspect the exported slide PNGs visually at presentation size/original size. Do not require the candidate to produce runtime QA reports, render/export QA reports, or visual-review notes as forward-test deliverables; export/runtime QA is already part of normal deck generation, while the main-agent forward judgment is based on the visible PPT result and contamination rules.
 
 ## Judgment Output
 
@@ -115,7 +112,7 @@ Use this template:
 - Evidence Readability: [0-3]
 - Text Compression: [0-3]
 - Information Density: [0-3]
-- Review Discipline: [0-3]
+- Export Discipline: [0-3]
 
 ## Blocking Findings
 
@@ -133,8 +130,6 @@ Use this template:
 
 - [PPTX path]
 - [Plan path]
-- [Manifest path]
-- [Visual-review notes path]
 - [Slide PNG directory]
 ```
 

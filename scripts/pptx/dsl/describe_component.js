@@ -55,7 +55,12 @@ if (require.main === module) {
     console.error("Usage: node scripts/pptx/dsl/describe_component.js <ComponentTag>");
     process.exit(1);
   }
-  console.log(JSON.stringify(describeComponent(tag), null, 2));
+  try {
+    console.log(JSON.stringify(describeComponent(tag), null, 2));
+  } catch (error) {
+    console.error(error.message || error);
+    process.exit(1);
+  }
 }
 
 module.exports = {

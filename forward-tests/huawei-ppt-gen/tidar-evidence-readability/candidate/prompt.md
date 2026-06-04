@@ -23,4 +23,4 @@ Write all generated artifacts under:
 
 Use a clear, new, non-existing run id, for example `candidate-YYYYMMDD-HHMMSS`. Do not overwrite or reuse any prior run directory.
 
-When finished, report the output directory, PPTX path, exported slide PNG directory, visual-review status, and caveats.
+When finished, report the output directory, PPTX path, exported slide PNG directory, and caveats.

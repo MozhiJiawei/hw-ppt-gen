@@ -49,14 +49,6 @@ function runDslInputChecks(page = {}) {
 
   const primitives = ir.compileIr?.visiblePrimitives || [];
   const anchors = primitives.filter((primitive) => primitive.identity.blockType === "visual_anchor");
-  if (!anchors.length && shouldReportMissingAnchor(compilerErrors, primitives)) {
-    issues.push(issue("dsl_real_anchor_missing", page, {
-      target: rootTarget(ir, page),
-      message: "Body DSL does not contain a real visual anchor for downstream visual layout.",
-      details: { found: primitives.map((primitive) => primitive.identity) },
-      repairs: ["Add an EvidenceFigure, EvidenceChart, or Visual component that is not a supporting readout."],
-    }));
-  }
 
   for (const anchor of anchors) {
     const visual = anchor.primitive?.visual_anchor || {};
@@ -90,11 +82,6 @@ function withPhaseResult(result = {}) {
   };
 }
 
-function shouldReportMissingAnchor(compilerErrors = [], primitives = []) {
-  if (primitives.length) return true;
-  return compilerErrors.some((issue) => issue.code === "dsl_component_tree_invalid" && Array.isArray(issue.details?.found_components));
-}
-
 function isTraceCompilerIssue(issue = {}) {
   const missingProps = issue.details?.missingProps || [];
   const componentTag = issue.details?.componentTag || issue.details?.tag;
@@ -123,11 +110,6 @@ function issue(code, page = {}, input = {}) {
 function bestTarget(compilerErrors = [], page = {}) {
   const target = compilerErrors.find((item) => item.target?.selector)?.target || compilerErrors[0]?.target || {};
   return { pageIndex: page.pageIndex, pageId: page.pageId, ...target };
-}
-
-function rootTarget(ir = {}, page = {}) {
-  const source = ir.compileIr?.tree?.source || {};
-  return { pageIndex: page.pageIndex, pageId: page.pageId, ...source };
 }
 
 module.exports = {

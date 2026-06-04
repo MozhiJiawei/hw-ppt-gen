@@ -9,7 +9,7 @@ const {
 } = require("../../pptx/hw_pptx_helpers");
 const {
   addVisualAnchorContentSlide,
-  writeVisualAnchorManifest,
+  collectBodyPipelinePages,
 } = require("../../pptx/hw_visual_anchor_slide");
 const { compileSlideDsl } = require("../../pptx/dsl/compile_slide_dsl");
 const { describeComponent } = require("../../pptx/dsl/describe_component");
@@ -20,7 +20,6 @@ const ROOT = path.resolve(__dirname, "..", "..", "..");
 const OUT_DIR = path.join(ROOT, ".tmp", "dsl_component_matrix");
 const SOURCE_DIR = path.join(OUT_DIR, "sources");
 const PPTX_OUT = path.join(OUT_DIR, "dsl_component_matrix.pptx");
-const MANIFEST_OUT = path.join(OUT_DIR, "dsl_component_matrix_manifest.json");
 const EXPOSURE_OUT = path.join(OUT_DIR, "dsl_component_agent_exposure.json");
 const COMPILE_OUT = path.join(OUT_DIR, "dsl_component_compile_report.json");
 const MEASURE_OUT = path.join(OUT_DIR, "dsl_component_measurement_report.json");
@@ -86,24 +85,28 @@ async function main() {
       bodyDsl: fixture.bodyDsl,
     });
   });
-  const manifest = writeVisualAnchorManifest(pptx, MANIFEST_OUT);
+  const renderedLayoutPages = collectBodyPipelinePages(pptx);
   await pptx.writeFile({ fileName: PPTX_OUT });
   await repairPptxForPowerPointCom(PPTX_OUT);
 
   const measurementRows = fixtures
     .filter((fixture) => fixture.kind === "renderable")
-    .map((fixture) => measurementRowForFixture(fixture, manifest));
+    .map((fixture) => measurementRowForFixture(fixture, renderedLayoutPages));
   fs.writeFileSync(MEASURE_OUT, JSON.stringify(measurementRows, null, 2), "utf8");
 
   console.log(`DSL component matrix tests passed: ${PPTX_OUT}`);
 }
 
-function measurementRowForFixture(fixture, manifest) {
-  const blocks = manifest.slides
-    .flatMap((entry) => entry.body_layout_schema?.module_layouts || [])
+function measurementRowForFixture(fixture, renderedLayoutPages) {
+  const blocks = renderedLayoutPages
+    .flatMap((entry) => entry.layoutInfo?.module_layouts || [])
     .flatMap((moduleLayout) => moduleLayout.block_areas || [])
     .filter((block) => block.source_component?.tag === fixture.tag);
-  assert(blocks.length > 0, `${fixture.tag} should have a source-mapped block in manifest measurement data`);
+  const compileNodes = renderedLayoutPages
+    .flatMap((entry) => entry.compileIr?.visiblePrimitives || [])
+    .filter((node) => node.sourceComponent?.tag === fixture.tag);
+  assert(compileNodes.length > 0, `${fixture.tag} should have a source-mapped primitive in production CompileIR`);
+  assert(blocks.length > 0, `${fixture.tag} should have a source-mapped block in layout measurement data`);
   const block = blocks[0];
   const measure = block.measure;
   assert(measure, `${fixture.tag} should record COM-backed measure data`);
@@ -118,12 +121,14 @@ function measurementRowForFixture(fixture, manifest) {
 
   const expected = fixture.expected || {};
   if (expected.visualRole !== "text") {
-    const entry = manifest.slides.find((item) => item.visual_component_id === expected.componentId);
-    assert(entry, `${fixture.tag} should render a manifest entry for ${expected.componentId}`);
+    const entry = renderedLayoutPages
+      .flatMap((page) => page.renderedVisuals || [])
+      .find((item) => item.visual_component_id === expected.componentId);
+    assert(entry, `${fixture.tag} should render visual evidence for ${expected.componentId}`);
     assert.equal(entry.visual_role, expected.visualRole, `${fixture.tag} visual role should match registry expectation`);
-    assert.equal(entry.kind, expected.kind, `${fixture.tag} manifest kind should match`);
-    assert.equal(entry.template, expected.template, `${fixture.tag} manifest template should match`);
-    assert.equal(entry.rendered, true, `${fixture.tag} manifest entry should be rendered`);
+    assert.equal(entry.kind, expected.kind, `${fixture.tag} visual kind should match`);
+    assert.equal(entry.template, expected.template, `${fixture.tag} visual template should match`);
+    assert.equal(entry.rendered, true, `${fixture.tag} visual evidence should be rendered`);
   }
 
   return {
@@ -135,7 +140,6 @@ function measurementRowForFixture(fixture, manifest) {
     finalSize: block.final_size,
     area: block.area,
     visibleArea: block.visible_area,
-    layoutDiagnostics: block.layout_diagnostics || [],
   };
 }
 

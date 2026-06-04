@@ -4,13 +4,15 @@ const path = require("path");
 const { spawnSync } = require("child_process");
 const { repairPptxForPowerPointCom } = require("./hw_pptx_helpers");
 const { requestPowerPointBroker } = require("./powerpoint_com_broker");
+const { createFeedbackCliError, feedbackToCliText } = require("./feedback/feedback_reporter");
+const { runRenderExportChecks } = require("./qa/render_export_checks");
 
 function usage() {
-  console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice]");
+  console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice] [--qa-artifacts .tmp/render_qa.json] [--qa-only]");
 }
 
 function parseArgs(argv) {
-  const args = { input: argv[2], out: null, dpi: 180, renderer: "auto" };
+  const args = { input: argv[2], out: null, dpi: 180, renderer: "auto", qaArtifacts: null, qaOnly: false };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--out") {
       args.out = argv[i + 1];
@@ -21,6 +23,11 @@ function parseArgs(argv) {
     } else if (argv[i] === "--renderer") {
       args.renderer = argv[i + 1];
       i += 1;
+    } else if (argv[i] === "--qa-artifacts") {
+      args.qaArtifacts = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--qa-only") {
+      args.qaOnly = true;
     }
   }
   return args;
@@ -194,6 +201,31 @@ async function exportWithPowerPoint(inputPath, outDir) {
   };
 }
 
+function readQaArtifacts(filePath) {
+  if (!filePath) return {};
+  ensureTmp(filePath, "QA artifacts");
+  if (!fs.existsSync(filePath)) throw new Error(`QA artifacts not found: ${filePath}`);
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
+}
+
+function assertRenderExportQaClean(manifest, qaArtifacts = {}) {
+  const artifacts = {
+    ...qaArtifacts,
+    slideCount: manifest.slide_count,
+    exportedPngs: manifest.slides,
+  };
+  const qa = runRenderExportChecks(artifacts);
+  const errors = (qa.issues || []).filter((issue) => issue.severity === "error");
+  if (!errors.length) return qa;
+  throw createFeedbackCliError(feedbackToCliText(errors, {
+    title: "Runtime render/export QA failed",
+  }), {
+    feedbackIssues: errors,
+    phaseResult: qa.phaseResult,
+    renderExportArtifacts: artifacts,
+  });
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   if (!args.input || !args.out) {
@@ -202,12 +234,26 @@ async function main() {
   }
   ensureTmp(args.input, "Input PPTX");
   ensureTmp(args.out, "Output directory");
-  if (!fs.existsSync(args.input)) throw new Error(`Input PPTX not found: ${args.input}`);
+  if (!args.qaOnly && !fs.existsSync(args.input)) throw new Error(`Input PPTX not found: ${args.input}`);
   if (!Number.isFinite(args.dpi) || args.dpi < 72 || args.dpi > 300) throw new Error(`Invalid DPI: ${args.dpi}`);
   if (!["auto", "powerpoint", "libreoffice"].includes(args.renderer)) throw new Error(`Invalid renderer: ${args.renderer}`);
 
   const inputPath = path.resolve(args.input);
   const outDir = path.resolve(args.out);
+  const qaArtifacts = readQaArtifacts(args.qaArtifacts);
+  if (args.qaOnly) {
+    const manifest = {
+      input: inputPath,
+      output_dir: outDir,
+      generated_at: new Date().toISOString(),
+      renderer: "qa_only",
+      slide_count: Number(qaArtifacts.slideCount || qaArtifacts.slide_count || 0),
+      slides: qaArtifacts.exportedPngs || qaArtifacts.slides || [],
+    };
+    assertRenderExportQaClean(manifest, qaArtifacts);
+    writeManifest(outDir, manifest);
+    return;
+  }
   cleanPreviousSlides(outDir);
 
   const renderer = args.renderer === "auto"
@@ -217,6 +263,7 @@ async function main() {
   const manifest = renderer === "powerpoint"
     ? await exportWithPowerPoint(inputPath, outDir)
     : exportWithLibreOffice(inputPath, outDir, args.dpi);
+  assertRenderExportQaClean(manifest, qaArtifacts);
   writeManifest(outDir, manifest);
 }
 

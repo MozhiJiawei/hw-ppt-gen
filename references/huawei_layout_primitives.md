@@ -8,9 +8,9 @@ The supported path is:
 Body DSL component tree
 -> taxonomy classification
 -> primitive measurement
--> module stack allocation
+-> LayoutIR box/constraint allocation
 -> existing PPT renderers
--> manifest diagnostics
+-> LayoutIR/render feedback
 ```
 
 ## Primitive Contract
@@ -21,6 +21,7 @@ Each measured primitive reports:
 - `preferredSize`: normal box for the current module width.
 - `maxUsefulSize`: largest useful box before extra space should go elsewhere.
 - `resizePolicy`: how it may shrink or grow.
+- `resizeLimits`: the browser-like resize envelope consumed by layout. Visual elements may uniformly scale only within `0.7-1.3`; flexible visuals may not introduce non-uniform axis distortion beyond `1.2`; evidence uses `preserveAspect: true`.
 - `priority`: layout priority when the stack must compress.
 - `diagnostics`: warnings or errors created before paint.
 
@@ -58,14 +59,27 @@ PNG export remains the visual review layer; COM measurement is the lightweight n
 
 ## Layout Diagnostics
 
-Module stack layout records:
+Runtime layout is reported as `LayoutIR`. It remains the only layout-phase runtime QA artifact; internal solver steps may change, but they must resolve into this IR before rendering or QA. LayoutIR records:
 
 - layout engine used;
 - layout status;
+- page/body bounds, layout type, module containers, and final primitive boxes;
+- spacing constraints for gap and padding values;
+- distribution constraints for row, column, card, and stack spacing;
+- alignment groups for top, bottom, left, right, and center-line checks;
+- fit policy and readability facts for visual slots;
+- actual visual scale, axis distortion, and unused slot space;
+- unresolved overflow facts before render;
 - available, minimum, and preferred main-axis budgets;
 - primitive taxonomy and support level;
 - min/preferred/max/final sizes;
 - shrink diagnostics;
 - fallback or infeasible diagnostics.
 
-Diagnostics augment manifest and render-evidence checks. They do not replace visual-anchor parity, real-anchor requirements, or PowerPoint render evidence.
+Runtime layout QA checks LayoutIR, not screenshot guesses. Spacing, alignment, distribution, readable visual slots, overflow, evidence stretching, scale limits, axis distortion, unused visual slot space, content density, excessive editable-text column height, and forced scaling must report through DSL-mapped feedback issues when the source component is known.
+
+Vertical stack layout follows a static-slide equivalent of web `space-between`: in normal multi-column modules the first content block stays on the body-slot top edge, the last content block reaches the body-slot bottom edge, and extra height becomes internal distribution gap instead of bottom slack.
+
+Column layout is evidence-aware. For normal two-column and three-column layouts, source-image aspect ratio can raise a module's preferred width so the planner gives wide evidence more horizontal room before reporting blank-space QA. If the adaptive pass still produces excessive stack gaps, `layout_internal_gap_excessive` is emitted as DSL-mapped feedback.
+
+Diagnostics augment rendered visual evidence and PowerPoint export checks. They do not replace visual-anchor parity, real-anchor requirements, or PowerPoint render evidence.

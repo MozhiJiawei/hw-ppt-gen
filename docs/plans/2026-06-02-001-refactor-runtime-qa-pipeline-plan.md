@@ -69,7 +69,13 @@ The desired developer experience is closer to browser DevTools plus compiler dia
 | CSS/layout box model | Layout IR with body, module, block, and final boxes |
 | DevTools Elements panel | Page/module/component grouped report view |
 | Incremental build | Per-page pipeline execution where one page failure does not block other pages |
-| Lighthouse/artifact audit | Render/export fallback checks on PPTX, PNG, manifest, brief, and visible text |
+| Lighthouse/artifact audit | Render/export fallback checks on PPTX, PNG evidence, render evidence, brief, and visible text |
+
+## Runtime Error Gate
+
+Runtime QA has four delivery gates: DSL input, measurement, layout, and render/export. Every issue with `severity = "error"` is blocking. A generated deck is not acceptable until all error-level issues from all four layers have been repaired and the affected layer plus downstream layers have been rerun cleanly.
+
+Visual review and content review are additive quality checks. They may find additional problems, but they must not waive or downgrade a runtime QA error. DSL-mapped errors should be fixed at the DSL or source-content level; artifact-only render/export errors should be fixed in the produced PPTX/export path.
 
 The design should support IR dumps for debugging, such as:
 
@@ -131,7 +137,7 @@ It should not become a broad text-quality, style, or implementation-contract che
 | `dsl_page_missing_body` | Content page is missing `bodyDsl`. | The page has no body input for the downstream pipeline. | Page-level |
 | `dsl_body_not_compilable` | `bodyDsl` cannot compile into a render model. | The AI-generated body input cannot be consumed by measure/layout. | DSL target when available, otherwise page-level |
 | `dsl_real_anchor_missing` | Compiled body has no real visual anchor. | The page lacks the core visual object required by downstream visual measurement/layout. | DSL layout/root target |
-| `dsl_source_trace_missing` | Real anchor lacks required traceability such as `id`, `source`, or `claim`. | Manifest/render evidence cannot establish a reliable evidence chain. | DSL component target |
+| `dsl_source_trace_missing` | Real anchor lacks required traceability such as `id`, `source`, or `claim`. | Render evidence cannot establish a reliable evidence chain. | DSL component target |
 
 ### Explicitly Excluded From Runtime DSL QA
 
@@ -231,14 +237,14 @@ This layer is intentionally not DSL-indexed. It reports at deck, slide, or artif
 
 | code | Check | Failure Meaning | Target |
 |------|-------|-----------------|--------|
-| `render_evidence_missing` | Required PNG export directory or render manifest is missing. | There is no final COM/export evidence for delivery review. | Artifact-level |
+| `render_evidence_missing` | Required PNG export directory or render evidence is missing. | There is no final COM/export evidence for delivery review. | Artifact-level |
 | `render_evidence_incomplete` | Exported PNG count does not match PPT slide count. | COM export evidence is incomplete. | Artifact-level |
 | `render_animation_forbidden` | PPTX XML contains animation timing/anim nodes. | Final deck contains forbidden animation. | Deck/slide-level |
 | `render_transition_forbidden` | PPTX XML contains slide or presentation transition nodes. | Final deck contains forbidden transitions. | Deck/slide-level |
 | `render_text_style_invalid` | PPTX XML text runs contain invalid font size, font face, color, or 8-digit ARGB. | Final text style violates Huawei delivery constraints. | Slide-level |
 | `render_shape_style_invalid` | PPTX XML shapes contain invalid fill color, line color, or line width. | Final shape style violates Huawei delivery constraints. | Slide-level |
-| `render_visual_manifest_invalid` | Visual manifest is missing, invalid JSON, structurally invalid, or contains unrendered entries. | Final visual evidence chain is incomplete. | Artifact/slide-level |
-| `render_visual_manifest_mismatch` | Visual manifest and plan disagree on id, kind, template, or renderer. | Final rendered visuals do not match planned visual evidence. | Slide-level |
+| `render_visual_evidence_invalid` | Render evidence is missing, structurally invalid, or contains unrendered entries. | Final visual evidence chain is incomplete. | Artifact/slide-level |
+| `render_visual_evidence_mismatch` | Render evidence and plan disagree on id, kind, template, or renderer. | Final rendered visuals do not match planned visual evidence. | Slide-level |
 | `render_placeholder_present` | Visible text contains TODO, TBD, Lorem, `待补充`, `XX`, or similar placeholders. | Final deck still contains unfinished content. | Slide-level |
 | `render_brief_visible_text_mismatch` | Required brief-backed title, title note, section, summary, or TOC text is missing/mismatched in visible text. | Final deck content does not match the delivery brief. | Slide-level |
 
@@ -250,7 +256,7 @@ This layer is intentionally not DSL-indexed. It reports at deck, slide, or artif
 | Large-shape overlap and sparse-card aesthetics | Future final-quality expansion |
 | English/CJK language ratio rules | Future content-quality discussion |
 | Fixed chrome drift thresholds for title, summary, and section indicator | Future final-quality expansion |
-| Image contain area / aspect-ratio precision checks | Future manifest/image evidence expansion |
+| Image contain area / aspect-ratio precision checks | Future render/image evidence expansion |
 | Highlight explanation and score-basis visible explanation | Future semantic-quality discussion |
 
 ---
@@ -423,7 +429,7 @@ scripts/smoke/qa/
 
 **Files:**
 - Create: `scripts/pptx/qa/layout_checks.js`
-- Modify: `scripts/pptx/hw_visual_anchor_slide.js` only if needed to expose layout records before render-side manifest serialization.
+- Modify: `scripts/pptx/hw_visual_anchor_slide.js` only if needed to expose layout records before render-side evidence collection.
 - Test: `scripts/smoke/qa/test_layout_runtime_checks.js`
 
 **Approach:**
@@ -446,24 +452,24 @@ scripts/smoke/qa/
 
 **Goal:** Add deck/slide/artifact-level final quality diagnostics without DSL mapping.
 
-**Requirements:** `render_evidence_missing`, `render_evidence_incomplete`, `render_animation_forbidden`, `render_transition_forbidden`, `render_text_style_invalid`, `render_shape_style_invalid`, `render_visual_manifest_invalid`, `render_visual_manifest_mismatch`, `render_placeholder_present`, `render_brief_visible_text_mismatch`.
+**Requirements:** `render_evidence_missing`, `render_evidence_incomplete`, `render_animation_forbidden`, `render_transition_forbidden`, `render_text_style_invalid`, `render_shape_style_invalid`, `render_visual_evidence_invalid`, `render_visual_evidence_mismatch`, `render_placeholder_present`, `render_brief_visible_text_mismatch`.
 
 **Files:**
 - Create: `scripts/pptx/qa/render_export_checks.js`
 - Test: `scripts/smoke/qa/test_render_export_runtime_checks.js`
 
 **Approach:**
-- Treat PPTX XML, COM-exported PNG files, render manifest, plan, brief, and visible text as artifact inputs.
+- Treat PPTX XML, COM-exported PNG files, render evidence, plan, brief, and visible text as artifact inputs.
 - Report only deck, slide, or artifact targets.
 - Do not attempt DSL/source mapping in this layer.
-- Allow intentional duplication of earlier style and manifest checks because this layer proves final artifact truth.
+- Allow intentional duplication of earlier style and render-evidence checks because this layer proves final artifact truth.
 
 **Test scenarios:**
-- Error path: missing export directory or manifest reports `render_evidence_missing`.
+- Error path: missing export directory or render evidence reports `render_evidence_missing`.
 - Error path: mismatched PNG count reports `render_evidence_incomplete`.
 - Error path: animation or transition XML reports the corresponding forbidden-motion issue.
 - Error path: invalid text or shape style in XML reports slide-level style issues.
-- Error path: invalid or mismatched manifest reports manifest issues without DSL target.
+- Error path: invalid or mismatched render evidence reports artifact-only issues without DSL target.
 - Error path: placeholder or brief-visible-text mismatch reports slide-level content issues.
 
 ---

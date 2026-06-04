@@ -31,6 +31,13 @@ const report = runRuntimeQaPipeline({
       dsl: primitive.dsl,
       status: page.pageId === "measure-failed" && primitive.identity.componentId === "main_evidence" ? "failed" : "ok",
       measureSupport: "measured",
+      minSize: { w: 2.1, h: 1.4 },
+      preferredSize: { w: 3, h: 2 },
+      maxUsefulSize: { w: 3.9, h: 2.6 },
+      resizePolicy: primitive.identity.blockType === "text" ? "shrink_text" : "preserve_aspect",
+      resizeLimits: primitive.identity.blockType === "text"
+        ? { preserveAspect: false, textScale: { min: 1, max: 1 } }
+        : { preserveAspect: true, uniformScale: { min: 0.7, max: 1.3 } },
       bounds: page.pageId === "measure-failed" && primitive.identity.componentId === "main_evidence" ? { w: 0, h: 0 } : { w: 3, h: 2 },
       measurement: page.pageId === "measure-failed" && primitive.identity.componentId === "main_evidence"
         ? { ok: false, error: "PowerPoint COM failed in artifact fixture." }
@@ -142,10 +149,10 @@ function writeDslCaseMatrix(outputDir) {
     },
     {
       id: "supporting-only",
-      purpose: "AI 用表格/文本冒充视觉证据，编译失败同时报告真实锚点缺失。",
+      purpose: "AI 用表格/文本冒充模块视觉证据，compile 层以 dsl_module_real_anchor_missing 记录真实锚点缺失。",
       bodyDsl: SUPPORTING_ONLY_BODY_DSL,
-      expectedCodes: ["dsl_body_not_compilable", "dsl_real_anchor_missing"],
-      check: "runDslInputChecks sees only supporting/text primitives and emits dsl_real_anchor_missing.",
+      expectedCodes: ["dsl_body_not_compilable"],
+      check: "runDslInputChecks keeps per-module real-anchor failure nested under compilerIssues.",
       result: runDslInputChecks({ pageIndex: 2, bodyDsl: SUPPORTING_ONLY_BODY_DSL, dslScope: scope }),
     },
     {

@@ -6,8 +6,9 @@ function layoutModuleStack(area = {}, blocks = [], flow = "top_bottom", options 
   const visibleBlocks = blocks.filter(Boolean);
   const gap = Number(options.blockGap ?? 0.12);
   const horizontal = flow === "left_right" || flow === "right_left";
-  premeasurePrimitives(visibleBlocks, area, options);
-  const measures = visibleBlocks.map((block) => measurePrimitive(block, area, options));
+  const measures = Array.isArray(options.premeasuredMeasures)
+    ? options.premeasuredMeasures
+    : measureStackPrimitives(area, visibleBlocks, options);
   const hardMeasure = measures.find((measure) => (measure.diagnostics || []).some((diag) => diag.severity === "error"));
   const fallbackMeasure = measures.find((measure) => measure.primitive.measureSupport === MEASURE_SUPPORT.LEGACY_FALLBACK);
   const unsupportedMeasure = measures.find((measure) => measure.primitive.measureSupport === MEASURE_SUPPORT.UNSUPPORTED);
@@ -43,8 +44,53 @@ function layoutModuleStack(area = {}, blocks = [], flow = "top_bottom", options 
   if (!visibleBlocks.length) {
     return { status: "empty", usedFallback: false, flow, measures: [], areas: [], diagnostics: [] };
   }
-  if (horizontal) return layoutHorizontal(area, visibleBlocks, measures, flow, gap);
-  return layoutVertical(area, visibleBlocks, measures, flow, gap);
+  const layoutFn = horizontal ? layoutHorizontal : layoutVertical;
+  let result = layoutFn(area, visibleBlocks, measures, flow, gap);
+  result = refreshLayoutMeasurements(area, visibleBlocks, result, layoutFn, flow, gap, options);
+  return result;
+}
+
+function measureStackPrimitives(area = {}, blocks = [], options = {}) {
+  const visibleBlocks = blocks.filter(Boolean);
+  premeasurePrimitives(visibleBlocks, area, options);
+  return visibleBlocks.map((block) => ({
+    ...measurePrimitive(block, area, options),
+    measurementArea: roundRect(area),
+  }));
+}
+
+function refreshLayoutMeasurements(area = {}, blocks = [], result = {}, layoutFn, flow, gap, options = {}) {
+  if (typeof options.measureOnDemand !== "function") return result;
+  if (!["ok", "empty"].includes(result.status) || !Array.isArray(result.areas) || !result.areas.length) return result;
+  const nextMeasures = [];
+  let changed = false;
+  blocks.forEach((block, index) => {
+    const current = result.measures[index];
+    const constraintBox = result.areas[index];
+    const next = options.measureOnDemand(block, constraintBox, {
+      index,
+      currentMeasure: current,
+      phase: "layout",
+    }) || current;
+    nextMeasures[index] = next;
+    if (next !== current) changed = true;
+  });
+  if (!changed) return result;
+  const refreshed = layoutFn(area, blocks, nextMeasures, flow, gap);
+  refreshed.diagnostics = [
+    ...(result.diagnostics || []),
+    diagnostic(
+      "layout_measurement_refreshed",
+      "info",
+      "Layout requested additional measurement facts for final constraint boxes before producing final boxes.",
+      { refreshed_count: nextMeasures.filter(Boolean).length }
+    ),
+    ...(refreshed.diagnostics || []),
+  ];
+  refreshed.measurementRefresh = {
+    count: nextMeasures.filter(Boolean).length,
+  };
+  return refreshed;
 }
 
 function layoutVertical(area, blocks, measures, flow, gap) {
@@ -150,7 +196,32 @@ function layoutVertical(area, blocks, measures, flow, gap) {
     }
   } else if (preferredTotal < available) {
     const growable = chooseGrowable(measures);
-    if (growable >= 0) sizes[growable] += available - preferredTotal;
+    if (growable >= 0) {
+      const max = Number(measures[growable].maxUsefulSize?.h || sizes[growable]);
+      sizes[growable] += Math.min(available - preferredTotal, Math.max(0, max - sizes[growable]));
+    }
+  }
+
+  const usedHeight = sum(sizes) + effectiveGap * gapCount;
+  const remainingSlack = Math.max(0, Number(area.h || 0) - usedHeight);
+  if (gapCount > 0 && remainingSlack > 0.001) {
+    effectiveGap += remainingSlack / gapCount;
+    const gapDetail = { target: firstDslTarget(measures), gap: round(effectiveGap), slack_h: round(remainingSlack) };
+    if (remainingSlack > 1.1 || effectiveGap > 0.85) {
+      diagnostics.push(diagnostic(
+        "layout_internal_gap_excessive",
+        "warning",
+        "Column content has excessive internal blank space after adaptive layout; add content, add a real visual, change layout, or split the page.",
+        gapDetail
+      ));
+    } else {
+      diagnostics.push(diagnostic(
+        "layout_stack_gap_expand",
+        "info",
+        "Module block gaps were expanded so the stack aligns to both top and bottom edges.",
+        gapDetail
+      ));
+    }
   }
 
   const orderedSizes = flow === "bottom_top" ? [...sizes].reverse() : sizes;
@@ -168,6 +239,7 @@ function layoutVertical(area, blocks, measures, flow, gap) {
     available_main: round(available),
     min_total: round(minTotal),
     preferred_total: round(preferredTotal),
+    block_gaps: Array.from({ length: gapCount }, () => round(effectiveGap)),
     measures,
     areas,
     diagnostics,
@@ -311,4 +383,5 @@ function firstDslTarget(measures = []) {
 
 module.exports = {
   layoutModuleStack,
+  measureStackPrimitives,
 };

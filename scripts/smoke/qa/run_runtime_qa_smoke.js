@@ -13,6 +13,7 @@
   "./test_render_export_runtime_checks",
   "./test_runtime_pipeline_page_isolation",
   "./test_runtime_qa_artifacts",
+  "./test_content_slide_runtime_qa_gate",
   "./test_no_legacy_qa_references",
 ].forEach((testPath) => require(testPath));
 

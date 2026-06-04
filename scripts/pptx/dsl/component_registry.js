@@ -24,6 +24,14 @@ const FAMILY = Object.freeze({
   INTERNAL: "internal",
 });
 
+const PROOF_CLASS = Object.freeze({
+  SOURCE_EVIDENCE: "source_evidence",
+  GENERATED_DRAWING: "generated_drawing",
+  SUPPORTING_READOUT: "supporting_readout",
+  TEXT: "text",
+  NONE: "none",
+});
+
 const FORBIDDEN_PROPS = Object.freeze(new Set([
   "style",
   "x",
@@ -93,12 +101,14 @@ const COMPONENTS = Object.freeze([
     }],
     useWhen: "Use when a source image, figure crop, UI capture, or paper visual is the module proof.",
     avoidWhen: "Do not use for generated diagrams or decorative images.",
-    budgetHints: ["Evidence preserves aspect ratio; reduce nearby prose when the source is tall or dense."],
+    budgetHints: ["Evidence preserves aspect ratio; reduce nearby prose or give the evidence a larger slot when the source is tall or dense."],
+    repairHints: ["Keep the same source evidence identity during QA repair; improve layout by reallocating slot, trimming neighbors, or adding source-grounded text around it."],
   }),
   visualComponent("EvidenceChart", "Evidence", "source_chart", {
     description: "Source-backed chart evidence with preserved aspect ratio.",
     requiredProps: ["id", "title", "claim", "source"],
     propEnums: { fit: ["contain"] },
+    repairHints: ["Keep the same source chart identity during QA repair; improve layout by reallocating slot, trimming neighbors, or adding source-grounded text around it."],
   }),
   supportingComponent("KpiCards", "Quantity", "data_cards", {
     description: "Compact KPI card row used as a secondary readout next to evidence.",
@@ -136,7 +146,7 @@ const COMPONENTS = Object.freeze([
       tag: "InsightText",
       props: { body: ["判断：核心收益来自并行验证。"], emphasis: ["并行验证"], maxLines: 3 },
     }],
-    budgetHints: ["Use 2-5 short claim lines; move dense comparisons into Table or KpiCards."],
+    budgetHints: ["Use 2-5 short claim lines; use KpiCards only for real metrics and Table only for real row/column comparisons."],
   }),
   escapeComponent("Visual", {
     description: "Generated drawing entry for registered kind/template draw functions.",
@@ -147,12 +157,15 @@ const COMPONENTS = Object.freeze([
         id: "official_process",
         title: "流程",
         claim: "流程来自官方 draw function。",
+        source: { path: ".tmp/deck/source.png", caption: "Source evidence" },
         draw: "Sequence/process",
         model: { steps: [{ id: "a", label: "输入" }, { id: "b", label: "输出" }] },
       },
     }],
-    budgetHints: ["Use only official draw ids from visual template contracts."],
-    repairHints: ["If draw is rejected, choose one of the official kind/template pairs from the component detail."],
+    useWhen: "Use when no readable source figure/chart exists, or when a generated drawing clarifies a mechanism next to preserved source evidence.",
+    avoidWhen: "Do not replace an authored EvidenceFigure/EvidenceChart with Visual only to satisfy layout feedback; preserve the source evidence and reflow around it.",
+    budgetHints: ["Use only official draw ids from visual template contracts; generated drawing is secondary to source evidence."],
+    repairHints: ["If draw is rejected, choose an official kind/template pair; if the module already has source evidence, keep that evidence and use Visual only as supporting explanation."],
   }),
   internalComponent("RawVisualSpec", {
     description: "Internal visual-spec carrier used by DSL runtime tests and future migrations.",
@@ -251,6 +264,7 @@ function layoutComponent(tag, options) {
 
 function visualComponent(tag, kind, template, options = {}) {
   const visual = getVisualTemplateContract(kind, template);
+  const proofClass = kind === "Evidence" ? PROOF_CLASS.SOURCE_EVIDENCE : PROOF_CLASS.GENERATED_DRAWING;
   return baseComponent(tag, FAMILY.VISUAL_ANCHOR, {
     ...defaultVisualText(kind, template),
     ...options,
@@ -261,6 +275,8 @@ function visualComponent(tag, kind, template, options = {}) {
       renderer: visual?.renderer,
       measureSupport: visual?.measureSupport || MEASURE_SUPPORT.MEASURED,
       resizePolicy: visual?.resizePolicy || RESIZE_POLICY.FLEXIBLE,
+      proofClass,
+      proofPriority: proofClass === PROOF_CLASS.SOURCE_EVIDENCE ? 100 : 70,
     },
     layoutIntent: {
       ...COMMON_LAYOUT_INTENT,
@@ -281,6 +297,8 @@ function supportingComponent(tag, kind, template, options = {}) {
       renderer: visual?.renderer,
       measureSupport: visual?.measureSupport || MEASURE_SUPPORT.MEASURED,
       resizePolicy: visual?.resizePolicy || RESIZE_POLICY.FLEXIBLE,
+      proofClass: PROOF_CLASS.SUPPORTING_READOUT,
+      proofPriority: 30,
     },
     layoutIntent: {
       ...COMMON_LAYOUT_INTENT,
@@ -308,6 +326,16 @@ function escapeComponent(tag, options = {}) {
     avoidWhen: "Do not use for arbitrary code or unregistered draw functions.",
     repairHints: ["Pick an official draw id and provide model data matching the generated visual schema."],
     ...options,
+    visual: {
+      kind: "Generated",
+      template: "official_draw",
+      anchorEligibility: ANCHOR_ELIGIBILITY.REAL_ANCHOR,
+      measureSupport: MEASURE_SUPPORT.MEASURED,
+      resizePolicy: RESIZE_POLICY.FLEXIBLE,
+      proofClass: PROOF_CLASS.GENERATED_DRAWING,
+      proofPriority: 70,
+      ...(options.visual || {}),
+    },
   });
 }
 
@@ -492,6 +520,7 @@ module.exports = {
   FAMILY,
   FORBIDDEN_PROPS,
   MATURITY,
+  PROOF_CLASS,
   defaultVisualSpecFor,
   getComponentContract,
   listAiComponents,

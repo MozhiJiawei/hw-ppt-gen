@@ -16,8 +16,11 @@ const ALLOWED_FONT_FACE_SET = new Set(ALLOWED_FONT_FACES);
 
 function runRenderExportChecks(artifacts = {}) {
   const issues = [];
-  if (!Array.isArray(artifacts.exportedPngs) || !artifacts.renderManifest) {
-    issues.push(issue("render_evidence_missing", "Required PNG export evidence or render manifest is missing.", { artifact: "render_evidence" }));
+  const requiresRenderEvidence = artifacts.requireRenderEvidence === true
+    || (Array.isArray(artifacts.contentSlides) && artifacts.contentSlides.length > 0)
+    || (Array.isArray(artifacts.planVisuals) && artifacts.planVisuals.length > 0);
+  if (!Array.isArray(artifacts.exportedPngs) || (requiresRenderEvidence && !artifacts.renderEvidence)) {
+    issues.push(issue("render_evidence_missing", "Required PNG export evidence or rendered visual evidence is missing.", { artifact: "render_evidence" }));
   } else if (Number(artifacts.slideCount || 0) && artifacts.exportedPngs.length !== Number(artifacts.slideCount)) {
     issues.push(issue("render_evidence_incomplete", "Exported PNG count does not match PPT slide count.", {
       details: { expected: artifacts.slideCount, actual: artifacts.exportedPngs.length },
@@ -33,11 +36,11 @@ function runRenderExportChecks(artifacts = {}) {
     if (shapeStyleInvalid(xml)) issues.push(issue("render_shape_style_invalid", "PPTX XML contains invalid shape style.", { slide: entry.slide }));
   }
 
-  if (artifacts.renderManifest && !manifestValid(artifacts.renderManifest, artifacts)) {
-    issues.push(issue("render_visual_manifest_invalid", "Visual manifest is missing, invalid, or contains unrendered entries.", { artifact: "visual_manifest" }));
+  if (artifacts.renderEvidence && !renderEvidenceValid(artifacts.renderEvidence, artifacts)) {
+    issues.push(issue("render_visual_evidence_invalid", "Rendered visual evidence is missing, invalid, or contains unrendered entries.", { artifact: "render_evidence" }));
   }
-  if (artifacts.renderManifest && Array.isArray(artifacts.planVisuals) && manifestMismatch(artifacts.renderManifest, artifacts.planVisuals)) {
-    issues.push(issue("render_visual_manifest_mismatch", "Visual manifest and plan disagree on id, kind, or template.", { artifact: "visual_manifest" }));
+  if (artifacts.renderEvidence && Array.isArray(artifacts.planVisuals) && renderEvidenceMismatch(artifacts.renderEvidence, artifacts.planVisuals)) {
+    issues.push(issue("render_visual_evidence_mismatch", "Rendered visual evidence and plan disagree on id, kind, or template.", { artifact: "render_evidence" }));
   }
 
   for (const [slide, text] of Object.entries(artifacts.visibleTextBySlide || {})) {
@@ -75,17 +78,17 @@ function shapeStyleInvalid(xml) {
   return widths.some((width) => width !== STANDARD_LINE_WIDTH_EMU);
 }
 
-function manifestValid(manifest = {}, artifacts = {}) {
-  if (!Array.isArray(manifest.slides) || manifest.slides.length === 0) return false;
-  if (!manifest.slides.every(isVisualManifestEntry)) return false;
+function renderEvidenceValid(renderEvidence = {}, artifacts = {}) {
+  if (!Array.isArray(renderEvidence.slides) || renderEvidence.slides.length === 0) return false;
+  if (!renderEvidence.slides.every(isRenderedVisualEvidenceEntry)) return false;
   const contentSlides = Array.isArray(artifacts.contentSlides) ? artifacts.contentSlides : [];
-  return contentSlides.every((slide) => manifest.slides.some((entry) => {
+  return contentSlides.every((slide) => renderEvidence.slides.some((entry) => {
     return Number(entry.slide ?? entry.page) === Number(slide)
       && isRealVisualAnchorEntry(entry);
   }));
 }
 
-function isVisualManifestEntry(entry) {
+function isRenderedVisualEvidenceEntry(entry) {
   const contract = entry && typeof entry === "object" && !Array.isArray(entry)
     ? getVisualTemplateContract(entry.kind, entry.template)
     : null;
@@ -109,9 +112,9 @@ function isRealVisualAnchorEntry(entry = {}) {
     && entry.renderer === contract.renderer;
 }
 
-function manifestMismatch(manifest = {}, planVisuals = []) {
+function renderEvidenceMismatch(renderEvidence = {}, planVisuals = []) {
   return planVisuals.some((planned) => {
-    const entry = (manifest.slides || []).find((item) => {
+    const entry = (renderEvidence.slides || []).find((item) => {
       const sameId = item.visual_component_id === planned.id || item.id === planned.id;
       const sameSlide = planned.slide === undefined || Number(item.slide ?? item.page) === Number(planned.slide);
       return sameId && sameSlide;

@@ -49,6 +49,9 @@ function runDslInputChecks(page = {}) {
 
   const primitives = ir.compileIr?.visiblePrimitives || [];
   const anchors = primitives.filter((primitive) => primitive.identity.blockType === "visual_anchor");
+  const contaminatedText = primitives
+    .filter((primitive) => primitive.identity.blockType === "text")
+    .flatMap((primitive) => visibleTextMetaContamination(primitive));
 
   for (const anchor of anchors) {
     const visual = anchor.primitive?.visual_anchor || {};
@@ -63,12 +66,53 @@ function runDslInputChecks(page = {}) {
     }
   }
 
+  for (const contamination of contaminatedText) {
+    issues.push(issue("dsl_visible_text_meta_contamination", page, {
+      target: contamination.target,
+      message: "Visible PPT text contains generation, QA-repair, or cross-page presentation meta commentary instead of source-grounded business content.",
+      details: {
+        text: contamination.text,
+        matchedPattern: contamination.pattern,
+      },
+      repairs: [
+        "Replace process-meta commentary with the business claim proved by this module's evidence.",
+        "Do not explain that another page contains the source image; place the source evidence here or remove the meta sentence.",
+      ],
+    }));
+  }
+
   return withPhaseResult({
     ok: issues.length === 0,
     dslIr: ir.dslIr,
     compileIr: ir.compileIr,
     issues,
   });
+}
+
+const META_TEXT_PATTERNS = Object.freeze([
+  { name: "cross_page_figure_reference", regex: /\bFigure\s*\d+[\s\S]{0,24}\bPage\s*\d+\b/i },
+  { name: "cross_page_chinese_reference", regex: /(?:原图|源图|证据图)[\s\S]{0,12}(?:Page|第?\s*\d+\s*页|本页|另[一个]页|放大呈现)/i },
+  { name: "summary_process_meta", regex: /\bSummary\b[\s\S]{0,24}(?:压缩|概览|呈现|替代)/i },
+  { name: "repair_rationale_visible", regex: /(?:不替代|保留证据|保留源图|QA|runtime|修复|降级|proof tier|source evidence|generated drawing)/i },
+]);
+
+function visibleTextMetaContamination(primitive = {}) {
+  const body = primitive.primitive?.body;
+  const lines = Array.isArray(body) ? body : [body].filter(Boolean);
+  const out = [];
+  for (const line of lines) {
+    const text = String(line || "").trim();
+    if (!text) continue;
+    const match = META_TEXT_PATTERNS.find((entry) => entry.regex.test(text));
+    if (match) {
+      out.push({
+        text,
+        pattern: match.name,
+        target: primitive.dsl || primitive.source || primitive.sourceComponent,
+      });
+    }
+  }
+  return out;
 }
 
 function withPhaseResult(result = {}) {

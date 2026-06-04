@@ -27,7 +27,7 @@ const bodyDsl = parseSlideBodyDsl(`<Slide>
     </Module>
     <Module title="B">
       <EvidenceChart id="wide_b" title="wide B" claim="wide evidence leaves empty vertical slot." source={source} fit="contain" />
-      <InsightText body={["结论：运行态 QA 应该阻断。"]} />
+      <InsightText body={["结论：证据不足时不能留下大段空白。"]} />
     </Module>
     <Module title="C">
       <EvidenceChart id="wide_c" title="wide C" claim="wide evidence leaves empty vertical slot." source={source} fit="contain" />
@@ -72,7 +72,7 @@ const bodyDsl = parseSlideBodyDsl(${JSON.stringify(`
     </Module>
     <Module title="B">
       <EvidenceChart id="wide_b" title="wide B" claim="wide evidence leaves empty vertical slot." source={source} fit="contain" />
-      <InsightText body={["结论：运行态 QA 应该阻断。"]} />
+      <InsightText body={["结论：证据不足时不能留下大段空白。"]} />
     </Module>
     <Module title="C">
       <EvidenceChart id="wide_c" title="wide C" claim="wide evidence leaves empty vertical slot." source={source} fit="contain" />

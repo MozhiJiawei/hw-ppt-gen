@@ -110,6 +110,8 @@ The visual proof hierarchy is semantic, not cosmetic:
 
 When the first authored DSL uses source evidence for a module, keep that evidence component through QA repair. Improve layout by reallocating body slot, reducing neighboring prose/readouts, or adding source-grounded text; use generated drawing only when it preserves or explains the same evidence chain.
 
+Visible `InsightText` lines are final PPT content, not repair notes. They must state business conclusions, evidence boundaries, or decision criteria. Do not write process-meta text such as QA status, "Summary only", "not replacing source image", or "Figure X is enlarged on another page".
+
 As of this contract, generated drawing is discovered as draw capabilities, not as one JSX tag per drawing. If a new official draw template is added to `scripts/pptx/contracts/visual_templates.js`, it should automatically appear in the first-level draw index and receive a second-level detail file unless explicitly hidden as internal.
 
 Examples of generated drawing:

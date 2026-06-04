@@ -48,6 +48,31 @@ assert.equal(multipleRoots.issues[0].target.sourceSpan.line, 2);
 assert(multipleRoots.issues[0].target.codeFrame.includes("<TwoColumn"));
 assertCliForAll(multipleRoots);
 
+const metaContaminatedBodyDsl = `
+<Slide>
+  <TwoColumn>
+    <Module title="机制证据">
+      <EvidenceFigure id="fig2" title="Figure 2" claim="Figure 2 支撑机制判断。" source={source} />
+      <InsightText body={metaBody} />
+    </Module>
+    <Module title="结论">
+      <EvidenceFigure id="secondary_evidence" title="补充来源图" claim="补充来源图让结论模块满足真实锚点规则。" source={source} fit="contain" />
+      <InsightText body={body} />
+    </Module>
+  </TwoColumn>
+</Slide>`;
+const metaScope = {
+  ...scope,
+  metaBody: ["保留证据：Figure 2 原图在 Page 6 放大呈现。", "概览表达：Summary 只压缩机制顺序，不替代源图。"],
+};
+const metaContaminated = runDslInputChecks({ pageIndex: 8, bodyDsl: metaContaminatedBodyDsl, dslScope: metaScope });
+assert(metaContaminated.issues.some((issue) => issue.code === "dsl_visible_text_meta_contamination"));
+const contaminationIssue = metaContaminated.issues.find((issue) => issue.code === "dsl_visible_text_meta_contamination");
+assert(contaminationIssue.target.selector.includes("InsightText"));
+assert(contaminationIssue.details.text.includes("Figure 2"));
+assert(contaminationIssue.repairs.join(" ").includes("business claim"));
+assertCliForAll(metaContaminated);
+
 assert.deepStrictEqual(
   codes(runDslInputChecks({ pageIndex: 2, bodyDsl: SUPPORTING_ONLY_BODY_DSL, dslScope: scope })),
   ["dsl_body_not_compilable"]
@@ -95,5 +120,36 @@ assert(cliOutput.includes("Selector: Slide > TwoColumn:nth-child(1) > Module:nth
 assert(cliOutput.includes("Source: line 5, column 7"), cliOutput);
 assert(cliOutput.includes("Code: <EvidenceFigure"), cliOutput);
 assert(!/^\s+at\s+\S+/m.test(cliOutput), cliOutput);
+
+const metaCli = spawnSync(process.execPath, ["-e", `
+const { createHuaweiDeck } = require("./scripts/pptx/hw_pptx_helpers");
+const { addVisualAnchorContentSlide } = require("./scripts/pptx/hw_visual_anchor_slide");
+const { parseSlideBodyDsl } = require("./scripts/pptx/dsl/jsx_dsl");
+const bodyDsl = parseSlideBodyDsl(${JSON.stringify(metaContaminatedBodyDsl)}, {
+  source: { path: ".tmp/source.png", caption: "source" },
+  body: ["判断：真实生成入口必须阻断正文元话语。"],
+  metaBody: ["保留证据：Figure 2 原图在 Page 6 放大呈现。"],
+}).bodyDsl;
+const pptx = createHuaweiDeck({ title: "DSL meta contamination smoke" });
+try {
+  addVisualAnchorContentSlide(pptx, {
+    page: "01",
+    title: "DSL meta contamination",
+    sections: ["QA"],
+    currentSection: "QA",
+    summary: { body: [{ label: "检查", text: "DSL input QA must reject visible process meta commentary." }] },
+    bodyDsl,
+  });
+} catch (error) {
+  console.error(error.message || String(error));
+  process.exit(1);
+}
+`], { cwd: process.cwd(), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+const metaCliOutput = `${metaCli.stdout || ""}${metaCli.stderr || ""}`;
+assert.notEqual(metaCli.status, 0, "real content slide CLI path should fail on visible process meta text");
+assert(metaCliOutput.includes("dsl_input:dsl_visible_text_meta_contamination"), metaCliOutput);
+assert(metaCliOutput.includes("Visible PPT text contains generation"), metaCliOutput);
+assert(metaCliOutput.includes("Selector: Slide > TwoColumn:nth-child(1) > Module:nth-child(1) > InsightText:nth-child(2)"), metaCliOutput);
+assert(!/^\s+at\s+\S+/m.test(metaCliOutput), metaCliOutput);
 
 console.log("Runtime QA DSL input checks passed.");

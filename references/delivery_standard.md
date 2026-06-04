@@ -10,6 +10,7 @@ This is the standard for a finished Huawei-style deck. Use it before planning or
 - Generated visuals are secondary. Use them only when the source has no usable evidence image, when they annotate preserved source evidence, or when they replace long prose with one clear visual explanation.
 - Proof priority is explicit: `source_evidence > generated_drawing > supporting_readout > text`. If the first Body DSL draft selects source evidence for a module, repair keeps that source evidence identity as the primary proof.
 - Text serves evidence. It states the conclusion the evidence proves and the boundary that prevents overclaiming.
+- Visible text is user-facing business content only. Do not write generation-process commentary, QA repair rationale, or cross-page excuses such as "the source image is enlarged on another page" into the slide body.
 - High density means readable evidence plus compact conclusions, not long paragraphs or empty cards.
 - QA repair preserves meaning before shape. When fixing density, spacing, alignment, overflow, or readability feedback, keep the module's semantic anchor if it still carries the claim. For source evidence, repair by giving it more slot, reducing nearby prose/supporting readouts, and adding source-grounded text around it. Generated drawing may explain the same chain, but it does not downgrade the original source evidence.
 

@@ -70,7 +70,7 @@ function renderable(tag, componentId, expected, componentMarkup, scope = {}, opt
       fixtureText: [
         `${tag} 组件应通过 JSX-like DSL 编译、渲染、测量。`,
         "检查：组件区域要保留真实锚点、解释文本和可测量边界。",
-        "结论：review deck 不能依赖空白或 QA 绕过。"
+        "结论：交付页面不能依赖空白或结构绕过。"
       ],
       emphasis: ["组件", "测量"],
     }, {

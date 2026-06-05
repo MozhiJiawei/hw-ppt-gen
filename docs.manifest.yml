@@ -9,5 +9,5 @@ nav:
   - title: 使用方式
     path: docs/usage.md
   - title: 架构概览
-    path: docs/index.md
-status: bootstrap
+    path: docs/architecture_design.md
+status: active

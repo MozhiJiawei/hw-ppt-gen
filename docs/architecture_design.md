@@ -1,4 +1,4 @@
-# Architecture Design
+# 架构概览
 
 This is the development-time architecture document for the Huawei PPT generation repository. It explains the repository as a system first, then attaches constraints to the architecture elements that own them.
 

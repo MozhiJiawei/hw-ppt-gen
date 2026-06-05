@@ -55,6 +55,7 @@ npm run smoke
 
 ```text
 forward-tests/huawei-ppt-gen/aegaeon-content-aware-layout/main-agent-prompt.md
+forward-tests/huawei-ppt-gen/tidar-evidence-readability/main-agent-prompt.md
 ```
 
 运行时由人类把 `main-agent-prompt.md` 的内容交给主 agent。主 agent 负责派发独立候选 agent、隔离 judge-only 资料，并把判题结果写回对应 `.tmp/forward-tests/.../<run-id>/judgment.md`。

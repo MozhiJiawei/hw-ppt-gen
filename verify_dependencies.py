@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
+"""Verify external dependencies for huawei-pptx-generator.
+
+This script checks only user/environment prerequisites: Node.js, installed Node
+packages, and the OS-specific PPTX rendering toolchain. Repository files,
+package declarations, generated artifacts, and QA/self-test flows are internal
+health checks and are intentionally outside this dependency check.
+"""
+
 from __future__ import annotations
 
 import argparse
-import json
 import platform
 import shutil
 import subprocess
@@ -60,11 +67,6 @@ def command_version(command: str, args: list[str] | None = None) -> tuple[bool, 
     return True, (result.stdout or result.stderr).strip().splitlines()[0]
 
 
-def load_package_json() -> dict:
-    with (ROOT / "package.json").open("r", encoding="utf-8") as handle:
-        return json.load(handle)
-
-
 def check_node_runtime() -> bool:
     ok = True
     node_ok, node_detail = command_version("node", ["--version"])
@@ -85,38 +87,6 @@ def check_node_runtime() -> bool:
 
 
 def check_node_packages() -> bool:
-    package_json_path = ROOT / "package.json"
-    if not package_json_path.exists():
-        fail_check("node packages", "package.json is missing")
-        return False
-
-    try:
-        declared = load_package_json().get("dependencies", {})
-    except Exception as exc:
-        fail_check("package.json", f"could not parse JSON: {exc}")
-        return False
-
-    ok = True
-    missing_declarations = [name for name in REQUIRED_NODE_PACKAGES if name not in declared]
-    if missing_declarations:
-        fail_check("package.json dependencies", f"missing declarations: {', '.join(missing_declarations)}")
-        ok = False
-    else:
-        pass_check("package.json dependencies", ", ".join(REQUIRED_NODE_PACKAGES))
-
-    lock_versions: dict[str, str] = {}
-    lock_path = ROOT / "package-lock.json"
-    if lock_path.exists():
-        try:
-            lock = json.loads(lock_path.read_text(encoding="utf-8"))
-            packages = lock.get("packages", {})
-            for name in REQUIRED_NODE_PACKAGES:
-                entry = packages.get(f"node_modules/{name}", {})
-                if entry.get("version"):
-                    lock_versions[name] = entry["version"]
-        except Exception as exc:
-            warn_check("package-lock.json", f"could not parse package versions: {exc}")
-
     probe = """
 const packages = process.argv.slice(1);
 for (const name of packages) {
@@ -144,12 +114,8 @@ if (!process.exitCode) console.log("loaded");
         )
         return False
 
-    versions = {
-        name: lock_versions.get(name) or declared.get(name) or "loaded"
-        for name in REQUIRED_NODE_PACKAGES
-    }
-    pass_check("node package imports", ", ".join(f"{name}@{versions.get(name, 'loaded')}" for name in REQUIRED_NODE_PACKAGES))
-    return ok
+    pass_check("node package imports", ", ".join(REQUIRED_NODE_PACKAGES))
+    return True
 
 
 def check_powershell() -> bool:

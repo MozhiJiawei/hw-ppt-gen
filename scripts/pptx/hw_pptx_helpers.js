@@ -525,7 +525,7 @@ function fallbackSummaryLabel(idx) {
 }
 
 function addSummaryRichText(slide, lines, options) {
-  const lineH = Math.min(0.28, (options.h || 0.56) / Math.max(lines.length, 1));
+  const lineH = (options.h || 0.56) / Math.max(lines.length, 1);
   lines.forEach((line, idx) => {
     slide.addText([
       { text: `${line.label}：`, options: { bold: true } },

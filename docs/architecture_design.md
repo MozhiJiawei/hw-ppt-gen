@@ -1,4 +1,4 @@
-# Architecture Design
+# 架构概览
 
 This is the development-time architecture contract for `hw-ppt-gen`.
 

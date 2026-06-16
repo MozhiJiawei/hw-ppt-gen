@@ -15,9 +15,9 @@ Validate the Skill's layout-realization ability after the upstream human-in-the-
 - page titles and title notes;
 - analysis-summary viewpoints;
 - TOC / section structure;
-- parser-derived `contentLayout.type`.
+- parser-derived `bodyLayout.type`.
 
-The candidate-facing prompt is intentionally minimal. It should only point the candidate at the brief and output location; all behavior about brief consumption, layout realization, evidence readability, text compression, module density, Huawei visual consistency, QA, and artifact shape must come from the repository Skill and normal runtime references.
+The candidate-facing prompt is intentionally minimal. It should only point the candidate at the brief and output location; all behavior about brief consumption, layout realization, evidence readability, text compression, module density, Huawei visual consistency, review, and artifact shape must come from the repository Skill and normal runtime references.
 
 ## Candidate-Facing Assets
 
@@ -61,9 +61,8 @@ Expected artifacts are judged after the run, but should be required by the Skill
 
 - generated `.pptx`;
 - deck plan JSON;
-- visual-anchor manifest JSON;
-- exported slide PNGs;
-- hard-QA report;
-- visual-QA notes.
+- exported slide PNGs.
+
+Runtime QA is part of normal deck generation and export. Forward-test judgment should not require the candidate to hand over separate runtime QA reports, render/export QA reports, or visual-review notes. The main agent judges the visible exported PPT images and contamination discipline.
 
 The fixture does not include runtime automation. It only fixes the input, candidate prompt, and judging criteria.

@@ -63,7 +63,6 @@ const BANNED_INTERNAL_TOKENS = [
 const BANNED_RENDERING_TOKENS = [
   "visual_anchor.kind",
   "visual_anchor_renderer",
-  "contentLayout",
   "renderer",
   "expected_renderer",
   "visual_strategy",
@@ -176,7 +175,7 @@ function parseSummaryPage(block) {
   };
 }
 
-function recommendContentLayoutForSummary(summary) {
+function recommendBodyLayoutForSummary(summary) {
   const count = Array.isArray(summary?.body) ? summary.body.length : 0;
   if (count <= 1) {
     return { type: "biased_column", reference: "06 内容 偏分栏", viewpointCount: Math.max(1, count) };
@@ -191,7 +190,7 @@ function buildPptContentBriefPlanContract(parsed) {
   const sections = parsed.sections || [];
   const slides = [];
   if (parsed.summaryPage) {
-    const recommendation = parsed.summaryPage.contentLayoutRecommendation || recommendContentLayoutForSummary(parsed.summaryPage.summary);
+    const recommendation = parsed.summaryPage.bodyLayoutRecommendation || recommendBodyLayoutForSummary(parsed.summaryPage.summary);
     slides.push({
       page: parsed.summaryPage.pageNumber,
       role: "summary",
@@ -199,12 +198,12 @@ function buildPptContentBriefPlanContract(parsed) {
       titleNote: parsed.summaryPage.titleNote,
       summary: parsed.summaryPage.summary,
       sections,
-      contentLayout: { type: recommendation.type },
+      bodyLayout: { type: recommendation.type },
       viewpointCount: recommendation.viewpointCount,
     });
   }
   for (const page of parsed.contentPages || []) {
-    const recommendation = page.contentLayoutRecommendation || recommendContentLayoutForSummary(page.summary);
+    const recommendation = page.bodyLayoutRecommendation || recommendBodyLayoutForSummary(page.summary);
     slides.push({
       page: page.pageNumber,
       role: "content",
@@ -213,7 +212,7 @@ function buildPptContentBriefPlanContract(parsed) {
       summary: page.summary,
       sections,
       currentSection: page.currentSection,
-      contentLayout: { type: recommendation.type },
+      bodyLayout: { type: recommendation.type },
       viewpointCount: recommendation.viewpointCount,
     });
   }
@@ -426,14 +425,14 @@ function parsePptContentBrief(input, options = {}) {
   const metadata = parseMetadata(extractHeadingSection(text, "## Deck Metadata").body);
   const tocItems = parseTocItems(extractHeadingSection(text, "## Table of Contents").body);
   const contentPages = extractContentPages(text).map((page) => {
-    const recommendation = recommendContentLayoutForSummary(page.summary);
+    const recommendation = recommendBodyLayoutForSummary(page.summary);
     return {
       pageNumber: page.pageNumber,
       title: page.title,
       titleNote: page.titleNote,
       currentSection: page.currentSection,
       summary: page.summary,
-      contentLayoutRecommendation: recommendation,
+      bodyLayoutRecommendation: recommendation,
       bodyContent: page.bodyContent,
       referenceImages: page.referenceImages,
       notes: page.notes,
@@ -447,7 +446,7 @@ function parsePptContentBrief(input, options = {}) {
     sections,
     summaryPage: {
       ...summaryPage,
-      contentLayoutRecommendation: recommendContentLayoutForSummary(summaryPage.summary),
+      bodyLayoutRecommendation: recommendBodyLayoutForSummary(summaryPage.summary),
     },
     tocItems,
     contentPages,
@@ -461,14 +460,14 @@ function parsePptContentBrief(input, options = {}) {
       },
       summary: {
         ...summaryPage,
-        contentLayoutRecommendation: recommendContentLayoutForSummary(summaryPage.summary),
+        bodyLayoutRecommendation: recommendBodyLayoutForSummary(summaryPage.summary),
       },
       toc: tocItems.map((item) => ({ title: item.title, description: item.description })),
       contentSlides: contentPages.map((page) => ({
         title: page.title,
         titleNote: page.titleNote,
         summary: page.summary,
-        contentLayoutRecommendation: page.contentLayoutRecommendation,
+        bodyLayoutRecommendation: page.bodyLayoutRecommendation,
         sections,
         currentSection: page.currentSection,
         bodyContent: page.bodyContent,
@@ -517,6 +516,6 @@ if (require.main === module) {
 module.exports = {
   buildPptContentBriefPlanContract,
   parsePptContentBrief,
-  recommendContentLayoutForSummary,
+  recommendBodyLayoutForSummary,
   validatePptContentBrief,
 };

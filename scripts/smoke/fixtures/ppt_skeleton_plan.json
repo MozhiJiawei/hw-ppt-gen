@@ -1,0 +1,87 @@
+{
+  "source": "skeleton fixture",
+  "cover": {
+    "title": "Aegaeon GPU Pooling",
+    "subtitle": "Token-level GPU Pooling 价值评估",
+    "department": "AI 平台云服务技术负责人",
+    "date": "2026.05.30"
+  },
+  "toc": {
+    "title": "目录 CONTENTS",
+    "page": 3,
+    "items": [
+      {
+        "title": "浪费来自市场形态",
+        "note": "证明 GPU 资源来自长尾并发形态。"
+      },
+      {
+        "title": "突破在 token 粒度",
+        "note": "说明 token-level prefill/decoding scaling 绕开 request-level pooling 上限。"
+      },
+      {
+        "title": "价值由生产验证",
+        "note": "说明端到端资源回收与 SLO 边界。"
+      }
+    ]
+  },
+  "sections": [
+    "浪费来自市场形态",
+    "突破在 token 粒度",
+    "价值由生产验证"
+  ],
+  "slides": [
+    {
+      "page": 2,
+      "role": "summary",
+      "title": "Aegaeon GPU Pooling",
+      "titleNote": "面向模型市场长尾与突发并发，以 token-level scaling 将生产 GPU 需求降低 82%。",
+      "summary": {
+        "body": [
+          {
+            "label": "场景",
+            "text": "长尾模型仅贡献少量请求，却占用大量 GPU。"
+          },
+          {
+            "label": "机制",
+            "text": "token 粒度抢占换模，绕开 request-level HOL blocking。"
+          },
+          {
+            "label": "结果",
+            "text": "H20 需求从 1,192 降至 213，未观察到 SLO violation。"
+          }
+        ]
+      },
+      "bodyContent": [
+        "DYNAMIC_BODY_SENTINEL_AEGAEON_SUMMARY must not be rendered."
+      ],
+      "referenceImages": [
+        "DYNAMIC_IMAGE_SENTINEL_AEGAEON_SUMMARY must not be rendered."
+      ]
+    },
+    {
+      "page": 4,
+      "role": "content",
+      "title": "市场型浪费",
+      "titleNote": "长尾与突发并存导致静态 GPU provisioning 不经济。",
+      "currentSection": "浪费来自市场形态",
+      "summary": {
+        "body": [
+          {
+            "label": "长尾",
+            "text": "94.1% 模型只贡献 1.35% 请求。"
+          },
+          {
+            "label": "突发",
+            "text": "低平均负载仍需要为 burst 预留容量。"
+          }
+        ]
+      },
+      "bodyContent": [
+        "DYNAMIC_BODY_SENTINEL_MARKET_WASTE must not be rendered."
+      ],
+      "referenceImages": [
+        "DYNAMIC_IMAGE_SENTINEL_MARKET_WASTE must not be rendered."
+      ]
+    }
+  ]
+}

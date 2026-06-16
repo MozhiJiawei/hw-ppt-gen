@@ -1,0 +1,265 @@
+const { HW_STYLE } = require("../hw_pptx_helpers");
+const fs = require("fs");
+const { collectPremeasurePrimitiveItems, measurePrimitive, premeasurePrimitives } = require("./measure_primitives");
+const { getBlockVisualSpec, modulePrimitives } = require("./content_model");
+
+function fixedBodyLayoutArea(layout, contentTop = HW_STYLE.summary.contentTop) {
+  const bottomPadding = layout.schema.special === "large_visual_with_side_cards" ? 0.35 : 0.17;
+  return {
+    x: HW_STYLE.slide.marginX,
+    y: contentTop - 0.18,
+    w: 12.23,
+    h: HW_STYLE.slide.footerY - contentTop - bottomPadding,
+  };
+}
+
+function bodyLayoutAreas(layout, layoutBounds, options = {}) {
+  const gap = 0.18;
+  if (layout.schema.special === "large_visual_with_side_cards") {
+    premeasureModuleWidthDemands([layout.modules[0]], layout.type, layoutBounds.w * 0.59, layoutBounds.h, options);
+    const visualDemand = measureModuleWidthDemand(layout.modules[0], layout.type, layoutBounds.w * 0.59, layoutBounds.h, options).preferred;
+    const requestedVisualShare = Number(layout.visualWeight);
+    const visualShare = Number.isFinite(requestedVisualShare)
+      ? Math.min(0.72, Math.max(0.52, requestedVisualShare))
+      : Math.min(0.68, Math.max(0.59, visualDemand / Math.max(0.1, layoutBounds.w)));
+    const sideGap = visualShare >= 0.64 ? 0.28 : 0.38;
+    const visualW = layoutBounds.w * visualShare;
+    const sideW = layoutBounds.w - visualW - sideGap;
+    const sideCount = Math.max(1, layout.modules.length - 1);
+    const sideCardGap = 0.14;
+    const sideCardH = (layoutBounds.h - sideCardGap * (sideCount - 1)) / sideCount;
+    return layout.modules.map((_, idx) => {
+      if (idx === 0) {
+        return { x: layoutBounds.x + 0.46, y: layoutBounds.y, w: visualW - 0.46, h: layoutBounds.h };
+      }
+      return {
+        x: layoutBounds.x + visualW + sideGap,
+        y: layoutBounds.y + (idx - 1) * (sideCardH + sideCardGap),
+        w: sideW,
+        h: sideCardH,
+      };
+    });
+  }
+  if (layout.schema.grid) {
+    const { rows, columns } = layout.schema.grid;
+    const cellW = (layoutBounds.w - gap * (columns - 1)) / columns;
+    const cellH = (layoutBounds.h - gap * (rows - 1)) / rows;
+    return layout.modules.map((_, idx) => {
+      const row = Math.floor(idx / columns);
+      const col = idx % columns;
+      return {
+        x: layoutBounds.x + col * (cellW + gap),
+        y: layoutBounds.y + row * (cellH + gap),
+        w: cellW,
+        h: cellH,
+      };
+    });
+  }
+  const columnLayout = resolveEvidenceAwareColumnLayout(layout, layoutBounds, gap, options);
+  let x = layoutBounds.x;
+  return columnLayout.widths.map((w) => {
+    const area = { x, y: layoutBounds.y, w, h: layoutBounds.h };
+    x += w + columnLayout.gap;
+    return area;
+  });
+}
+
+function collectBaseWidthMeasurementItems(layout, layoutBounds, options = {}) {
+  const gap = 0.18;
+  if (layout.schema.special === "large_visual_with_side_cards") {
+    const bodyArea = moduleBodyArea({
+      x: 0,
+      y: 0,
+      w: Math.max(0.4, layoutBounds.w * 0.59),
+      h: Math.max(0.6, layoutBounds.h),
+    });
+    return collectPremeasurePrimitiveItems(modulePrimitives(layout.modules[0], {}), bodyArea, { ...options, layoutType: layout.type });
+  }
+  if (layout.schema.grid) return [];
+  const columnCount = layout.schema.columns.length;
+  const initialAvailableW = layoutBounds.w - gap * (columnCount - 1);
+  const baseModuleW = initialAvailableW / columnCount;
+  const bodyArea = moduleBodyArea({
+    x: 0,
+    y: 0,
+    w: Math.max(0.4, baseModuleW),
+    h: Math.max(0.6, layoutBounds.h),
+  });
+  return collectPremeasurePrimitiveItems(
+    layout.modules.flatMap((module) => modulePrimitives(module, {})),
+    bodyArea,
+    { ...options, layoutType: layout.type }
+  );
+}
+
+function resolveEvidenceAwareColumnLayout(layout, layoutBounds, baseGap, options = {}) {
+  const columnCount = layout.schema.columns.length;
+  const initialAvailableW = layoutBounds.w - baseGap * (columnCount - 1);
+  const baseModuleW = initialAvailableW / columnCount;
+  premeasureModuleWidthDemands(layout.modules, layout.type, baseModuleW, layoutBounds.h, options);
+  const demands = layout.modules.map((module) => measureModuleWidthDemand(module, layout.type, baseModuleW, layoutBounds.h, options));
+  const largestDemand = Math.max(1, ...demands.map((demand) => demand.preferred / Math.max(0.1, baseModuleW)));
+  const gap = largestDemand >= 1.28 ? 0.08 : (largestDemand >= 1.12 ? 0.11 : baseGap);
+  const availableW = layoutBounds.w - gap * (columnCount - 1);
+  const widths = allocateMeasuredWidths(demands, availableW);
+  return { gap, widths, availableW, demands };
+}
+
+function premeasureModuleWidthDemands(modules = [], layoutType, probeModuleW, moduleH, options = {}) {
+  const bodyArea = moduleBodyArea({
+    x: 0,
+    y: 0,
+    w: Math.max(0.4, probeModuleW),
+    h: Math.max(0.6, moduleH),
+  });
+  const blocks = modules.flatMap((module) => modulePrimitives(module, {}));
+  premeasurePrimitives(blocks, bodyArea, { ...options, layoutType });
+}
+
+function measureModuleWidthDemand(module, layoutType, probeModuleW, moduleH, options = {}) {
+  const framePaddingW = 0.26;
+  const blocks = modulePrimitives(module, {});
+  const bodyArea = moduleBodyArea({ x: 0, y: 0, w: Math.max(0.4, probeModuleW), h: Math.max(0.6, moduleH) });
+  const measureOptions = { ...options, layoutType };
+  premeasurePrimitives(blocks, bodyArea, measureOptions);
+  const measures = blocks.map((block) => measurePrimitive(block, bodyArea, measureOptions));
+  const min = Math.max(0.6, ...measures.map((measure) => Number(measure.minSize?.w || 0))) + framePaddingW;
+  const naturalPreferred = Math.max(min, ...measures.map((measure) => Number(measure.preferredSize?.w || 0) + framePaddingW));
+  const aspectDemand = measureAspectAwareWidthDemand(blocks, measures, bodyArea, framePaddingW, options);
+  const preferred = Math.max(min, naturalPreferred, aspectDemand.preferred);
+  const maxUseful = Math.max(preferred, aspectDemand.maxUseful, ...measures.map((measure) => Number(measure.maxUsefulSize?.w || 0) + framePaddingW));
+  return {
+    min,
+    preferred,
+    maxUseful,
+    diagnostics: measures.flatMap((measure) => measure.diagnostics || []),
+  };
+}
+
+function measureAspectAwareWidthDemand(blocks = [], measures = [], bodyArea = {}, framePaddingW = 0, options = {}) {
+  const visualItems = blocks
+    .map((block, index) => ({ block, measure: measures[index], visual: getBlockVisualSpec(block) }))
+    .filter((item) => item.visual);
+  if (!visualItems.length) return { preferred: 0, maxUseful: 0 };
+  const gap = Number(options.blockGap ?? 0.12);
+  const nonVisualHeight = blocks.reduce((sum, block, index) => {
+    if (getBlockVisualSpec(block)) return sum;
+    return sum + Number(measures[index]?.preferredSize?.h || 0);
+  }, 0);
+  const visualHeightBudget = Math.max(0.6, Number(bodyArea.h || 0) - nonVisualHeight - gap * Math.max(0, blocks.length - 1));
+  const perVisualHeight = visualHeightBudget / visualItems.length;
+  let preferred = 0;
+  let maxUseful = 0;
+  for (const item of visualItems) {
+    const dimensions = sourceDimensions(item.visual);
+    if (!dimensions) continue;
+    const aspect = dimensions.width / Math.max(1, dimensions.height);
+    if (!Number.isFinite(aspect) || aspect <= 1.05) continue;
+    const desiredContentWidth = perVisualHeight * aspect;
+    const currentContentWidth = Number(bodyArea.w || 0);
+    if (desiredContentWidth <= currentContentWidth + 0.05) continue;
+    const cappedPreferred = Math.min(desiredContentWidth, currentContentWidth * 1.45) + framePaddingW;
+    preferred = Math.max(preferred, cappedPreferred);
+    maxUseful = Math.max(maxUseful, Math.min(desiredContentWidth, currentContentWidth * 1.65) + framePaddingW);
+  }
+  return { preferred, maxUseful };
+}
+
+function allocateMeasuredWidths(demands, availableW) {
+  const minTotal = demands.reduce((sum, demand) => sum + Number(demand.min || 0), 0);
+  const preferredTotal = demands.reduce((sum, demand) => sum + Number(demand.preferred || 0), 0);
+  if (minTotal > availableW + 0.001) return demands.map((demand) => Number(demand.min || 0));
+  if (preferredTotal <= availableW) {
+    const widths = demands.map((demand) => Number(demand.preferred || 0));
+    let slack = availableW - preferredTotal;
+    for (let idx = 0; idx < widths.length && slack > 0.001; idx += 1) {
+      const capacity = Math.max(0, Number(demands[idx].maxUseful || widths[idx]) - widths[idx]);
+      const grow = Math.min(capacity, slack / Math.max(1, widths.length - idx));
+      widths[idx] += grow;
+      slack -= grow;
+    }
+    if (slack > 0.001 && widths.length) widths[widths.length - 1] += slack;
+    return widths;
+  }
+  let overflow = preferredTotal - availableW;
+  const widths = demands.map((demand) => Number(demand.preferred || 0));
+  const shrinkables = demands
+    .map((demand, index) => ({ index, capacity: Math.max(0, Number(demand.preferred || 0) - Number(demand.min || 0)) }))
+    .filter((item) => item.capacity > 0)
+    .sort((a, b) => b.capacity - a.capacity);
+  for (const item of shrinkables) {
+    if (overflow <= 0) break;
+    const shrink = Math.min(item.capacity, overflow);
+    widths[item.index] -= shrink;
+    overflow -= shrink;
+  }
+  return widths;
+}
+
+function sourceDimensions(visual = {}) {
+  const filePath = visual.source?.path || visual.path;
+  if (!filePath || !fs.existsSync(filePath)) return null;
+  const lower = String(filePath).toLowerCase();
+  try {
+    if (lower.endsWith(".svg")) return svgDimensions(fs.readFileSync(filePath, "utf8"));
+    const buffer = fs.readFileSync(filePath);
+    if (lower.endsWith(".png")) return pngDimensions(buffer);
+    if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return jpegDimensions(buffer);
+  } catch (_) {
+    return null;
+  }
+  return null;
+}
+
+function svgDimensions(text = "") {
+  const width = Number((text.match(/\bwidth=["']?([0-9.]+)/i) || [])[1]);
+  const height = Number((text.match(/\bheight=["']?([0-9.]+)/i) || [])[1]);
+  if (width > 0 && height > 0) return { width, height };
+  const viewBox = (text.match(/\bviewBox=["']([^"']+)["']/i) || [])[1];
+  if (!viewBox) return null;
+  const parts = viewBox.trim().split(/\s+/).map(Number);
+  if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) return { width: parts[2], height: parts[3] };
+  return null;
+}
+
+function pngDimensions(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 24) return null;
+  if (buffer.readUInt32BE(0) !== 0x89504e47) return null;
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
+function jpegDimensions(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4 || buffer[0] !== 0xff || buffer[1] !== 0xd8) return null;
+  let offset = 2;
+  while (offset + 9 < buffer.length) {
+    if (buffer[offset] !== 0xff) return null;
+    const marker = buffer[offset + 1];
+    const length = buffer.readUInt16BE(offset + 2);
+    if (length < 2) return null;
+    if (marker >= 0xc0 && marker <= 0xc3) {
+      return { height: buffer.readUInt16BE(offset + 5), width: buffer.readUInt16BE(offset + 7) };
+    }
+    offset += 2 + length;
+  }
+  return null;
+}
+
+function moduleBodyArea(area) {
+  return {
+    x: area.x + 0.13,
+    y: area.y + 0.48,
+    w: area.w - 0.26,
+    h: area.h - 0.62,
+  };
+}
+
+module.exports = {
+  allocateMeasuredWidths,
+  collectBaseWidthMeasurementItems,
+  bodyLayoutAreas,
+  fixedBodyLayoutArea,
+  measureModuleWidthDemand,
+  moduleBodyArea,
+  premeasureModuleWidthDemands,
+  resolveEvidenceAwareColumnLayout,
+};

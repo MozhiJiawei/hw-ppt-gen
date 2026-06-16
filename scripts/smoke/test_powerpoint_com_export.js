@@ -6,6 +6,8 @@ const JSZip = require("jszip");
 const pptHelpers = require("../pptx/hw_pptx_helpers");
 const visualSlide = require("../pptx/hw_visual_anchor_slide");
 const diagram = require("../pptx/hw_diagram_helpers");
+const { requestPowerPointBroker } = require("../pptx/powerpoint_com_broker");
+const { parseSlideBodyDsl } = require("../pptx/dsl/jsx_dsl");
 
 const {
   HW_STYLE,
@@ -27,10 +29,8 @@ const {
 } = pptHelpers;
 
 const {
-  addEvidenceModule,
-  addSupportingCards,
   addVisualAnchorContentSlide,
-  writeVisualAnchorManifest,
+  collectBodyPipelinePages,
 } = visualSlide;
 
 const {
@@ -48,7 +48,6 @@ const {
 } = diagram;
 
 const OUT = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test.pptx"));
-const MANIFEST = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test_visual_anchor_manifest.json"));
 const RENDER_DIR = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test_slides"));
 const ASSET_DIR = ensureTmpPath(path.join(".tmp", "powerpoint_com_interface_test_assets"));
 
@@ -73,17 +72,11 @@ function run(command, args, options = {}) {
   return result.stdout;
 }
 
-function requirePowerPointCom() {
+async function requirePowerPointCom() {
   if (process.platform !== "win32") {
     throw new Error("PowerPoint COM export test requires Windows.");
   }
-  run("powershell", [
-    "-NoProfile",
-    "-ExecutionPolicy",
-    "Bypass",
-    "-Command",
-    "$ErrorActionPreference='Stop'; $app = New-Object -ComObject PowerPoint.Application; $v = $app.Version; $app.Quit(); Write-Output $v",
-  ]);
+  await requestPowerPointBroker("ping", {}, { timeoutMs: 30000 });
 }
 
 function baseSpec(kind, template, visual_spec, extra = {}) {
@@ -91,6 +84,11 @@ function baseSpec(kind, template, visual_spec, extra = {}) {
     id: `com_${template}`,
     title: `${kind} ${template}`,
     claim: `${kind}/${template} 应能进入 PowerPoint COM 导出链路。`,
+    source: {
+      kind: "fixture",
+      id: `com_${template}_source`,
+      caption: `${kind}/${template} synthetic source for COM export fixture.`,
+    },
     kind,
     template,
     visual_spec,
@@ -122,11 +120,11 @@ function visualSpecs() {
     }),
     baseSpec("Quantity", "proportion_chart", {
       total_label: "接口覆盖",
-      segments: [{ label: "页面", value: 30 }, { label: "图形", value: 50 }, { label: "QA", value: 20 }],
+      segments: [{ label: "页面", value: 30 }, { label: "图形", value: 50 }, { label: "审阅", value: 20 }],
       highlight: "图形",
     }),
     baseSpec("Quantity", "heatmap", {
-      rows: ["Prompt", "脚本", "QA"],
+      rows: ["Prompt", "脚本", "审阅"],
       columns: ["计划", "渲染", "导出"],
       values: [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
       highlight: { row: "脚本", column: "导出" },
@@ -168,9 +166,9 @@ function visualSpecs() {
     baseSpec("Loop", "dual_loop", {
       loops: [
         { id: "dev", label: "开发测试", steps: [{ id: "d1", label: "生成" }, { id: "d2", label: "导出" }, { id: "d3", label: "检查" }] },
-        { id: "qa", label: "交付 QA", steps: [{ id: "q1", label: "验证" }, { id: "q2", label: "记录" }, { id: "q3", label: "回归" }] },
+        { id: "review", label: "交付审阅", steps: [{ id: "q1", label: "验证" }, { id: "q2", label: "记录" }, { id: "q3", label: "回归" }] },
       ],
-      highlight: "qa",
+      highlight: "review",
     }),
     baseSpec("Loop", "spiral_iteration_ladder", {
       center: "兼容性提升",
@@ -195,8 +193,8 @@ function visualSpecs() {
         { id: "export", label: "导出层", items: ["PowerPoint COM"] },
       ],
       side_label: "检查",
-      side_modules: ["QA"],
-      edges: [["visual_anchor", "content entry"], ["diagram helper", "PowerPoint COM"], ["QA", "content entry"]],
+      side_modules: ["审阅"],
+      edges: [["visual_anchor", "content entry"], ["diagram helper", "PowerPoint COM"], ["审阅", "content entry"]],
     }),
     baseSpec("Hierarchy", "capability_stack", {
       levels: [
@@ -230,10 +228,10 @@ function visualSpecs() {
       nodes: [
         { id: "page", label: "页面" },
         { id: "diagram", label: "图形" },
-        { id: "qa", label: "QA" },
+        { id: "review", label: "审阅" },
         { id: "com", label: "COM" },
       ],
-      edges: [["contract", "page"], ["contract", "diagram"], ["contract", "qa"], ["diagram", "com"]],
+      edges: [["contract", "page"], ["contract", "diagram"], ["contract", "review"], ["diagram", "com"]],
       highlight: "com",
     }),
     baseSpec("Network", "dependency_graph", {
@@ -277,6 +275,103 @@ function exerciseDiagramInterfaces(specs) {
   assert(fs.existsSync(writeVisualAnchorImage(roughSpec, ASSET_DIR, { width: 720 })), "writeVisualAnchorImage should write an SVG image file");
 }
 
+function isSupportingOnlySpec(spec) {
+  return (spec.kind === "Quantity" && ["data_cards", "heatmap"].includes(spec.template))
+    || (spec.kind === "Hierarchy" && spec.template === "capability_stack")
+    || (spec.kind === "Matrix" && ["table", "capability_matrix"].includes(spec.template));
+}
+
+function contentBodyDslForSpec(spec, realAnchorSpec) {
+  if (!isSupportingOnlySpec(spec)) {
+    const visualNode = spec.kind === "Evidence"
+      ? `<EvidenceFigure id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} fit="contain" />`
+      : `<Visual id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} draw={draw} model={spec.visual_spec} />`;
+    const checkAnchorSpec = {
+      ...realAnchorSpec,
+      id: `${spec.id}_check_anchor`,
+      title: "检查真实锚点",
+      claim: "导出检查模块需要真实锚点。",
+    };
+    return parseSlideBodyDsl(`<Slide>
+  <TwoColumn>
+    <Module title={spec.title}>
+      ${visualNode}
+      <InsightText body={mainText} />
+    </Module>
+    <Module title="导出检查">
+      <Visual id={checkAnchorSpec.id} title={checkAnchorSpec.title} claim={checkAnchorSpec.claim} source={checkAnchorSpec.source} draw={realDraw} model={checkAnchorSpec.visual_spec} />
+      <InsightText body={checkText} />
+    </Module>
+  </TwoColumn>
+</Slide>`, {
+      spec,
+      draw: `${spec.kind}/${spec.template}`,
+      checkAnchorSpec,
+      realDraw: `${realAnchorSpec.kind}/${realAnchorSpec.template}`,
+      mainText: [
+        "主视觉：统一正文页入口通过 Body DSL 渲染。",
+        "检查：图形、解释文本和模块边界一起导出。",
+        "版式检查：主视觉与解释文字需要保持紧密绑定。",
+        "结论：单图页面也要保持信息密度。"
+      ],
+      checkText: [
+        "导出检查：PowerPoint COM 必须能逐页导出。",
+        "证据路径：rendered visuals 记录 slot、image area 和尺寸。",
+        "版式检查：图形与说明要保持紧密视觉绑定。",
+        "密度检查：固定版式不能依赖模块内大块空白。",
+        "结论：导出图用于最终人工审阅。"
+      ],
+  }).bodyDsl;
+  }
+  const supportAnchorSpec = {
+    ...realAnchorSpec,
+    id: `${spec.id}_support_anchor`,
+    title: "模块真实锚点",
+    claim: "supporting component 所在模块需要独立真实锚点。",
+  };
+  const checkAnchorSpec = {
+    ...realAnchorSpec,
+    id: `${spec.id}_check_anchor`,
+    title: "检查真实锚点",
+    claim: "导出检查模块需要独立真实锚点。",
+  };
+  return parseSlideBodyDsl(`<Slide>
+  <ThreeColumn>
+    <Module title="真实锚点">
+      <Visual id={realAnchorSpec.id} title={realAnchorSpec.title} claim={realAnchorSpec.claim} source={realAnchorSpec.source} draw={realDraw} model={realAnchorSpec.visual_spec} />
+      <InsightText body={realAnchorText} />
+    </Module>
+    <Module title={spec.title}>
+      <Visual id={supportAnchorSpec.id} title={supportAnchorSpec.title} claim={supportAnchorSpec.claim} source={supportAnchorSpec.source} draw={realDraw} model={supportAnchorSpec.visual_spec} />
+      <Visual id={spec.id} title={spec.title} claim={spec.claim} source={spec.source} draw={draw} model={spec.visual_spec} />
+    </Module>
+    <Module title="导出检查">
+      <Visual id={checkAnchorSpec.id} title={checkAnchorSpec.title} claim={checkAnchorSpec.claim} source={checkAnchorSpec.source} draw={realDraw} model={checkAnchorSpec.visual_spec} />
+      <InsightText body={checkText} />
+    </Module>
+  </ThreeColumn>
+</Slide>`, {
+    spec,
+    draw: `${spec.kind}/${spec.template}`,
+    realAnchorSpec,
+    supportAnchorSpec,
+    checkAnchorSpec,
+    realDraw: `${realAnchorSpec.kind}/${realAnchorSpec.template}`,
+    realAnchorText: [
+      "真实锚点：每个 supporting 页面仍需要独立证据。",
+      "检查目标：导出图能看到图形、文字和模块边界。",
+      "结论：不靠空白通过 review。"
+    ],
+    checkText: [
+      "导出检查：supporting component 随 Body DSL 一起渲染。",
+      "边界：它不充当真实锚点。",
+      "版式检查：图形与说明要保持紧密视觉绑定。",
+      "密度检查：固定版式不能依赖模块内大块空白。",
+      "结论：真实锚点、supporting 和解释文本都要可导出。"
+    ],
+  }).bodyDsl;
+}
+
 function addPrimitiveSlide(pptx) {
   const slide = pptx.addSlide();
   const sample = cloneOptions({ value: "#C00000" });
@@ -300,20 +395,20 @@ function addPrimitiveSlide(pptx) {
   grayCard(slide, { x: 0.7, y: 2.39, w: 3.6, h: 1.3, title: "灰卡", body: ["redTitleCard", "grayCard", "textBox"] });
   textBox(slide, `主题色 ${HW_STYLE.color.red}`, { x: 4.6, y: 2.28, w: 3.2, h: 0.35, fontSize: 14, bold: true, color: HW_STYLE.color.red });
   textBox(slide, "表格能力由 Matrix/table 视觉锚点覆盖，不作为页面 primitive 暴露。", { x: 4.6, y: 2.8, w: 3.6, h: 0.55, fontSize: 12, color: HW_STYLE.color.text });
-  addSupportingCards(slide, [{ title: "辅卡接口", body: ["addSupportingCards 已调用", "不作为主视觉"] }], { x: 8.5, y: 2.05, w: 3.7, h: 1.8 });
+  textBox(slide, "正文侧边解读由 Body DSL 模块覆盖，不再暴露直接辅卡接口。", { x: 8.5, y: 2.05, w: 3.7, h: 0.6, fontSize: 12, color: HW_STYLE.color.text });
   addFooter(slide, { source: "开发测试", page: "03" });
 }
 
 function addDirectHelperSlides(pptx, specs) {
   const slide = pptx.addSlide();
   addPageTitle(slide, "直接渲染接口", {
-    subtitle: "底层 helper 与 addEvidenceModule",
+    subtitle: "底层 renderer 与 Evidence 输出",
     sections: ["接口覆盖"],
     currentSection: "接口覆盖",
   });
-  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页绕过正文页入口，专门验证底层 helper。" }] });
+  addAnalysisSummary(slide, { body: [{ label: "直接调用", text: "本页只验证图形 renderer；正文页路径由 Body DSL 覆盖。" }] });
   renderVisualAnchorPptNative(slide, specs.find((spec) => spec.template === "process"), { x: 0.7, y: 2.05, w: 5.7, h: 3.2 });
-  addEvidenceModule(slide, specs.find((spec) => spec.kind === "Evidence"), { x: 6.75, y: 2.05, w: 5.7, h: 3.2 });
+  renderVisualAnchorPptNative(slide, specs.find((spec) => spec.kind === "Evidence"), { x: 6.75, y: 2.05, w: 5.7, h: 3.2 });
   addFooter(slide, { source: "开发测试", page: "04" });
 }
 
@@ -333,6 +428,7 @@ async function assertNoNegativeExtents(fileName) {
 async function buildDeck() {
   const specs = visualSpecs();
   exerciseDiagramInterfaces(specs);
+  const realAnchorSpec = specs.find((spec) => spec.kind === "Sequence" && spec.template === "process");
 
   const pptx = createHuaweiDeck({ title: "PowerPoint COM interface coverage" });
   const sections = ["接口覆盖", "锚点覆盖", "导出验证"];
@@ -367,20 +463,30 @@ async function buildDeck() {
           { label: "导出目标", text: "该页必须能被 PowerPoint COM 打开并导出。" },
         ],
       },
-      visual_anchor: spec,
+      bodyDsl: contentBodyDslForSpec(spec, realAnchorSpec),
       source: "开发测试",
       page: String(idx + 5).padStart(2, "0"),
     });
   });
 
-  writeVisualAnchorManifest(pptx, MANIFEST);
+  const roughEntries = collectBodyPipelinePages(pptx)
+    .flatMap((page) => page.renderedVisuals || [])
+    .filter((entry) => entry.renderer === "rough_svg");
+  assert(roughEntries.length > 0, "interface test should include image-based content slides");
+  roughEntries.forEach((entry) => {
+    assert(entry.image_area && entry.visual_slot, "image-based entries should record image_area and visual_slot");
+    assert(entry.image_width > 0 && entry.image_height > 0, "image-based entries should record image dimensions");
+    const imageRatio = entry.image_width / entry.image_height;
+    const placedRatio = entry.image_area.w / entry.image_area.h;
+    assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_component_id} should preserve image aspect ratio`);
+  });
   await pptx.writeFile({ fileName: OUT });
   await repairPptxForPowerPointCom(OUT);
   await assertNoNegativeExtents(OUT);
 }
 
 async function main() {
-  requirePowerPointCom();
+  await requirePowerPointCom();
   await buildDeck();
   run("node", [
     "scripts/pptx/export_pptx_images.js",
@@ -396,17 +502,6 @@ async function main() {
   const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   assert(manifest.renderer === "powerpoint", "render manifest should confirm PowerPoint renderer");
   assert(manifest.slide_count === 4 + visualSpecs().length, `expected ${4 + visualSpecs().length} rendered slides`);
-
-   const visualManifest = JSON.parse(fs.readFileSync(MANIFEST, "utf8"));
-   const roughEntries = visualManifest.slides.filter((entry) => entry.renderer === "rough_svg");
-   assert(roughEntries.length > 0, "interface test should include image-based content slides");
-   roughEntries.forEach((entry) => {
-     assert(entry.image_area && entry.anchor_area, "image-based entries should record image_area and anchor_area");
-     assert(entry.image_width > 0 && entry.image_height > 0, "image-based entries should record image dimensions");
-     const imageRatio = entry.image_width / entry.image_height;
-     const placedRatio = entry.image_area.w / entry.image_area.h;
-     assert(approxEqual(imageRatio, placedRatio), `image-based entry ${entry.visual_anchor_id} should preserve image aspect ratio`);
-   });
 
   console.log(`PowerPoint COM interface export test passed: ${OUT}`);
 }

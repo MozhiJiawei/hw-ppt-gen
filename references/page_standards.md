@@ -19,13 +19,17 @@ Use this reference to decide what each page type must deliver.
 
 The summary page is the deck's evidence overview, not a KPI-only dashboard.
 
+When repairing density, alignment, spacing, or readability feedback, preserve the semantic anchor of each column first. The anchor may be source evidence, a generated visual, a chart, a compact table, KPI readouts, or a key text block, depending on what carries the column's main claim. Source evidence has the highest proof priority: if the first Body DSL draft selected `<EvidenceFigure>` or `<EvidenceChart>` for a column, keep that same source image/chart as the primary proof and repair the layout around it. Strengthen the same claim with nearby source-grounded text, supporting readouts, or generated explanation that preserves the evidence chain, and replace the anchor only when it no longer proves the claim.
+
 Required:
 
 - preserves the brief's title, title note, and `分析总结`;
-- uses the parser-derived `contentLayout.type`;
+- uses the parser-derived `bodyLayout.type`;
 - presents the key evidence objects named by the summary brief when available;
 - keeps each evidence object readable;
 - uses KPI/cards/tables only as supporting components that explain the evidence.
+
+For summary and content pages, the page chrome is fixed: title, title note, section tabs, `分析总结`, summary body, footer, and page number are rendered by the shared Huawei shell helpers from the parsed brief. Body DSL layout starts below the `分析总结` band and must not move or redraw those shell elements. Do not add manual text boxes in the title-summary gap to patch density or repeat summary content.
 
 Reject:
 
@@ -65,7 +69,7 @@ When a page cites several figures, choose the one that carries the page claim as
 
 ## Dense Evidence Page
 
-Multiple evidence objects on one page are allowed only when each remains readable at final size and the layout still follows a fixed Huawei content layout.
+Multiple evidence objects on one page are allowed only when each remains readable at final size and the layout still follows a fixed Huawei Body DSL layout family.
 
 If several figures cannot all remain readable:
 
@@ -74,4 +78,4 @@ If several figures cannot all remain readable:
 - split the material across pages if page count is not fixed;
 - record the limitation when page count is fixed.
 
-Do not crop source evidence merely to fill a panel. A crop is acceptable only when it preserves a complete subfigure or a human/source-provided evidence region with axes, legends, labels, borders, and decisive annotations intact.
+Do not alter source evidence merely to fill a panel. If evidence is too small, change the layout allocation, reduce supporting material, or split the claim.

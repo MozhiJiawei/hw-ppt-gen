@@ -1,10 +1,10 @@
 # Evidence Schema
 
-Use this reference before placing any source figure, chart, screenshot, or table.
+Use this reference before placing any source image evidence.
 
 ## Contract
 
-Evidence anchors route source visuals through the unified content-slide path and manifest. Do not bypass this with direct `slide.addImage`.
+Evidence anchors route source visuals through the unified content-slide path and render evidence. Do not bypass this with direct `slide.addImage`.
 
 ```json
 {
@@ -15,8 +15,7 @@ Evidence anchors route source visuals through the unified content-slide path and
   "template": "source_figure",
   "source": {
     "path": "source_images/figure01_workload.png",
-    "caption": "Figure 1: concurrent LLM serving workloads",
-    "treatment": "original"
+    "caption": "Figure 1: concurrent LLM serving workloads"
   }
 }
 ```
@@ -25,8 +24,8 @@ Supported templates:
 
 - `source_figure`
 - `source_chart`
-- `source_table`
-- `source_screenshot`
+
+Tables, screenshots, UI captures, and paper figures are still image inputs. Use `source_figure` unless the image is specifically a chart and the chart distinction matters.
 
 Required fields:
 
@@ -35,18 +34,8 @@ Required fields:
 - `claim`: what the evidence proves.
 - `kind`: `Evidence`.
 - `template`: one of the supported evidence templates.
-- `source.path`: original or derived source image path.
+- `source.path`: the exact image file to render.
 - `source.caption`: original figure/table caption or short source note.
-
-Optional `source.treatment`:
-
-- `original`
-- `crop`
-- `crop_zoom`
-- `padded_canvas`
-- `annotated_crop`
-
-Default to `original` or an already complete source subfigure. `crop`, `crop_zoom`, and `annotated_crop` are exceptions, not normal layout tools.
 
 ## Evidence Object Rule
 
@@ -59,9 +48,9 @@ Do not use one `Evidence` anchor for:
 - multiple unrelated subfigures;
 - a giant canvas where the relevant figure is a thumbnail.
 
-If one paper figure has subfigures and the slide claim depends on one subfigure, use a complete subfigure as the evidence object. A crop is acceptable only when it extracts that complete subfigure or a human/source-provided region. The crop must preserve the full plotted or diagrammed object: axes, tick labels, legends, labels, titles, borders, arrows, and annotations that make the evidence interpretable.
+Evidence is an identity component: the image file given in `source.path` is the image that appears in the deck. It must not be rewritten to fit a layout slot.
 
-Do not crop only to make the image larger in a fixed layout. Cutting off a chart axis, legend, figure label, timeline endpoint, diagram node, or table boundary is evidence loss, not text compression. If the complete evidence object is too small, choose a larger visual region, reduce secondary text/tables/KPI cards, use a different fixed layout if the brief allows it, or split the point if page count permits.
+If the evidence object is too small, choose a larger visual region, reduce secondary text/tables/KPI cards, use a different fixed layout if the brief allows it, or split the point if page count permits. Layout adapts to evidence; Evidence does not reshape itself for layout.
 
 If the claim needs two separate source figures, choose a primary evidence object and convert the secondary evidence into concise text, KPI/table readout, speaker note, or another slide.
 
@@ -97,7 +86,11 @@ If proportional placement makes the evidence too small:
 - split the page if page count permits;
 - replace secondary evidence with concise text/table/KPI explanation.
 
-Never solve small evidence by trimming away chart boundaries or diagram context. The original source evidence is the strongest proof; preserving its integrity ranks above filling the module perfectly.
+Never solve small evidence by modifying the source file. The source image is the proof object; preserving its identity ranks above filling the module perfectly.
+
+## Resize Contract
+
+Evidence uses `resizePolicy: preserve_aspect`. Its measured `minSize` is no smaller than 50% of preferred size, and `maxUsefulSize` allows at most 20% one-axis extra room before layout should give space elsewhere.
 
 ## Text Around Evidence
 

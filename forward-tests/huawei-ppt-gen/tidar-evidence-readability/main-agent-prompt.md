@@ -55,13 +55,12 @@ Collect the candidate's output directory and inspect:
 
 - generated `.pptx`;
 - deck plan JSON;
-- visual-anchor manifest JSON;
-- hard-QA report;
 - exported slide PNGs;
-- visual-QA notes;
 - generation script, only as supporting evidence.
 
 Use `forward-tests/huawei-ppt-gen/tidar-evidence-readability/judge/rubric.md` to judge the output.
+
+Inspect the exported slide PNGs visually at presentation size/original size. Do not require the candidate to produce runtime QA reports, render/export QA reports, or visual-review notes as forward-test deliverables; export/runtime QA is already part of normal deck generation, while the main-agent forward judgment is based on the visible PPT result and contamination rules.
 
 Write judgment to:
 

@@ -3,13 +3,16 @@ const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const { repairPptxForPowerPointCom } = require("./hw_pptx_helpers");
+const { requestPowerPointBroker } = require("./powerpoint_com_broker");
+const { createFeedbackCliError, feedbackToCliText } = require("./feedback/feedback_reporter");
+const { runRenderExportChecks } = require("./qa/render_export_checks");
 
 function usage() {
-  console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice]");
+  console.error("Usage: node scripts/pptx/export_pptx_images.js .tmp/<deck>.pptx --out .tmp/<deck>_slides [--dpi 180] [--renderer auto|powerpoint|libreoffice] [--qa-artifacts .tmp/render_qa.json] [--qa-only]");
 }
 
 function parseArgs(argv) {
-  const args = { input: argv[2], out: null, dpi: 180, renderer: "auto" };
+  const args = { input: argv[2], out: null, dpi: 180, renderer: "auto", qaArtifacts: null, qaOnly: false };
   for (let i = 3; i < argv.length; i += 1) {
     if (argv[i] === "--out") {
       args.out = argv[i + 1];
@@ -20,6 +23,11 @@ function parseArgs(argv) {
     } else if (argv[i] === "--renderer") {
       args.renderer = argv[i + 1];
       i += 1;
+    } else if (argv[i] === "--qa-artifacts") {
+      args.qaArtifacts = argv[i + 1];
+      i += 1;
+    } else if (argv[i] === "--qa-only") {
+      args.qaOnly = true;
     }
   }
   return args;
@@ -53,40 +61,14 @@ function commandExists(command) {
   return !probe.error;
 }
 
-function escapePowerShellSingleQuoted(value) {
-  return String(value).replace(/'/g, "''");
-}
-
-function powerpointAvailable() {
+async function powerpointAvailable() {
   if (process.platform !== "win32") return false;
-  cleanupPowerPointProcesses();
-  const ps = spawnSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "$ErrorActionPreference='Stop'; $app = New-Object -ComObject PowerPoint.Application; $v = $app.Version; $app.Quit(); Write-Output $v",
-    ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
-  );
-  return ps.status === 0 && /\d/.test(ps.stdout || "");
-}
-
-function cleanupPowerPointProcesses() {
-  if (process.platform !== "win32") return;
-  spawnSync(
-    "powershell",
-    [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-Command",
-      "Get-Process POWERPNT -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue",
-    ],
-    { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }
-  );
+  try {
+    const response = await requestPowerPointBroker("ping", {}, { timeoutMs: 30000 });
+    return Boolean(response.version);
+  } catch {
+    return false;
+  }
 }
 
 function refreshWindowsPathFromRegistry() {
@@ -188,75 +170,60 @@ function exportWithLibreOffice(inputPath, outDir, dpi) {
   }
 }
 
-function exportWithPowerPoint(inputPath, outDir) {
+async function exportWithPowerPoint(inputPath, outDir) {
   if (process.platform !== "win32") throw new Error("PowerPoint rendering is only available on Windows.");
-  cleanupPowerPointProcesses();
-  const scriptPath = path.join(os.tmpdir(), `hw-ppt-render-${Date.now()}-${Math.random().toString(16).slice(2)}.ps1`);
-  const inputPs = escapePowerShellSingleQuoted(inputPath);
-  const outPs = escapePowerShellSingleQuoted(outDir);
-  const psScript = `
-$ErrorActionPreference = 'Stop'
-$inputPath = '${inputPs}'
-$outDir = '${outPs}'
-New-Item -ItemType Directory -Force -Path $outDir | Out-Null
-$app = $null
-$presentation = $null
-try {
-  for ($attempt = 1; $attempt -le 3; $attempt++) {
-    try {
-      $app = New-Object -ComObject PowerPoint.Application
-      if ($app -ne $null) { break }
-    } catch {
-      if ($attempt -eq 3) { throw }
-      Start-Sleep -Milliseconds 800
-    }
+  const response = await requestPowerPointBroker("export", {
+    inputPath: path.resolve(inputPath),
+    outDir: path.resolve(outDir),
+    width: 2400,
+    height: 1350,
+  }, { timeoutMs: 180000 });
+  const pages = Number(response.result?.slide_count || 0);
+  if (!pages) throw new Error("PowerPoint export did not report a slide count.");
+  const finalFiles = fs.readdirSync(outDir)
+    .filter((name) => /^slide_\d+\.png$/i.test(name))
+    .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+  if (finalFiles.length !== pages) {
+    throw new Error(`PowerPoint rendered ${finalFiles.length} PNGs, expected ${pages}.`);
   }
-  if ($app -eq $null) { throw "PowerPoint COM application could not be created." }
-  $presentation = $app.Presentations.Open($inputPath, $true, $false, $false)
-  $count = $presentation.Slides.Count
-  for ($i = 1; $i -le $count; $i++) {
-    $name = 'slide_{0:D2}.png' -f $i
-    $file = Join-Path $outDir $name
-    $presentation.Slides.Item($i).Export($file, 'PNG', 2400, 1350) | Out-Null
-  }
-  Write-Output $count
+  return {
+    input: inputPath,
+    output_dir: outDir,
+    generated_at: new Date().toISOString(),
+    renderer: "powerpoint",
+    toolchain: {
+      pptx_to_png: "PowerPoint COM broker",
+      width: 2400,
+      height: 1350,
+    },
+    slide_count: pages,
+    slides: finalFiles.map((name) => path.join(outDir, name)),
+  };
 }
-finally {
-  if ($presentation -ne $null) {
-    try { $presentation.Close() } catch { Write-Warning ("PowerPoint presentation cleanup failed: " + $_.Exception.Message) }
-  }
-  if ($app -ne $null) {
-    try { $app.Quit() } catch { Write-Warning ("PowerPoint application cleanup failed: " + $_.Exception.Message) }
-  }
+
+function readQaArtifacts(filePath) {
+  if (!filePath) return {};
+  ensureTmp(filePath, "QA artifacts");
+  if (!fs.existsSync(filePath)) throw new Error(`QA artifacts not found: ${filePath}`);
+  return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
-`;
-  fs.writeFileSync(scriptPath, psScript, "utf8");
-  try {
-    const stdout = run("powershell", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", scriptPath], { timeout: 120000 });
-    const pages = Number((stdout.match(/(\d+)\s*$/) || [])[1] || 0);
-    if (!pages) throw new Error(`PowerPoint export did not report a slide count.\n${stdout}`);
-    const finalFiles = fs.readdirSync(outDir)
-      .filter((name) => /^slide_\d+\.png$/i.test(name))
-      .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-    if (finalFiles.length !== pages) {
-      throw new Error(`PowerPoint rendered ${finalFiles.length} PNGs, expected ${pages}.`);
-    }
-    return {
-      input: inputPath,
-      output_dir: outDir,
-      generated_at: new Date().toISOString(),
-      renderer: "powerpoint",
-      toolchain: {
-        pptx_to_png: "PowerPoint COM",
-        width: 2400,
-        height: 1350,
-      },
-      slide_count: pages,
-      slides: finalFiles.map((name) => path.join(outDir, name)),
-    };
-  } finally {
-    fs.rmSync(scriptPath, { force: true });
-  }
+
+function assertRenderExportQaClean(manifest, qaArtifacts = {}) {
+  const artifacts = {
+    ...qaArtifacts,
+    slideCount: manifest.slide_count,
+    exportedPngs: manifest.slides,
+  };
+  const qa = runRenderExportChecks(artifacts);
+  const errors = (qa.issues || []).filter((issue) => issue.severity === "error");
+  if (!errors.length) return qa;
+  throw createFeedbackCliError(feedbackToCliText(errors, {
+    title: "Runtime render/export QA failed",
+  }), {
+    feedbackIssues: errors,
+    phaseResult: qa.phaseResult,
+    renderExportArtifacts: artifacts,
+  });
 }
 
 async function main() {
@@ -267,21 +234,36 @@ async function main() {
   }
   ensureTmp(args.input, "Input PPTX");
   ensureTmp(args.out, "Output directory");
-  if (!fs.existsSync(args.input)) throw new Error(`Input PPTX not found: ${args.input}`);
+  if (!args.qaOnly && !fs.existsSync(args.input)) throw new Error(`Input PPTX not found: ${args.input}`);
   if (!Number.isFinite(args.dpi) || args.dpi < 72 || args.dpi > 300) throw new Error(`Invalid DPI: ${args.dpi}`);
   if (!["auto", "powerpoint", "libreoffice"].includes(args.renderer)) throw new Error(`Invalid renderer: ${args.renderer}`);
 
   const inputPath = path.resolve(args.input);
   const outDir = path.resolve(args.out);
+  const qaArtifacts = readQaArtifacts(args.qaArtifacts);
+  if (args.qaOnly) {
+    const manifest = {
+      input: inputPath,
+      output_dir: outDir,
+      generated_at: new Date().toISOString(),
+      renderer: "qa_only",
+      slide_count: Number(qaArtifacts.slideCount || qaArtifacts.slide_count || 0),
+      slides: qaArtifacts.exportedPngs || qaArtifacts.slides || [],
+    };
+    assertRenderExportQaClean(manifest, qaArtifacts);
+    writeManifest(outDir, manifest);
+    return;
+  }
   cleanPreviousSlides(outDir);
 
   const renderer = args.renderer === "auto"
-    ? (powerpointAvailable() ? "powerpoint" : "libreoffice")
+    ? ((await powerpointAvailable()) ? "powerpoint" : "libreoffice")
     : args.renderer;
   if (renderer === "powerpoint") await repairPptxForPowerPointCom(inputPath);
   const manifest = renderer === "powerpoint"
-    ? exportWithPowerPoint(inputPath, outDir)
+    ? await exportWithPowerPoint(inputPath, outDir)
     : exportWithLibreOffice(inputPath, outDir, args.dpi);
+  assertRenderExportQaClean(manifest, qaArtifacts);
   writeManifest(outDir, manifest);
 }
 

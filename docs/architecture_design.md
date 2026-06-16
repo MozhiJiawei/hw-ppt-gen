@@ -1,462 +1,370 @@
 # 架构概览
 
-This is the development-time architecture document for the Huawei PPT generation repository. It explains the repository as a system first, then attaches constraints to the architecture elements that own them.
+This is the development-time architecture contract for `hw-ppt-gen`.
 
-`SKILL.md` is runtime guidance for deck-generation agents. This document is for maintainers and coding agents changing this repository.
+`SKILL.md` is runtime guidance for deck-generation agents. This document is for maintainers and coding agents changing the repository.
 
-## Architectural Goal
+## Core Idea
 
-The repository turns structured content plans into Huawei-style PPTX decks with deterministic AI execution.
+PPT generation should feel as smooth as web development.
 
-Two invariants define the system:
-
-1. Layout, visual rendering, and text outline are independent architecture elements.
-2. Runtime instructions, generation scripts, and QA must stay consistent so agent output is predictable.
-
-## Logical Architecture Elements
-
-This view lists the architectural elements only. It intentionally does not draw relationships; relationships belong in the runtime flow view below.
+An agent should not hand-place shapes and hope the deck looks right. It should write a stable page skeleton and a web-like Body DSL, then rely on a compiler-style runtime pipeline to produce a PPT:
 
 ```text
-+----------------------------------------------------------------------------------+
-| L1 Runtime Contract / 运行契约层                                                   |
-|                                                                                  |
-|        +--------------------------+        +-------------------------------+      |
-|        | Deck-generation agent    |        | SKILL.md                      |      |
-|        | runtime executor         |        | runtime workflow              |      |
-|        +--------------------------+        +-------------------------------+      |
-+----------------------------------------------------------------------------------+
-
-+----------------------------------------------------------------------------------+
-| L2 Schema Contract / Schema 契约层                                                 |
-|                                                                                  |
-|  +--------------------------+  +--------------------------+  +------------------+ |
-|  | references/*.md          |  | *_plan.json              |  | Slide schema     | |
-|  | semantic/style contracts |  | planned intent           |  | layout+visual+txt| |
-|  +--------------------------+  +--------------------------+  +------------------+ |
-+----------------------------------------------------------------------------------+
-
-+----------------------------------------------------------------------------------+
-| L3 Composition / 页面编排层                                                        |
-|                                                                                  |
-|  +--------------------------+  +--------------------------+  +------------------+ |
-|  | addVisualAnchorContent   |  | hw_visual_anchor_slide   |  | PPT text layer   | |
-|  | unified content API      |  | content layout composer  |  | editable notes   | |
-|  +--------------------------+  +--------------------------+  +------------------+ |
-+----------------------------------------------------------------------------------+
-
-+----------------------------------------------------------------------------------+
-| L4 Visual Rendering / 视觉渲染层                                                   |
-|                                                                                  |
-| +-------------------+ +-------------------+ +-------------------+ +-------------+ |
-  | | Template contract | | hw_diagram_helpers| | Supporting comps  | | Evidence    | |
-  | | fixed mapping     | | conceptual visual | | tables/cards      | | source image| |
-| +-------------------+ +-------------------+ +-------------------+ +-------------+ |
-+----------------------------------------------------------------------------------+
-
-+----------------------------------------------------------------------------------+
-| L5 Artifact / 产物层                                                               |
-|                                                                                  |
-|        +--------------------------+ +--------------------------+ +-------------+  |
-|        | PPTX output              | | visual manifest          | | PNG evidence|  |
-|        | generated deck           | | rendered anchor evidence | | COM render  |  |
-|        +--------------------------+ +--------------------------+ +-------------+  |
-+----------------------------------------------------------------------------------+
-
-+----------------------------------------------------------------------------------+
-| L6 Verification / 验证层                                                           |
-|                                                                                  |
-|        +--------------------------+        +-------------------------------+      |
-|        | Hard QA                  |        | Development smoke tests       |      |
-|        | check_huawei_pptx.js     |        | scripts/smoke/*.js           |      |
-|        +--------------------------+        +-------------------------------+      |
-+----------------------------------------------------------------------------------+
+AI writes skeleton + Body DSL
+        |
+        v
+DSL input
+        |
+        v
+CompileIR
+        |
+        v
+MeasurementIR
+        |
+        v
+LayoutIR
+        |
+        v
+PPTX + exported PNG
 ```
 
-The system is intentionally layered:
+Each stage owns its own intermediate representation, its own checks, and its own diagnostics. When something fails, the CLI should behave like a compiler: report the failing phase, page, DSL selector/source span when available, code frame, reason, and repair hint directly in the command output.
 
-- L1 tells the agent how to work at runtime.
-- L2 defines the schemas and records planned intent.
-- L3 composes Huawei pages and keeps layout, visual anchors, and text outline separate.
-- L4 owns visual-anchor validation and implementation-owned output handling.
-- L5 stores generated artifacts and render evidence.
-- L6 verifies that the artifacts match the plan and contracts.
+The goal is not to make PPT generation clever through hidden fallbacks. The goal is to make the system legible enough that AI can write, receive feedback, repair, and rerun in a familiar loop.
 
-Dependencies flow downward during generation and back into L6 during verification. Lower layers must not invent semantics that belong to upper layers. Upper layers must not bypass lower-layer evidence and QA.
+## Non-Negotiable Invariants
 
-## Runtime Flow View
+1. **No manual layout escape hatch.** Body DSL authors describe structure and intent, not absolute coordinates, arbitrary styles, z-index, raw width/height percentages, or manual margins/padding.
+2. **Every major stage has an IR.** Compile, measurement, and layout hand off explicit, inspectable objects. Internal implementation may change, but the stage boundary must stay real.
+3. **Diagnostics belong to the stage that can understand the problem.** DSL checks validate whether the next stage can consume the input. Measurement checks validate measurable coverage and measurement consistency. Layout checks validate allocation, fit, spacing, alignment, overflow, and readability facts. Render/export checks validate the final artifact.
+4. **Early stages preserve DSL traceability.** DSL, compile, measurement, and layout diagnostics should map back to the original Body DSL page/component when the source is known. Render/export diagnostics may be artifact-only.
+5. **Runtime QA is part of generation.** A generated deck is not acceptable while any error-level runtime diagnostic remains. Visual review can add findings, but it cannot waive a runtime error.
+6. **Smoke tests prove the framework, not the deck.** Runtime QA diagnoses generated decks at runtime. Smoke tests prove that the compiler pipeline, IR contracts, QA rules, CLI feedback, and rendering integrations behave correctly.
 
-This view shows the main runtime relationship. It deliberately omits most internal elements so the logical element view remains readable.
+## Web Development Analogy
+
+The intended mental model is deliberately close to the browser pipeline:
+
+| Web development | PPT generation |
+|---|---|
+| HTML/JSX tree | Body DSL tree |
+| CSS/layout constraints | layout family, spacing tokens, alignment/distribution constraints |
+| DOM/component compile | CompileIR render model |
+| intrinsic measurement | MeasurementIR primitive sizes and resize envelope |
+| layout/reflow | LayoutIR containers, boxes, fit, overflow, alignment groups |
+| browser paint/export | PPTX render and PowerPoint COM PNG export |
+| browser/dev-server errors | compiler-style CLI diagnostics |
+
+This analogy is architectural, not cosmetic. It means agents should work in a familiar loop:
+
+```text
+write DSL -> run generation -> read compiler-like CLI feedback -> fix DSL/content -> rerun
+```
+
+The repository should optimize for that loop.
+
+## Runtime Pipeline
 
 ```mermaid
 flowchart LR
-  skill["SKILL.md"]
-  refs["references/*.md"]
-  plan["plan.json"]
-  schema["slide schema"]
-  compose["addVisualAnchorContentSlide"]
-  render["visual output"]
-  artifacts["PPTX + manifest + PNG"]
-  qa["hard QA + smoke"]
+  Brief["PPT Content Brief"]
+  Agent["AI agent"]
+  Skeleton["Page skeleton\nfixed title/summary/sections"]
+  BodyDsl["Body DSL\nweb-like body tree"]
+  Compile["Compile\nBody DSL -> CompileIR"]
+  Measure["Measure\nCompileIR -> MeasurementIR"]
+  Layout["Layout\nMeasurementIR -> LayoutIR"]
+  Render["Render/export\nLayoutIR -> PPTX/PNG"]
+  Feedback["CLI feedback\ncompiler-style diagnostics"]
 
-  skill --> refs
-  refs --> plan
-  refs --> schema
-  plan --> compose
-  schema --> compose
-  compose --> render
-  compose --> artifacts
-  render --> artifacts
-  artifacts --> qa
-  plan --> qa
+  Brief --> Agent
+  Agent --> Skeleton
+  Agent --> BodyDsl
+  Skeleton --> Compile
+  BodyDsl --> Compile
+  Compile --> Measure
+  Measure --> Layout
+  Layout --> Render
+  Compile --> Feedback
+  Measure --> Feedback
+  Layout --> Feedback
+  Render --> Feedback
+  Feedback --> Agent
 ```
 
-## Architecture Elements
+### AI Input
 
-### Runtime Workflow
+The agent writes two things:
 
-Owned by:
+- a page skeleton from the approved content brief;
+- `bodyDsl` for the creative body area.
 
-- `SKILL.md`
+The skeleton owns fixed page fields: title, title note, section tabs, analysis summary, TOC/page sequence, footer source text, and other brief-controlled structure.
 
-Responsibility:
+Body DSL owns the body region below the fixed page frame. It expresses layout family, modules, visual anchors, supporting components, and editable text.
 
-- tell a deck-generation agent how to research, plan, generate, QA, export, and inspect a deck;
-- define the runtime sequence an agent follows;
-- avoid development-only explanations.
+### DSL Input Stage
 
-Constraints:
+Purpose:
 
-- `SKILL.md` should not be the primary home for architecture rationale.
-- If runtime behavior changes, update `SKILL.md` only after the reference contract, implementation, QA, and smoke coverage are aligned.
+- determine whether the page has usable Body DSL for the compiler;
+- reject malformed DSL before measurement/layout work begins;
+- preserve source locations for compiler-style feedback.
 
-### Reference Contracts
+This stage should catch problems such as:
 
-Owned by:
+- missing body DSL where a content page requires one;
+- DSL that cannot compile;
+- missing real visual anchor where the page needs source-backed evidence;
+- missing source/claim/evidence trace for visual evidence.
 
-- `references/delivery_standard.md`
-- `references/page_standards.md`
-- `references/brief_contract.md`
-- `references/layout_standards.md`
-- `references/content_layout_schema.md`
-- `references/evidence_schema.md`
-- `references/generated_visual_schema.md`
+This stage should not become a broad style or content-quality checker. Text semantics, font choices, color choices, and final visual quality belong later unless they prevent the next stage from consuming the DSL.
 
-Responsibility:
+### Compile Stage
 
-- define the delivery standard a generated deck must satisfy;
-- define immutable brief fields and how brief evidence is consumed;
-- define page, layout, evidence, and generated-visual schemas;
-- keep runtime-facing rules separate from implementation details and test fixtures.
+Purpose:
 
-Constraints:
+- turn Body DSL into `CompileIR`;
+- normalize the web-like DSL tree into renderable primitives;
+- attach selectors, semantic stack, source component ids, and source spans.
 
-- reference docs must describe schema and quality standards, not implementation shortcuts;
-- evidence visuals and generated visuals are separate contracts;
-- visual templates are semantic categories, not renderer-specific categories;
-- new schema fields require matching implementation and QA support;
-- smoke fixtures such as `scripts/smoke/fixtures/visual_diagram_test_cases.js` are development assets, not runtime references.
+Compile diagnostics should look like programming-language errors: unknown component, illegal prop, missing required field, invalid enum, invalid tree shape, or unsupported draw id.
 
-### Deck Plan
+Compile should not silently rewrite illegal DSL into a best-effort slide. If the DSL is not valid, it should fail loudly with actionable feedback.
 
-Owned by:
+### Measurement Stage
 
-- `.tmp/<deck>/<deck>_plan.json`
-- generation scripts that write the plan
+Purpose:
 
-Responsibility:
+- turn `CompileIR` into `MeasurementIR`;
+- prove every renderable primitive has a trustworthy size model;
+- provide min/preferred/max useful size and resize policy facts for layout.
 
-- record what the agent intended to render;
-- record every content slide's real visual anchors and supporting components with relevant semantic reasons.
+Measurement checks should validate:
 
-Constraints:
+- every compiled primitive that must participate in layout is measurable;
+- measurement records correspond to DSL/CompileIR inputs;
+- dimensions are positive and internally consistent;
+- visual evidence has a bounded resize envelope.
 
-- output handling is implementation-owned and must not be recorded as plan configuration;
-- plan must record all real visual anchors and supporting components on a slide, not only the first rendered object;
-- plan and manifest must be comparable by `id`, `kind`, and `template`.
+Measurement owns sizing capability. It should not decide final page aesthetics. It gives layout enough information to make a good allocation.
 
-### Slide Schema
+### Layout Stage
 
-Owned by:
+Purpose:
 
-- deck-specific generation scripts;
-- content layout data passed to `addVisualAnchorContentSlide`;
-- `references/content_layout_schema.md`
+- turn `MeasurementIR` into `LayoutIR`;
+- allocate modules, columns, blocks, and visual slots;
+- record constraints and facts needed for runtime layout QA.
 
-Responsibility:
+LayoutIR should express:
 
-- combine layout selection, visual anchors, supporting components, and text outline into a page-level data structure.
+- containers and records with final boxes;
+- spacing token usage and observed gaps;
+- alignment groups for top/bottom/center alignment;
+- horizontal and vertical distribution constraints;
+- fit/readability facts for text and evidence;
+- overflow facts;
+- fit policy, scale ratio, and aspect-ratio preservation;
+- unused slot space or excessive internal gaps.
 
-The slide schema has three independent substructures:
+Layout diagnostics should catch issues such as:
 
-1. `contentLayout`: page shape and module/block placement.
-2. `visual_anchor`: evidence or diagram/chart that acts as the page/module's visual proof.
-3. `supporting_component`: structured readout/compression such as KPI cards, tables, capability matrices/stacks, or heatmaps.
-4. text fields: summary, captions, legends, source notes, interpretation, and conclusions.
+- font size or color contract violations that need DSL traceability;
+- text, visual, or module overflow;
+- excessive block gaps inside a module;
+- evidence below readable floor;
+- visual evidence stretched or distorted beyond policy;
+- layout fallback or unsupported primitive use.
 
-Constraints:
+This stage is where PPT starts to become visually disciplined: normalized whitespace, alignment, distribution, and readable evidence slots should be enforced here rather than left to final visual review.
 
-- layout chooses where content goes;
-- visual anchors choose what evidence or diagram relationship anchors the module;
-- supporting components structure secondary readouts but do not satisfy visual-anchor requirements;
-- text fields explain the slide and remain editable PPT text;
-- do not put captions, source notes, reading guidance, or conclusions under `visual_anchor.visual_spec`.
+### Render/Export Stage
 
-### Content Layout Composer
+Purpose:
 
-Owned by:
+- turn `LayoutIR` into PPTX and exported PNG evidence;
+- prove the final PowerPoint artifact is usable.
 
-- `scripts/pptx/hw_visual_anchor_slide.js`
+Render/export checks are the artifact fallback. They may duplicate earlier concerns, and they do not need to map back to DSL.
 
-Responsibility:
+They should catch final output failures such as:
 
-- create Huawei content pages;
-- apply fixed content layouts such as `two_column`, `biased_column`, `three_column`, and `four_column`;
-- place module blocks;
-- invoke visual rendering for `visual_anchor` and `supporting_component` blocks through the same implementation path;
-- write manifest entries for rendered visual anchors and supporting components.
+- PPTX cannot be opened/exported by PowerPoint COM;
+- exported slide count mismatch;
+- broken image or missing rendered visual;
+- artifact-only clipping/overflow that escaped earlier stages;
+- mismatch between planned visuals and rendered visuals.
 
-Constraints:
+## Intermediate Representations
 
-- `contentLayout` is a layout container, not a visual-template layer;
-- allowed blocks are layout/text blocks, `visual_anchor` blocks, and `supporting_component` blocks;
-- do not add layout-specific visual roles such as `image_text`, `metric_row`, `mini_card_grid`, or `sectioned_card_grid`;
-- if a module needs multiple visuals, supporting readouts, and text fragments, represent them as multiple `visual_anchor`, `supporting_component`, and `text` blocks;
-- source images must enter through `Evidence`, not a direct image block.
+IRs are implementation objects first, not a mandate to store everything as JSON. They may be serialized to JSON for smoke tests, debugging, and reports, but the architecture requirement is the boundary and shape, not the file format.
 
-### Visual Output
+### CompileIR
 
-Owned by:
+CompileIR records what the DSL means after parsing and normalization:
 
-- `scripts/pptx/hw_diagram_helpers.js`
+- page id/index;
+- layout family;
+- module tree;
+- renderable primitives;
+- selector/source span/code frame;
+- semantic stack;
+- source component identity;
+- source/evidence trace where relevant.
 
-Responsibility:
+### MeasurementIR
 
-- validate visual-anchor specs;
-- route each semantic template through its fixed implementation;
-- render conceptual anchors, evidence anchors, and supporting components through their fixed handling.
+MeasurementIR records what each primitive can occupy:
 
-Constraints:
+- primitive id and source selector;
+- taxonomy kind/template;
+- min size;
+- preferred size;
+- max useful size;
+- resize policy;
+- aspect-ratio policy;
+- measurement source;
+- measurement diagnostics.
 
-- implementation routing is not part of the model-facing visual spec;
-- never accept slide-level, module-level, or anchor-level output overrides;
-- generated visuals must contain only relationship-native content such as labels, axes, values, nodes, and edges;
-- `Quantity/data_cards`, generated `heatmap`, `Matrix/table`, `Matrix/capability_matrix`, and `Hierarchy/capability_stack` are supporting components, not visual anchors;
-- page-level prose remains outside `visual_spec`;
-- generated image placement preserves aspect ratio and uses contain placement;
-- do not silently substitute one template implementation for another to pass PowerPoint export.
+### LayoutIR
 
-### PPT Text Layer
+LayoutIR records how measured primitives are actually allocated:
 
-Owned by:
+- page and container boxes;
+- module/column/block records;
+- final boxes;
+- spacing and distribution constraints;
+- alignment groups;
+- fit/readability/overflow facts;
+- fit policy and scale ratio;
+- source mapping back to DSL/CompileIR/MeasurementIR.
 
-- `scripts/pptx/hw_visual_anchor_slide.js`
-- `scripts/pptx/hw_pptx_helpers.js`
+## Body DSL
 
-Responsibility:
+Body DSL is the AI-facing creative body authoring surface.
 
-- render titles, section tabs, analysis summaries, captions, legends, source notes, interpretation text, and footers as editable PPT text.
+It should feel like writing a constrained component tree, not hand-editing PowerPoint XML. It gives the agent a familiar way to describe:
 
-Constraints:
+- layout family, such as `two_column`, `biased_column`, `three_column`;
+- modules;
+- real visual anchors;
+- supporting readouts;
+- text blocks and emphasis;
+- source binding.
 
-- text that explains the visual belongs here, not inside `visual_spec`;
-- visual captions and source notes must remain visible to QA;
-- text layer may surround and explain visuals but must not become an untracked visual renderer.
+Body DSL must reject:
 
-### Manifest
+- arbitrary style objects;
+- absolute x/y coordinates;
+- manual width/height percentages;
+- manual margins/padding;
+- z-index or layer-order hacks;
+- component-specific shape overrides that bypass measurement/layout.
 
-Owned by:
+If a capability is not supported, it should be absent from the DSL contract or fail at compile time. Runtime QA should diagnose AI uncertainty in generated decks, not compensate for unsupported code paths.
 
-- `writeVisualAnchorManifest`
-- `pptx._hwVisualAnchorManifest`
+## Visual Anchors And Supporting Components
 
-Responsibility:
+Content slides need real visual anchors. A table, KPI card row, or text block alone cannot pretend to be evidence.
 
-- record every rendered visual anchor and supporting component;
-- capture page, id, kind, template, renderer, render status, image dimensions, anchor area, image area, and layout metadata.
+Real visual anchors have an explicit proof hierarchy:
 
-Constraints:
+| Proof tier | DSL component | Meaning |
+|---|---|---|
+| `source_evidence` | `<EvidenceFigure>`, `<EvidenceChart>` | Original source figure/chart/image that proves the claim. This is the highest-priority proof object. |
+| `generated_drawing` | `<Visual draw="Kind/template" ... />` | Hand-drawn/generated explanation from an official renderer. It can clarify mechanisms and relationships, but it is secondary to source evidence. |
+| `supporting_readout` | `<KpiCards>`, `<Table>`, `<CapabilityStack>` | Compact readout that supports an already-proven claim. It does not satisfy source evidence by itself. |
+| `text` | `<InsightText>` | Editable explanation and conclusion. It never replaces visual proof. |
 
-- every正文内容页 must have at least one manifest-backed rendered real visual anchor; supporting components alone are insufficient;
-- dense pages may have multiple manifest entries;
-- manifest must be sufficient for QA to prove the implementation matched the plan.
+When the authored Body DSL first chooses source evidence for a page or module, later QA repair should preserve that same source evidence identity. After a successful DSL compile, the runtime records the primary visual-anchor proof type for each page/module and the CLI echoes that memory so the next repair loop knows the anchor is locked. Layout fixes should give the evidence more effective slot, reduce neighboring prose/supporting readouts, rebalance columns, or add source-grounded content around it. A generated drawing may annotate or explain the same evidence chain, but it must not downgrade the original source evidence merely because drawing is easier to lay out.
 
-### Hard QA
+When layout diagnostics report sparse content or excessive internal gaps, feedback should stay objective and positive: state the measured gap/density problem and ask the author to review the source material for the module claim, then add source-grounded visual or text content that supports the same viewpoint. The feedback should not teach authors to write repair notes into the slide body.
 
-Owned by:
+Supporting components include KPI cards, tables, capability stacks, structured bullets, and compact readouts. They can clarify evidence, but they do not replace it.
 
-- `scripts/qa/check_huawei_pptx.js`
+Every visual anchor should carry source/claim/evidence traceability when the page claim depends on source material.
 
-Responsibility:
+## Runtime Feedback Contract
 
-- check PPTX style and structure;
-- compare plan and manifest;
-- validate visual-anchor/supporting-component schema and implementation contract;
-- check exported render evidence when available.
+Runtime feedback is a cross-stage data contract.
 
-Constraints:
+An issue should include:
 
-- QA is part of the architecture;
-- multi-anchor slides must validate every planned anchor;
-- QA must fail implementation drift, missing real anchors, unrendered components, invalid schema, and plan/manifest mismatch;
-- QA must protect "at least one real anchor" without letting supporting components count as anchors or regressing into "exactly one anchor";
-- QA should distinguish accepted architecture exceptions from accidental bypass paths.
+- `phase`: DSL input, compile, measurement, layout, or render/export;
+- `severity`: error/warning/info;
+- `code`: stable machine-readable rule code;
+- `message`: short user-facing explanation;
+- `target`: page/selector/component/artifact location;
+- `source`: source span/code frame when available;
+- `semanticStack`: human-readable component context when available;
+- `repairHint`: actionable next step.
 
-### Smoke Tests
+The CLI should surface error-level feedback directly. An agent should not need to search logs, inspect hidden reports, or read a JavaScript stack trace before it can repair the DSL.
 
-Owned by:
+Reporters format feedback. Producers own detection. A reporter must not become a second rule engine.
 
-- `scripts/smoke/*.js`
-- `package.json` scripts
+## Forward Tests
 
-Responsibility:
+Forward tests are end-to-end skill validation, not smoke tests.
 
-- preserve architecture contracts during development;
-- generate regression decks for visual-anchor templates;
-- exercise PowerPoint COM export;
-- verify helper export surfaces and QA rule coverage.
+They ask a clean candidate agent to generate a deck from realistic inputs and then judge the exported PPT visually. Candidate agents should not see judge rubrics, expected outputs, prior failures, or hidden examples.
 
-Constraints:
+Forward tests should not require the candidate to hand over runtime QA reports or visual-review notes as special test artifacts. Runtime QA is part of generation/export. The forward judge inspects the exported PNGs and judges whether the deck is good.
 
-- when a schema or visual-anchor rule changes, smoke tests must change in the same commit;
-- template output paths need coverage when visual-anchor behavior changes;
-- PowerPoint COM failures should reveal implementation or environment problems, not trigger silent output substitution.
+## Smoke Tests
 
-## Core Data Flow
+Smoke tests protect the architecture while maintainers refactor.
 
-```mermaid
-flowchart LR
-  Layout["contentLayout\npage shape + modules + blocks"]
-  VisualSpec["visual_anchor\nevidence + diagram/chart"]
-  SupportSpec["supporting_component\ncards + tables + grids"]
-  TextOutline["text outline\nsummary + captions + notes"]
-  RenderedPage["PPT content page"]
-  ManifestEntry["manifest entries"]
-  QACompare["QA comparison"]
+The smoke report is organized by the runtime pipeline:
 
-  Layout --> RenderedPage
-  VisualSpec --> RenderedPage
-  SupportSpec --> RenderedPage
-  TextOutline --> RenderedPage
-  VisualSpec --> ManifestEntry
-  SupportSpec --> ManifestEntry
-  RenderedPage --> ManifestEntry
-  Layout --> ManifestEntry
-  ManifestEntry --> QACompare
-  TextOutline --> QACompare
+```text
+01 AI 输入契约
+02 DSL 编译
+03 测量
+04 排版
+05 导出渲染
+06 运行态 QA 与 CLI 反馈
 ```
 
-The three inputs are independent:
+Smoke tests should prove:
 
-- `contentLayout` must not carry visual semantics.
-- `visual_anchor` must not carry page explanation prose.
-- `supporting_component` must not be used as proof that the page has a visual anchor.
-- text outline must not bypass visual-anchor evidence.
+- AI-facing contracts are discoverable and synchronized;
+- DSL compile errors are deterministic and source-mapped;
+- every DSL primitive has compile, render, and measurement evidence;
+- measurement can produce trustworthy bounds;
+- layout can express and check spacing, alignment, distribution, fit, overflow, and readability;
+- PPTX artifacts can be opened and exported through PowerPoint COM;
+- every runtime QA rule has deterministic positive/negative coverage;
+- CLI error output is directly actionable for agents.
 
-## Visual Output Flow
+Smoke tests are allowed to serialize IRs and produce review decks. Those are development artifacts, not runtime requirements for forward-test candidates.
 
-```mermaid
-flowchart TB
-  Anchor["visual_anchor"]
-  Evidence["Evidence"]
-  Support["supporting_component"]
-  EditableTemplates["Editable-output templates"]
-  ImageTemplates["Image-output templates"]
-  ImageOutput["image output"]
-  EditableOutput["editable PPT output"]
-  Manifest["manifest"]
+## Repository Ownership Map
 
-  Anchor --> Evidence
-  Anchor --> EditableTemplates
-  Anchor --> ImageTemplates
-  Support --> EditableTemplates
-  Evidence --> Manifest
-  EditableTemplates --> EditableOutput
-  ImageTemplates --> ImageOutput
-  ImageOutput --> Manifest
-  EditableOutput --> Manifest
-```
+| Area | Primary files |
+|---|---|
+| Runtime instructions | `SKILL.md` |
+| Authoring contracts | `references/*.md` |
+| Body DSL registry/discovery/compiler | `scripts/pptx/dsl/*` |
+| Runtime QA framework | `scripts/pptx/qa/*` |
+| Measurement/layout primitives | `scripts/pptx/layout/*` |
+| PPT composition/rendering | `scripts/pptx/*.js` |
+| PowerPoint COM integration | `scripts/pptx/powerpoint_com_broker.*`, `scripts/pptx/export_pptx_images.js`, `scripts/pptx/measure_pptx_layout.js` |
+| Development smoke tests | `scripts/smoke/*` |
+| Software test report | `scripts/quality/software_test_report.js` |
+| Forward tests | `forward-tests/huawei-ppt-gen/*` |
 
-Output constraints attach to this flow:
+## Change Rules
 
-- `Evidence` is source-backed evidence handling.
-- `supporting_component` is the fixed handling path for structured readouts such as `Quantity/data_cards`, generated `heatmap`, `Matrix/table`, `Matrix/capability_matrix`, and `Hierarchy/capability_stack`.
-- all anchors and supporting components follow the fixed output path mapped from their semantic template.
-- no slide, layout, or anchor can override output handling.
+When changing the architecture:
 
-## Table Boundary
+1. Update the owning implementation.
+2. Update the relevant runtime/reference contract.
+3. Update or add smoke coverage for the affected stage and QA rule.
+4. Keep CLI feedback actionable.
+5. Keep `SKILL.md` aligned with what the implementation really supports.
+6. Do not add compatibility shims that keep retired architecture paths alive.
 
-Tables are supporting components, not general page-level helpers and not visual anchors.
-
-Architecture rule:
-
-- if a generated/transcribed table appears on a正文内容页 and carries comparison, judgment, or a structured claim, it must be represented as a `supporting_component` using `kind = "Matrix"` and `template = "table"`;
-- the native table implementation is an internal rendering detail of that supporting-component template;
-- page schemas must not expose table drawing as a standalone layout helper.
-
-This prevents native table drawing from becoming a bypass around plan, manifest, and QA.
-
-## Image Boundary
-
-Images are not a general page-level helper.
-
-Architecture rule:
-
-- source figures, screenshots, and charts must be `Evidence` anchors;
-- generated diagram output may be inserted as an image only as the final artifact of a visual anchor;
-- direct image roles such as `image_text` are not allowed in content layout.
-
-This prevents image placement from bypassing semantic anchors and source tracking.
-
-## Consistency Contract
-
-The repository has three surfaces that must remain consistent:
-
-1. runtime instructions in `SKILL.md`;
-2. implementation in `scripts/pptx/*`;
-3. enforcement in `scripts/qa/*` and `scripts/smoke/*`.
-
-When changing behavior:
-
-- update references so the schema is explicit;
-- update generation helpers so the schema renders;
-- update QA so bad output fails;
-- update smoke tests so the contract stays protected;
-- update `SKILL.md` only when the runtime workflow changes.
-
-Do not merge changes where only the script works but the skill still asks for old behavior, or where the skill asks for behavior QA cannot verify.
-
-## Recent Architecture Drift Patterns
-
-These are concrete drift patterns this repository should avoid:
-
-- layout shortcut becomes visual semantics: `image_text`, `metric_row`, or mini-grid roles in `contentLayout`;
-- structured readout becomes fake anchor: `data_cards`, `Matrix/table`, `capability_matrix`, `capability_stack`, or generated `heatmap` is used to satisfy visual-anchor requirements;
-- visual-anchor bypass: part of the visual is drawn through untracked helper calls;
-- silent fallback: one template implementation quietly substitutes another to pass PowerPoint export;
-- first-anchor-only QA: multi-anchor pages validate only the first manifest entry;
-- unbounded helper exposure: low-level drawing helper becomes a schema-level escape hatch;
-- runtime docs carry development principles while `AGENTS.md` and `docs/` stay silent.
-
-## Known Enhancement
-
-Issue [#2](https://github.com/MozhiJiawei/hw-ppt-gen/issues/2) tracks diagram density problems in small two-column and four-column anchors. This should be fixed inside the visual-anchor implementation through compact layouts, padding reduction, or target-size-aware template choices.
-
-It must not be fixed by stretching generated images or bypassing visual anchors with untracked helper fragments.
-
-## Change Checklist
-
-Before merging architecture-sensitive changes, verify:
-
-- the change fits the logical architecture above;
-- layout, visual rendering, and text outline remain separate;
-- new visual needs use existing `kind` / `template` semantics unless a new semantic template is truly required;
-- source images use `Evidence`;
-- tables on content pages use `Matrix/table` supporting components;
-- visual output handling remains implementation-owned;
-- fixed template implementations do not silently substitute for each other;
-- plan and manifest cover every visual anchor and supporting component;
-- QA checks the behavior being introduced;
-- smoke tests cover affected visual-anchor templates when relevant;
-- PowerPoint COM export remains part of the quality bar;
-- `SKILL.md`, references, scripts, QA, and smoke tests agree.
+When deleting an old path, delete its tests, docs, references, and report entries together. Leaving retired architecture visible to agents creates bad training signals and future regressions.
